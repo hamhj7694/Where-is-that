@@ -3,7 +3,8 @@ import { Crop, ImagePlus, Trash2 } from 'lucide-react'
 import Modal from '../../components/Modal'
 import CropDialog from '../workspace/CropDialog'
 import { localPhotoId, photoFromFile, type AppPhoto } from '../workspace/data'
-import { assertImageReadable, formatFileSize, MAX_LOST_REFERENCE_PHOTOS } from './model'
+import { formatFileSize, MAX_LOST_REFERENCE_PHOTOS } from './model'
+import { prepareLostReferenceFiles } from './lost-reference-import'
 import { originalReferencePhoto, rememberReferenceCrop } from './reference-photo-model'
 import { usePhotoPreview } from './usePhotoPreview'
 import PhotoGuide from './PhotoGuide'
@@ -24,6 +25,7 @@ export default function LostReferenceDialog({ photos, selected: initialSelected,
   const addInput = useRef<HTMLInputElement>(null), replaceInput = useRef<HTMLInputElement>(null)
   const firstButton = useRef<HTMLButtonElement>(null), cropButton = useRef<HTMLButtonElement>(null)
   const active = useRef(true), sequence = useRef(0), busy = useRef(false)
+  const reader = useRef<AbortController | null>(null)
   const currentEntries = useRef(entries)
   currentEntries.current = entries
   const entry = entries[selected]
@@ -31,22 +33,23 @@ export default function LostReferenceDialog({ photos, selected: initialSelected,
   useEffect(() => {
     active.current = true
     if (dropped.length) void readFiles(dropped)
-    return () => { active.current = false; sequence.current++; busy.current = false }
+    return () => { active.current = false; sequence.current++; busy.current = false; reader.current?.abort() }
     // This dialog is a transaction; dropped files are consumed only at mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function close() { active.current = false; sequence.current++; busy.current = false; onClose() }
+  function close() { active.current = false; sequence.current++; busy.current = false; reader.current?.abort(); onClose() }
   async function readFiles(files: File[], replaceIndex?: number) {
     if (!files.length || busy.current || crop) return
     const existing = currentEntries.current
-    if ((replaceIndex !== undefined && files.length !== 1) || existing.length + files.length - (replaceIndex !== undefined ? 1 : 0) > MAX_LOST_REFERENCE_PHOTOS) { setError('같은 물건의 사진을 최대 3장까지 추가할 수 있어요.'); return }
     const token = ++sequence.current
+    reader.current?.abort()
+    const controller = new AbortController()
+    reader.current = controller
     busy.current = true; setReading(true); setError('')
     try {
-      for (const file of files) { if (!active.current || token !== sequence.current) return; await assertImageReadable(file) }
+      const ready = await prepareLostReferenceFiles(files, existing.length, { replace: replaceIndex !== undefined, signal: controller.signal })
       if (!active.current || token !== sequence.current) return
-      const additions = files.map(file => ({ file, original: file }))
+      const additions = ready.map(file => ({ file, original: file }))
       setEntries(replaceIndex === undefined ? [...existing, ...additions] : existing.map((item, index) => index === replaceIndex ? additions[0] : item))
       setSelected(replaceIndex ?? existing.length)
     } catch (problem) { if (active.current && token === sequence.current) setError(problem instanceof Error ? problem.message : '사진을 읽지 못했어요.') }
