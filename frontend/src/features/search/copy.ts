@@ -1,0 +1,25 @@
+export const copy = {
+  gallery: {
+    name: '갤러리에서 사진 찾기',
+    title: '어떤 사진을 찾고 있나요?',
+    description: '연결한 갤러리에서 사진이나 스크린샷을 찾을 수 있어요.',
+    inputLabel: '찾고 싶은 이미지',
+    placeholder: '예: 검은 지갑, 제주 바닷가, 주간 일정표가 있는 스크린샷',
+    action: '사진 찾기',
+    examples: ['검은 지갑', '제주 바닷가', '주간 일정표가 있는 스크린샷'],
+  },
+  lost: {
+    name: '분실물 찾기',
+    title: '어떤 물건을 잃어버렸나요?',
+    description: '글이나 사진으로 비슷한 물건을 찾아요.',
+    inputLabel: '잃어버린 물건의 특징',
+    placeholder: '예: 검정 가죽 지갑, 작은 금색 로고',
+    action: '비슷한 물건 찾기',
+    examples: ['검정 가죽 지갑', '노란 가방', '작은 금색 로고가 있는 지갑'],
+  },
+  emptyInput: '찾고 싶은 내용을 적거나 참고 사진을 추가해 주세요.',
+  missingGallery: '먼저 갤러리를 연결해 주세요.',
+  aiNotice: 'AI 검색은 잘못 찾거나 놓칠 수 있어요.',
+  publicLimit: '공개 정보가 부족하면 검색이 제한될 수 있어요.',
+  bothInputs: '글만 적거나 사진만 추가해도 검색할 수 있어요. 함께 입력해도 좋아요.',
+} as const

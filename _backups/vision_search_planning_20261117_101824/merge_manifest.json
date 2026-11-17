@@ -1,0 +1,33 @@
+{
+  "merged_at": "2026-11-17",
+  "source_zip": "C:\\Users\\mbc\\Downloads\\vision_search_planning_latest_20261116.zip",
+  "source_zip_sha256": "30c2fd432810281bbc2c6e777123a4f0dfc632ce10ebf4b3ec52067a3cb6cd36",
+  "target": "C:\\Users\\mbc\\Documents\\git\\비전 AI 활용하여 웹서비스 만들기\\vision_search_planning",
+  "backup": "C:\\Users\\mbc\\Documents\\git\\비전 AI 활용하여 웹서비스 만들기\\_backups\\vision_search_planning_20261117_101824",
+  "before": {
+    "00_상세기획안_그거어디_개정.md": "83310295a79e9f4b159b46ef617defa8751c8cd81004efc19a701b6cada73c5d",
+    "01_Figma_디자인_실행가이드.md": "0b63e721ee177bc7e69f995fb64ec977c0f2bc013a6ee608d7f384347529afcd",
+    "02_확인_실험_결정_체크리스트.md": "61ee157fd793d0c3fbe2cc1da11ee32fa7b989c2685feb5c593b9e529c05ce8a",
+    "03_API_라이브러리_연동조사목록.md": "875ec24a461d1268f7f209c7922b098461c883dc3f2ec8a4fa68fcdb3d27ad4c",
+    "04_파이프라인_아키텍처_및_흐름도.md": "a61b138b021362f6fcb098521653453e1489daf5cfdc46afb184d23b2c2ad09a",
+    "05_페이지구성_와이어프레임_UIUX_통합설계.md": "1927c748e27883a0d788342f45760230e6361910233c0a0cfda094fd963e3add",
+    "06_UI_최신_카피.md": "89e914c8f8e0b7aac043de1b790223486ca4183002b2033ed0ba700b9e84bd56",
+    "07_Figma_카피_컬러_레이아웃_반영기록_2026-11-16.md": "7c80d8969424d0f75c5d91380dbd86e8d18e6dd1a2b4d2262f9ee9e5e46a60ae",
+    "그거어디_파이프라인_리디자인_OLD내용_디자인 참고용.pptx": "1a2d425751d349a94beb0dfe1d58f1b9e76658ba96f49bb386f8ca9223413324"
+  },
+  "after": {
+    "00_상세기획안_그거어디_개정.md": "ff6a87f44f890ecbd532a72da664327593418abf20812b9c4118dbae26c7b981",
+    "01_Figma_디자인_실행가이드.md": "9436c9889647a69c0aae76193b04b8a40379f6a07509ba03680ea827fcdf3fee",
+    "02_확인_실험_결정_체크리스트.md": "1692687b7ee85af0cda8ef647a58c393a16e95e7c99bae41134d0685b0849314",
+    "03_API_라이브러리_연동조사목록.md": "317ff98fff999849b1f6afad73cc2ec09bfb712113e20e7981c410e899189f14",
+    "04_파이프라인_아키텍처_및_흐름도.md": "9449175c50382dd4bba0e609a6b49e996cc8af7ec737f3fee023c3b1b8f4bb18",
+    "05_페이지구성_와이어프레임_UIUX_통합설계.md": "54095e813ba3f7a4e4cce4a69cecb8fdc6f81102ea9f0c60d6267b494c890e2d",
+    "06_UI_최신_카피.md": "5552cc155a187030b8e76122f8d9c21b717af5704a7a53783369ca8cd1a96fa6",
+    "07_Figma_카피_컬러_레이아웃_반영기록_2026-11-16.md": "0bca748b1b2a54947a48692db9fbee04f617a6094f29ea530bb3cbf639ffd38f",
+    "08_AI모듈_검색랭킹_오케스트레이션_구현계약.md": "4a3a270d7dd06f6793b39de70e858f6000f89343c384a9c6bbfea67ec4374e62",
+    "README_최신설계_및_작업순서.md": "cf7242b857b24344035b2257a5b45b362bb972692746da1576581446d9696bc5"
+  },
+  "archived_only": [
+    "그거어디_파이프라인_리디자인_OLD내용_디자인 참고용.pptx"
+  ]
+}

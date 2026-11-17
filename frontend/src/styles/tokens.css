@@ -1,0 +1,44 @@
+@font-face {
+  font-family: Pretendard;
+  src: url('/fonts/PretendardVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  font-family: Pretendard, 'Noto Sans KR', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--text-primary);
+  background: var(--page);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --page: #fafaf8;
+  --surface: #fff;
+  --raised: #f1f2ee;
+  --ink: #222322;
+  --accent: #e5db72;
+  --accent-soft: #f5f2d7;
+  --text-primary: #222322;
+  --text-secondary: #5d625b;
+  --text-muted: #656a62;
+  --line: #dedfd9;
+  --control-line: #868c81;
+  --negative: #a63b32;
+  --negative-surface: #fff2f0;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 20px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --feedback: 160ms;
+}

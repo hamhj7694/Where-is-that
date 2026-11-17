@@ -1,0 +1,82 @@
+[
+  {
+    "file": "00_상세기획안_그거어디_개정.md",
+    "old_bytes": 183930,
+    "new_bytes": 189088,
+    "same_bytes": false,
+    "added_lines": 102,
+    "removed_lines": 86
+  },
+  {
+    "file": "01_Figma_디자인_실행가이드.md",
+    "old_bytes": 30906,
+    "new_bytes": 30675,
+    "same_bytes": false,
+    "added_lines": 60,
+    "removed_lines": 63
+  },
+  {
+    "file": "02_확인_실험_결정_체크리스트.md",
+    "old_bytes": 13833,
+    "new_bytes": 16608,
+    "same_bytes": false,
+    "added_lines": 27,
+    "removed_lines": 11
+  },
+  {
+    "file": "03_API_라이브러리_연동조사목록.md",
+    "old_bytes": 18102,
+    "new_bytes": 20975,
+    "same_bytes": false,
+    "added_lines": 35,
+    "removed_lines": 10
+  },
+  {
+    "file": "04_파이프라인_아키텍처_및_흐름도.md",
+    "old_bytes": 13110,
+    "new_bytes": 16709,
+    "same_bytes": false,
+    "added_lines": 64,
+    "removed_lines": 28
+  },
+  {
+    "file": "05_페이지구성_와이어프레임_UIUX_통합설계.md",
+    "old_bytes": 74485,
+    "new_bytes": 67649,
+    "same_bytes": false,
+    "added_lines": 202,
+    "removed_lines": 274
+  },
+  {
+    "file": "06_UI_최신_카피.md",
+    "old_bytes": 28016,
+    "new_bytes": 28886,
+    "same_bytes": false,
+    "added_lines": 35,
+    "removed_lines": 27
+  },
+  {
+    "file": "07_Figma_카피_컬러_레이아웃_반영기록_2026-11-16.md",
+    "old_bytes": 18324,
+    "new_bytes": 18965,
+    "same_bytes": false,
+    "added_lines": 2,
+    "removed_lines": 0
+  },
+  {
+    "file": "08_AI모듈_검색랭킹_오케스트레이션_구현계약.md",
+    "old_bytes": null,
+    "new_bytes": 9427,
+    "same_bytes": false,
+    "added_lines": 114,
+    "removed_lines": 0
+  },
+  {
+    "file": "README_최신설계_및_작업순서.md",
+    "old_bytes": null,
+    "new_bytes": 6469,
+    "same_bytes": false,
+    "added_lines": 65,
+    "removed_lines": 0
+  }
+]
