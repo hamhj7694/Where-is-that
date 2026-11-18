@@ -1,10 +1,37 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createSearchRecord, disconnectGalleryHistory, findSearchRecord, overwriteGallerySearch, recordPath, refineGalleryRecord, removeSearchRecord, resolveGalleryAssistant, updateSearchAssistant, type SearchRecord } from './history'
+import { createSearchRecord, disconnectGalleryHistory, findSearchRecord, overwriteGallerySearch, overwriteLostSearch, recordPath, refineGalleryRecord, refineLostRecord, removeSearchRecord, resolveGalleryAssistant, resolveLostAssistant, updateSearchAssistant, type SearchRecord } from './history'
 import { addGalleryCondition, createGalleryAssistantState, editGalleryCondition, galleryConditionsChanged, removeGalleryCondition, type GalleryAssistantState } from './gallery-search-model'
+import type { ReferencePhotoView } from './model'
 
 const image = new File(['image'], 'photo.jpg', { type: 'image/jpeg' })
 
 describe('찾은 기록의 세션 스냅샷', () => {
+  it('도우미의 여러 조건 추가·수정·삭제는 제출 질의를 유지하고 명시적 재검색에서만 묶어 반영한다', () => {
+    const original = createSearchRecord('gallery', { query: '검정 지갑', photo: image }, { name: '갤러리', files: [image] })
+    let records = [original]
+    let staged = addGalleryCondition(createGalleryAssistantState(), '금색 로고')
+    records = updateSearchAssistant(records, original.id, staged)
+    staged = addGalleryCondition(staged, '실내 사진')
+    records = updateSearchAssistant(records, original.id, staged)
+    staged = addGalleryCondition(staged, '주말')
+    records = updateSearchAssistant(records, original.id, staged)
+    staged = editGalleryCondition(staged, 0, '은색 로고')
+    staged = removeGalleryCondition(staged, 2)
+    records = updateSearchAssistant(records, original.id, staged)
+    expect(records).toHaveLength(1)
+    expect(records[0].id).toBe(original.id)
+    expect(records[0].draft).toEqual(original.draft)
+    expect(records[0].assistant!.conditions).toEqual(['은색 로고', '실내 사진'])
+    const applied = refineGalleryRecord(records[0], records[0].assistant!)!
+    expect(applied.draft.query).toBe('검정 지갑\n은색 로고\n실내 사진')
+    expect(applied.assistant!.appliedConditions).toEqual(['은색 로고', '실내 사진'])
+    const pendingRemoval = updateSearchAssistant([applied], applied.id, removeGalleryCondition(applied.assistant!, 0))[0]
+    expect(pendingRemoval.draft.query).toBe(applied.draft.query)
+    const reapplied = refineGalleryRecord(pendingRemoval, pendingRemoval.assistant!)!
+    expect(reapplied.draft.query).toBe('검정 지갑\n실내 사진')
+    expect(original.draft.query).toBe('검정 지갑')
+  })
+
   it('이후 입력과 갤러리 배열이 바뀌어도 검색 당시의 내용과 파일을 유지한다', () => {
     const draft = { query: '  바닷가 사진  ', photo: image }
     const gallery = { name: '여행', files: [image] }
@@ -64,7 +91,7 @@ describe('찾은 기록의 세션 스냅샷', () => {
   })
 })
 
-describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
+describe('찾은 이미지의 검색 도우미와 같은 기록 재검색', () => {
   it('조건 편집은 해당 갤러리 기록만 바꾸고 새 기록·F2 변경을 만들지 않는다', () => {
     const source = { name: '원래 갤러리', files: [image] }
     const parent = createSearchRecord('gallery', { query: '여행', photo: image }, source)
@@ -96,14 +123,13 @@ describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
     expect(parent.assistant.open).toBeUndefined()
   })
 
-  it('다른 모드·없는 ID에는 도우미를 만들지 않는다', () => {
+  it('없는 ID에는 도우미를 만들지 않는다', () => {
     const lost = createSearchRecord('lost', { query: '지갑', photo: null }, null)
-    expect(updateSearchAssistant([lost], lost.id, { draft: '추가 조건' })[0]).toBe(lost)
     expect(updateSearchAssistant([lost], 'missing', { open: true })[0]).toBe(lost)
     expect(lost.assistant).toBeUndefined()
   })
 
-  it('확인 후 다시 검색할 때만 새 ID·시각과 결합된 질의의 자식 기록을 만든다', () => {
+  it('확인 후 다시 검색해도 기존 ID·시각을 유지하고 질의만 불변 갱신한다', () => {
     const source = { name: '여행', files: [image] }
     const parent = createSearchRecord('gallery', { query: '제주 사진', photo: image }, source)
     const assistant = { ...addGalleryCondition(addGalleryCondition(createGalleryAssistantState(), '파란 가방'), '2024년'), draft: '미확정 입력은 새 질의에 넣지 않기', open: true }
@@ -111,9 +137,10 @@ describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
     let child
     try { child = refineGalleryRecord(parent, assistant) } finally { clock.mockRestore() }
     expect(child).not.toBeNull()
-    expect(child!.id).not.toBe(parent.id)
-    expect(child!.createdAt).toBe(parent.createdAt + 100)
-    expect(child!.parentRecordId).toBe(parent.id)
+    expect(child!.id).toBe(parent.id)
+    expect(child!.createdAt).toBe(parent.createdAt)
+    expect(child!).not.toBe(parent)
+    expect(child!).not.toHaveProperty('parentRecordId')
     expect(child!.draft).toEqual({ query: '제주 사진\n파란 가방\n2024년', photo: image })
     expect(child!.gallery).toEqual(parent.gallery)
     expect(child!.gallery).not.toBe(parent.gallery)
@@ -124,7 +151,7 @@ describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
     expect(assistant.conditions).toEqual(['파란 가방', '2024년'])
   })
 
-  it('새 기록은 대화·열림과 적용 조건을 상속하고 미확정 입력만 비우며 독립 복사한다', () => {
+  it('같은 기록 갱신은 대화·열림과 적용 조건을 보존하고 미확정 입력만 비우며 독립 복사한다', () => {
     const parent = createSearchRecord('gallery', { query: '여행', photo: image }, { name: '갤러리', files: [image] })
     const assistant = { ...addGalleryCondition(createGalleryAssistantState(), '바닷가'), draft: '  미확정 ', open: false }
     const child = refineGalleryRecord(parent, assistant)!
@@ -132,14 +159,14 @@ describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
     expect(child.assistant!.messages).not.toBe(assistant.messages)
     expect(child.assistant!.messages[0]).not.toBe(assistant.messages[0])
     expect(child.assistant!.conditions).not.toBe(assistant.conditions)
-    child.assistant!.messages[0].text = '새 기록만 바꾸기'
+    child.assistant!.messages[0].text = '갱신본만 바꾸기'
     child.gallery!.files.length = 0
     expect(assistant.messages[0].text).toBe('바닷가')
     expect(parent.gallery!.files).toEqual([image])
     expect(assistant.draft).toBe('  미확정 ')
   })
 
-  it('pending 조건이 없거나 F2·갤러리 소스 없는 기록에서는 새 검색을 만들지 않는다', () => {
+  it('pending 조건이 없거나 F2·갤러리 소스 없는 기록은 갱신하지 않는다', () => {
     const gallery = createSearchRecord('gallery', { query: '사진', photo: null }, { name: '갤러리', files: [image] })
     const pending = addGalleryCondition(createGalleryAssistantState(), '바닷가')
     expect(refineGalleryRecord(gallery, createGalleryAssistantState())).toBeNull()
@@ -148,22 +175,27 @@ describe('찾은 이미지의 검색 도우미와 새 검색 기록', () => {
     expect(refineGalleryRecord(createSearchRecord('lost', { query: '지갑', photo: image }, null), pending)).toBeNull()
   })
 
-  it('같은 내용으로 다시 검색해도 기록을 임의 병합하지 않는다', () => {
+  it('같은 조건으로 반복 재검색해도 기존 ID·시각과 부모 없음 상태를 유지한다', () => {
     const parent = createSearchRecord('gallery', { query: '사진', photo: null }, { name: '갤러리', files: [image] })
     const pending = addGalleryCondition(createGalleryAssistantState(), '바닷가')
     const first = refineGalleryRecord(parent, pending)!
-    const second = refineGalleryRecord(parent, pending)!
-    expect(first.id).not.toBe(second.id)
+    const second = refineGalleryRecord(first, first.assistant!)!
+    expect(first.id).toBe(parent.id)
+    expect(second.id).toBe(parent.id)
+    expect(second.createdAt).toBe(parent.createdAt)
+    expect(second).not.toBe(first)
     expect(first.draft).toEqual(second.draft)
-    expect(first.parentRecordId).toBe(parent.id)
-    expect(second.parentRecordId).toBe(parent.id)
+    expect(first).not.toHaveProperty('parentRecordId')
+    expect(second).not.toHaveProperty('parentRecordId')
+    expect(second.draft.query).toBe('사진\n바닷가')
+    expect(parent.draft.query).toBe('사진')
   })
 })
 
 describe('같은 검색 기록에서 검색어·참고 사진 수정', () => {
   it('ID·시각·갤러리 스냅샷·부모 관계를 유지하고 도우미만 초기화한다', () => {
     const parent = createSearchRecord('gallery', { query: '원래 검색', photo: image }, { name: '원래 갤러리', files: [image] })
-    const child = refineGalleryRecord(parent, addGalleryCondition(createGalleryAssistantState(), '파란색'))!
+    const child = { ...refineGalleryRecord(parent, addGalleryCondition(createGalleryAssistantState(), '파란색'))!, id: crypto.randomUUID(), parentRecordId: parent.id }
     const sibling = createSearchRecord('gallery', { query: '다른 검색', photo: null }, parent.gallery)
     const lost = createSearchRecord('lost', { query: '분실물', photo: image }, null)
     const replacement = new File(['replacement'], 'new.png', { type: 'image/png' })
@@ -215,7 +247,8 @@ describe('도우미 적용 조건 수정·삭제와 재검색', () => {
     const changed = editGalleryCondition(first.assistant!, 0, '노란색')
     const second = refineGalleryRecord(first, changed)!
     expect(second.draft.query).toBe('여행 사진\n노란색')
-    expect(second.parentRecordId).toBe(first.id)
+    expect(second.id).toBe(parent.id)
+    expect(second.parentRecordId).toBe(first.parentRecordId)
     expect(second.assistantBaseQuery).toBe('여행 사진')
     expect(second.assistant!.conditions).toEqual(['노란색'])
     expect(second.assistant!.appliedConditions).toEqual(['노란색'])
@@ -224,12 +257,14 @@ describe('도우미 적용 조건 수정·삭제와 재검색', () => {
     expect(changed.appliedConditions).toEqual(['파란색'])
   })
 
-  it('적용 조건을 전부 지우면 기본 질의만으로 새 기록을 만든다', () => {
+  it('적용 조건을 전부 지우면 같은 기록을 기본 질의로 되돌린다', () => {
     const parent = createSearchRecord('gallery', { query: '기본 질의', photo: image }, { name: '갤러리', files: [image] })
     const refined = refineGalleryRecord(parent, addGalleryCondition(createGalleryAssistantState(), '바닷가'))!
     const cleared = removeGalleryCondition(refined.assistant!, 0)
     expect(galleryConditionsChanged(cleared)).toBe(true)
     const child = refineGalleryRecord(refined, cleared)!
+    expect(child.id).toBe(parent.id)
+    expect(child.createdAt).toBe(parent.createdAt)
     expect(child.draft).toEqual({ query: '기본 질의', photo: image })
     expect(child.assistant!.conditions).toEqual([])
     expect(child.assistant!.appliedConditions).toEqual([])
@@ -240,7 +275,7 @@ describe('도우미 적용 조건 수정·삭제와 재검색', () => {
 
   it('덮어쓴 질의를 새 기본으로 삼고 과거 부모 조건을 되살리지 않는다', () => {
     const parent = createSearchRecord('gallery', { query: '옛 검색', photo: null }, { name: '갤러리', files: [image] })
-    const refined = refineGalleryRecord(parent, addGalleryCondition(createGalleryAssistantState(), '파란색'))!
+    const refined = { ...refineGalleryRecord(parent, addGalleryCondition(createGalleryAssistantState(), '파란색'))!, id: crypto.randomUUID(), parentRecordId: parent.id }
     const overwritten = overwriteGallerySearch([refined, parent], refined.id, { query: '새 검색', photo: image })[0]
     const resolved = resolveGalleryAssistant([overwritten, parent], overwritten)
     expect(resolved.baseQuery).toBe('새 검색')
@@ -276,6 +311,8 @@ describe('이전 형식 도우미 상태의 세션 내 복원', () => {
     expect(state.appliedConditions).toBeUndefined()
     const next = refineGalleryRecord({ ...child, assistantBaseQuery: resolved.baseQuery }, resolved.assistant)!
     expect(next.draft.query).toBe('여행\n사진\n파란색\n주말\n노을\n인물 제외')
+    expect(next.id).toBe(child.id)
+    expect(next.parentRecordId).toBe(first.id)
     expect(child.draft.query).toBe('여행\n사진\n파란색\n주말\n노을')
   })
 
@@ -360,11 +397,27 @@ describe('F2 다중 참고 사진의 기록 스냅샷', () => {
   const second = new File(['second'], 'back.png', { type: 'image/png' })
   const third = new File(['third'], 'detail.png', { type: 'image/png' })
 
+  it('전체6장 기록은 원본 순서·File 참조와 별도 목록을 유지한다', () => {
+    const photos = [image, second, third, ...Array.from({ length: 3 }, (_, index) => new File([String(index)], `angle-${index}.png`, { type: 'image/png' }))]
+    const original = [...photos]
+    const draft = { query: '앞뒤와 특징', photo: third, photos }
+    const record = createSearchRecord('lost', draft, null)
+    expect(record.draft.photos).toHaveLength(6)
+    expect(record.draft.photos).toEqual(original)
+    expect(record.draft.photos).not.toBe(photos)
+    expect(record.draft.photo).toBe(image)
+    record.draft.photos!.forEach((file, index) => expect(file).toBe(original[index]))
+    photos.splice(0, photos.length)
+    draft.photo = second
+    expect(record.draft.photos).toEqual(original)
+    expect(record.draft.photo).toBe(image)
+  })
+
   it('전체3장의 순서·원참조를 별도 배열로 보존하고 현재 선택 변경과 격리한다', () => {
     const draft = { query: '  검정 지갑  ', photo: third, photos: [image, second, third] }
     const first = createSearchRecord('lost', draft, { name: '개인 폴더', files: [image] })
     const next = createSearchRecord('lost', draft, null)
-    expect(first.draft).toEqual({ query: '검정 지갑', photo: image, photos: [image, second, third] })
+    expect(first.draft).toEqual({ query: '검정 지갑', photo: image, photos: [image, second, third], photoViews: ['unspecified', 'unspecified', 'unspecified'] })
     expect(first.draft.photos).not.toBe(draft.photos)
     expect(first.draft.photos).not.toBe(next.draft.photos)
     expect(first.draft.photos![2]).toBe(third)
@@ -380,7 +433,7 @@ describe('F2 다중 참고 사진의 기록 스냅샷', () => {
   it('빈 명시 목록은 과거 대표사진을 기록에 되살리지 않는다', () => {
     const photos: File[] = []
     const record = createSearchRecord('lost', { query: '설명만 검색', photo: image, photos }, null)
-    expect(record.draft).toEqual({ query: '설명만 검색', photo: null, photos: [] })
+    expect(record.draft).toEqual({ query: '설명만 검색', photo: null, photos: [], photoViews: [] })
     expect(record.draft.photos).not.toBe(photos)
   })
 
@@ -399,5 +452,257 @@ describe('F2 다중 참고 사진의 기록 스냅샷', () => {
     const refined = refineGalleryRecord(changed, addGalleryCondition(createGalleryAssistantState(), '밝은색'))!
     expect(refined.draft).toEqual({ query: '수정\n밝은색', photo: second })
     expect(record.draft.photo).toBe(image)
+  })
+})
+
+describe('F2 수동 사진 방향의 기록 스냅샷', () => {
+  it('6장과 각 방향은 현재 초안·다른 기록의 배열 변경과 격리된다', () => {
+    const photos = Array.from({ length: 6 }, (_, index) => new File([String(index)], `manual-${index}.jpg`, { type: 'image/jpeg' }))
+    const views: ReferencePhotoView[] = ['front', 'back', 'side', 'top', 'bottom', 'diagonal']
+    const draft = { query: '물건', photo: null, photos: [...photos], photoViews: views }
+    const first = createSearchRecord('lost', draft, null)
+    const second = createSearchRecord('lost', draft, null)
+    expect(first.draft.photoViews).toEqual(views)
+    expect(first.draft.photoViews).not.toBe(views)
+    expect(first.draft.photoViews).not.toBe(second.draft.photoViews)
+    expect(first.draft.photos![0]).toBe(photos[0])
+    views[0] = 'bottom'
+    draft.photos.reverse()
+    first.draft.photoViews![1] = 'unspecified'
+    expect(second.draft.photoViews).toEqual(['front', 'back', 'side', 'top', 'bottom', 'diagonal'])
+    expect(second.draft.photos).toEqual(photos)
+    expect(second.draft.photo).toBe(photos[0])
+  })
+
+  it('구버전 기록 입력에는 미지정을 넣고 F1에는 방향 필드를 남기지 않는다', () => {
+    expect(createSearchRecord('lost', { query: '', photo: image }, null).draft.photoViews).toEqual(['unspecified'])
+    const gallery = createSearchRecord('gallery', { query: '내 사진', photo: image, photoViews: ['front'] }, { name: '폴더', files: [image] })
+    expect(gallery.draft.photoViews).toBeUndefined()
+    const overwritten = overwriteGallerySearch([gallery], gallery.id, { query: '수정', photo: image, photoViews: ['back'] })[0]
+    expect(overwritten.draft.photoViews).toBeUndefined()
+    expect(refineGalleryRecord(overwritten, addGalleryCondition(createGalleryAssistantState(), '가방'))!.draft.photoViews).toBeUndefined()
+  })
+})
+
+describe('분실물 기록별 도우미·조건 재검색·인페이지 검색 수정', () => {
+  const photos = Array.from({ length: 6 }, (_, index) => new File([String(index)], `lost-${index}.jpg`, { type: 'image/jpeg' }))
+  const photoViews: ReferencePhotoView[] = ['front', 'back', 'side', 'top', 'bottom', 'diagonal']
+  function lostRecord(query = '검정 가방') {
+    return createSearchRecord('lost', { query, photo: photos[0], photos, photoViews }, null)
+  }
+
+  it('조건·초안·열림 patch는 지정한 F2 기록에만 적용하며 제출 입력은 보존한다', () => {
+    const parent = lostRecord()
+    const other = lostRecord('다른 분실물')
+    const gallery = createSearchRecord('gallery', { query: '개인 사진', photo: image }, { name: '갤러리', files: [image] })
+    const state = { ...addGalleryCondition(createGalleryAssistantState(), '은색 로고'), draft: '  이어 쓸 문장\n', open: true }
+    const records = [parent, other, gallery]
+    const patched = updateSearchAssistant(records, parent.id, state)
+    const closed = updateSearchAssistant(patched, parent.id, { open: false })
+    const opened = updateSearchAssistant(closed, parent.id, { open: true })
+    expect(opened).toHaveLength(3)
+    expect(opened[0].id).toBe(parent.id)
+    expect(opened[0].draft).toBe(parent.draft)
+    expect(opened[0].assistant).toEqual(state)
+    expect(opened[0].assistantBaseQuery).toBe('검정 가방')
+    expect(opened[0].assistant!.conditions).not.toBe(state.conditions)
+    expect(opened[0].assistant!.messages[0]).not.toBe(state.messages[0])
+    expect(opened[1]).toBe(other)
+    expect(opened[2]).toBe(gallery)
+    expect(parent.assistant).toBeUndefined()
+    expect(records[0]).toBe(parent)
+    expect(state.draft).toBe('  이어 쓸 문장\n')
+  })
+
+  it('명시적 재검색은 기존 ID·시각과 6장·방향·대화의 독립 스냅샷을 유지한다', () => {
+    const parent = lostRecord()
+    const state = { ...addGalleryCondition(createGalleryAssistantState(), '은색 로고'), draft: '미제출 문장은 제외', open: false }
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(parent.createdAt + 100)
+    const child = (() => {
+      try { return refineLostRecord(parent, state) } finally { clock.mockRestore() }
+    })()
+    expect(child).not.toBeNull()
+    expect(child!.id).toBe(parent.id)
+    expect(child!.createdAt).toBe(parent.createdAt)
+    expect(child).not.toBe(parent)
+    expect(child).not.toHaveProperty('parentRecordId')
+    expect(child!.draft.query).toBe('검정 가방\n은색 로고')
+    expect(child!.draft.photos).toEqual(photos)
+    expect(child!.draft.photos).not.toBe(parent.draft.photos)
+    expect(child!.draft.photoViews).toEqual(photoViews)
+    expect(child!.draft.photoViews).not.toBe(parent.draft.photoViews)
+    child!.draft.photos!.forEach((file, index) => expect(file).toBe(photos[index]))
+    expect(child!.gallery).toBeNull()
+    expect(child!.assistant).toEqual({ ...state, draft: '', appliedConditions: ['은색 로고'] })
+    expect(child!.assistant!.messages).not.toBe(state.messages)
+    child!.draft.photos!.pop()
+    child!.draft.photoViews![0] = 'unspecified'
+    child!.assistant!.messages[0].text = '갱신본에서만 변경'
+    expect(parent.draft.photos).toEqual(photos)
+    expect(parent.draft.photoViews).toEqual(photoViews)
+    expect(parent.draft.query).toBe('검정 가방')
+    expect(state.messages[0].text).toBe('은색 로고')
+  })
+
+  it('적용 조건 수정·삭제는 기본 질의를 재사용하고 이전 조건을 누적하지 않는다', () => {
+    const parent = lostRecord()
+    const first = refineLostRecord(parent, addGalleryCondition(createGalleryAssistantState(), '은색 로고'))!
+    const changed = editGalleryCondition(first.assistant!, 0, '금색 로고')
+    const second = refineLostRecord(first, changed)!
+    expect(second.draft.query).toBe('검정 가방\n금색 로고')
+    expect(second.assistantBaseQuery).toBe('검정 가방')
+    expect(second.assistant!.conditions).toEqual(['금색 로고'])
+    expect(second.assistant!.appliedConditions).toEqual(['금색 로고'])
+    const cleared = refineLostRecord(second, removeGalleryCondition(second.assistant!, 0))!
+    expect(cleared.draft.query).toBe('검정 가방')
+    expect(cleared.draft.photoViews).toEqual(photoViews)
+    expect(cleared.assistant!.conditions).toEqual([])
+    expect(first.draft.query).toBe('검정 가방\n은색 로고')
+    expect(second.draft.query).toBe('검정 가방\n금색 로고')
+  })
+
+  it('사진만인 기본 검색도 모든 조건 삭제 후 사진·방향을 유지한다', () => {
+    const parent = lostRecord('')
+    const first = refineLostRecord(parent, addGalleryCondition(createGalleryAssistantState(), '주말'))!
+    const cleared = refineLostRecord(first, removeGalleryCondition(first.assistant!, 0))!
+    expect(cleared.draft.query).toBe('')
+    expect(cleared.draft.photo).toBe(photos[0])
+    expect(cleared.draft.photos).toEqual(photos)
+    expect(cleared.draft.photoViews).toEqual(photoViews)
+    expect(cleared.assistantBaseQuery).toBe('')
+  })
+
+  it('F1·미적용 빈 조건·유효하지 않은 F2 검색은 갱신하지 않는다', () => {
+    const state = addGalleryCondition(createGalleryAssistantState(), '로고')
+    const gallery = createSearchRecord('gallery', { query: '개인 사진', photo: image }, { name: '갤러리', files: [image] })
+    expect(refineLostRecord(gallery, state)).toBeNull()
+    expect(refineLostRecord(lostRecord(), createGalleryAssistantState())).toBeNull()
+    const textOnly = createSearchRecord('lost', { query: '적용 조건만 있음', photo: null }, null)
+    textOnly.assistantBaseQuery = ''
+    expect(refineLostRecord(textOnly, { ...createGalleryAssistantState(), appliedConditions: ['적용 조건만 있음'] })).toBeNull()
+    const tooMany = createSearchRecord('lost', { query: '가방', photo: null, photos: [...photos, image] }, null)
+    expect(refineLostRecord(tooMany, state)).toBeNull()
+  })
+
+  it('검색 수정은 같은 ID·시각·부모를 유지하고 사진·방향을 복사하며 도우미를 초기화한다', () => {
+    const parent = lostRecord()
+    const child = { ...refineLostRecord(parent, addGalleryCondition(createGalleryAssistantState(), '은색 로고'))!, id: crypto.randomUUID(), parentRecordId: parent.id }
+    const other = lostRecord('다른 가방')
+    const gallery = createSearchRecord('gallery', { query: '개인 사진', photo: image }, { name: '갤러리', files: [image] })
+    const input = { query: '  수정한 가방\n새 특징  ', photo: null, photos: [...photos].reverse(), photoViews: [...photoViews].reverse() }
+    const records = [child, parent, other, gallery]
+    const next = overwriteLostSearch(records, child.id, input)
+    expect(next).toHaveLength(4)
+    expect(next[0].id).toBe(child.id)
+    expect(next[0].createdAt).toBe(child.createdAt)
+    expect(next[0].parentRecordId).toBe(parent.id)
+    expect(next[0].draft.query).toBe('수정한 가방\n새 특징')
+    expect(next[0].draft.photo).toBe(photos[5])
+    expect(next[0].draft.photos).toEqual(input.photos)
+    expect(next[0].draft.photos).not.toBe(input.photos)
+    expect(next[0].draft.photoViews).toEqual(input.photoViews)
+    expect(next[0].draft.photoViews).not.toBe(input.photoViews)
+    expect(next[0].assistantBaseQuery).toBe('수정한 가방\n새 특징')
+    expect(next[0].assistant).toEqual(createGalleryAssistantState())
+    expect(next[1]).toBe(parent)
+    expect(next[2]).toBe(other)
+    expect(next[3]).toBe(gallery)
+    const resolved = resolveLostAssistant(next, next[0])
+    expect(resolved.baseQuery).toBe('수정한 가방\n새 특징')
+    expect(refineLostRecord(next[0], addGalleryCondition(resolved.assistant, '주말'))!.draft.query).toBe('수정한 가방\n새 특징\n주말')
+    expect(child.draft.photos).toEqual(photos)
+    expect(child.draft.query).toBe('검정 가방\n은색 로고')
+    input.photos.pop(); input.photoViews.pop()
+    expect(next[0].draft.photos).toHaveLength(6)
+    expect(next[0].draft.photoViews).toHaveLength(6)
+  })
+
+  it('명시적 빈 사진 목록·구버전 한 장을 처리하고 빈 검색·7장·다른 모드 수정은 거절한다', () => {
+    const record = lostRecord()
+    const records = [record]
+    expect(overwriteLostSearch(records, record.id, { query: ' ', photo: image, photos: [] })).toBe(records)
+    expect(overwriteLostSearch(records, record.id, { query: '가방', photo: null, photos: [...photos, image] })).toBe(records)
+    const removed = overwriteLostSearch(records, record.id, { query: '설명만', photo: image, photos: [] })[0]
+    expect(removed.draft).toEqual({ query: '설명만', photo: null, photos: [], photoViews: [] })
+    const legacy = overwriteLostSearch(records, record.id, { query: '', photo: image })[0]
+    expect(legacy.draft).toEqual({ query: '', photo: image, photos: [image], photoViews: ['unspecified'] })
+    const gallery = createSearchRecord('gallery', { query: '개인 사진', photo: image }, { name: '갤러리', files: [image] })
+    expect(overwriteLostSearch([gallery], gallery.id, { query: '수정', photo: null })[0]).toBe(gallery)
+    expect(overwriteLostSearch(records, 'missing', { query: '수정', photo: null })[0]).toBe(record)
+  })
+
+  it('이전 형식 F2 부모 체인의 기본 질의·다중 줄 적용 조건·pending을 모드별로 복원한다', () => {
+    const parent = lostRecord('검정\n가방')
+    const first = { ...lostRecord('검정\n가방\n은색 로고'), parentRecordId: parent.id }
+    const child = { ...lostRecord('검정\n가방\n은색 로고\n주말\n서울'), parentRecordId: first.id, assistant: {
+      draft: '  이어 쓰기\n', open: false, conditions: ['가죽'], messages: ['은색 로고', '주말\n서울', '가죽'].map(text => ({ id: crypto.randomUUID(), role: 'user' as const, text })),
+    } }
+    const resolved = resolveLostAssistant([child, first, parent], child)
+    expect(resolved.baseQuery).toBe('검정\n가방')
+    expect(resolved.assistant.conditions).toEqual(['은색 로고', '주말\n서울', '가죽'])
+    expect(resolved.assistant.appliedConditions).toEqual(['은색 로고', '주말\n서울'])
+    expect(resolved.assistant.draft).toBe('  이어 쓰기\n')
+    expect(resolved.assistant.open).toBe(false)
+    const patched = updateSearchAssistant([child, first, parent], child.id, { open: true })[0]
+    expect(patched.assistantBaseQuery).toBe('검정\n가방')
+    expect(patched.assistant!.conditions).toEqual(resolved.assistant.conditions)
+    expect(patched.draft).toBe(child.draft)
+    const refined = refineLostRecord(patched, patched.assistant!)!
+    expect(refined.draft.query).toBe('검정\n가방\n은색 로고\n주말\n서울\n가죽')
+    expect(refined.id).toBe(child.id)
+    expect(refined.parentRecordId).toBe(first.id)
+    expect(child.assistant.conditions).toEqual(['가죽'])
+    expect(child.assistant).not.toHaveProperty('appliedConditions')
+  })
+
+  it('다른 모드 부모·끊긴 부모·순환 체인은 현재 질의를 유지하며 안전하게 복구한다', () => {
+    const gallery = createSearchRecord('gallery', { query: '다른 모드', photo: image }, { name: '갤러리', files: [image] })
+    const lost = { ...lostRecord('분실물\n조건'), parentRecordId: gallery.id, assistant: { draft: '미제출', conditions: ['대기 조건'], messages: [] } }
+    for (const records of [[lost, gallery], [lost]]) {
+      const resolved = resolveLostAssistant(records, lost)
+      expect(resolved.baseQuery).toBe('분실물\n조건')
+      expect(resolved.assistant.conditions).toEqual(['대기 조건'])
+      expect(resolved.assistant.appliedConditions).toEqual([])
+    }
+    const second = { ...lostRecord('둘째'), parentRecordId: lost.id }
+    const cycled = { ...lost, parentRecordId: second.id }
+    expect(resolveLostAssistant([cycled, second], cycled).baseQuery).toBe('분실물\n조건')
+    expect(resolveLostAssistant([cycled, second], cycled).assistant.conditions).toEqual(['대기 조건'])
+  })
+})
+
+describe('도우미 재검색의 기록 정체성', () => {
+  it.each(['gallery', 'lost'] as const)('%s 재검색은 UUID·시각을 새로 만들지 않고 기존 부모 관계·행 수를 보존한다', mode => {
+    const gallery = mode === 'gallery' ? { name: '갤러리', files: [image] } : null
+    const legacyParent = createSearchRecord(mode, { query: '과거 기록', photo: image }, gallery)
+    const record: SearchRecord = { ...createSearchRecord(mode, { query: '기본 질의', photo: image }, gallery), parentRecordId: legacyParent.id }
+    const state = { ...addGalleryCondition(createGalleryAssistantState(), '은색 로고'), draft: '아직 추가하지 않은 문장', open: true }
+    const refine = mode === 'gallery' ? refineGalleryRecord : refineLostRecord
+    const uuid = vi.spyOn(crypto, 'randomUUID')
+    const clock = vi.spyOn(Date, 'now')
+    try {
+      const first = refine(record, state)!
+      const changed = editGalleryCondition(first.assistant!, 0, '금색 로고')
+      const second = refine(first, changed)!
+      const repeated = refine(second, second.assistant!)!
+      const records = [record, legacyParent]
+      const updated = records.map(item => item.id === repeated.id ? repeated : item)
+      expect(uuid).not.toHaveBeenCalled()
+      expect(clock).not.toHaveBeenCalled()
+      expect(updated).toHaveLength(records.length)
+      expect(updated[0].id).toBe(record.id)
+      expect(updated[0].createdAt).toBe(record.createdAt)
+      expect(updated[0].parentRecordId).toBe(legacyParent.id)
+      expect(updated[0].draft.query).toBe('기본 질의\n금색 로고')
+      expect(updated[0].assistant!.draft).toBe('')
+      expect(updated[0].assistant!.open).toBe(true)
+      expect(updated[0].assistant!.appliedConditions).toEqual(['금색 로고'])
+      expect(updated[1]).toBe(legacyParent)
+      expect(record.draft.query).toBe('기본 질의')
+      expect(record.assistant).toBeUndefined()
+      expect(first.draft.query).toBe('기본 질의\n은색 로고')
+      expect(state.draft).toBe('아직 추가하지 않은 문장')
+      expect(records[0]).toBe(record)
+    } finally { uuid.mockRestore(); clock.mockRestore() }
   })
 })

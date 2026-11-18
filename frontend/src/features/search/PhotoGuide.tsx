@@ -1,4 +1,5 @@
 import type { SearchMode } from './model'
+import type { ReactNode } from 'react'
 
 function SchedulePreview() {
   return <div className="schedule-preview" aria-label="글자를 읽을 수 있는 일정표 스크린샷 예시">
@@ -8,7 +9,7 @@ function SchedulePreview() {
   </div>
 }
 
-export default function PhotoGuide({ mode }: { mode: SearchMode }) {
+export default function PhotoGuide({ mode, children }: { mode: SearchMode; children?: ReactNode }) {
   const items = mode === 'gallery' ? [
     { title: '장면이 보이게', detail: '기억나는 물건이나 장면을 담아요.', image: '/images/coast.jpg', alt: '해안의 전체 장면이 보이는 사진 예시', crop: false },
     { title: '특징이 선명하게', detail: '색상·모양이 잘 보이면 좋아요.', image: '/images/card.jpg', alt: '지갑의 색상과 형태가 보이는 사진 예시', crop: false },
@@ -21,7 +22,9 @@ export default function PhotoGuide({ mode }: { mode: SearchMode }) {
     { title: '물건이 잘 보이게', detail: '형태를 알아볼 수 있는 사진이 좋아요.', image: '/images/detail.jpg', alt: '열쇠고리 전체의 모양이 보이는 사진 예시', crop: false },
   ]
   return <section className="photo-guide" aria-labelledby="photo-guide-heading">
+    {children}
     <div className="photo-guide__heading"><h3 id="photo-guide-heading">이런 사진이 좋아요</h3></div>
+    {mode === 'lost' && <div className="photo-guide__angles"><p>여러 방향의 사진은 물건의 특징을 비교하는 데 도움이 될 수 있어요.</p><p>모든 방향을 채울 필요는 없어요. 같은 물건이 선명하게 보이는 사진을 골라 주세요.</p></div>}
     <div className="photo-guide__grid">{items.map(item => <figure key={item.title}>
       <div className={`photo-guide__image ${item.crop ? 'photo-guide__image--crop' : ''}`}>
         {item.image ? <img src={item.image} alt={item.alt} width="400" height="300" /> : <SchedulePreview />}

@@ -1,4 +1,4 @@
-import { snapshotSearchDraft, type GallerySource, type SearchDraft, type SearchMode } from './model'
+import { snapshotSearchDraft, validateSearch, type GallerySource, type SearchDraft, type SearchMode } from './model'
 import { combineGalleryQuery, createGalleryAssistantState, type GalleryAssistantState } from './gallery-search-model'
 
 // Session memory only. Keep the submitted input/source separate from later edits.
@@ -39,8 +39,8 @@ export function removeSearchRecord(records: SearchRecord[], id: string) {
 
 export function updateSearchAssistant(records: SearchRecord[], id: string, patch: Partial<GalleryAssistantState>): SearchRecord[] {
   return records.map(record => {
-    if (record.id !== id || record.mode !== 'gallery') return record
-    const resolved = resolveGalleryAssistant(records, record)
+    if (record.id !== id) return record
+    const resolved = resolveAssistant(records, record, record.mode)
     const state = { ...resolved.assistant, ...patch }
     return {
       ...record,
@@ -54,13 +54,29 @@ export function refineGalleryRecord(parent: SearchRecord, assistant: GalleryAssi
   const conditions = assistant.conditions.filter(condition => condition.trim().length > 0)
   if (parent.mode !== 'gallery' || !parent.gallery || (!conditions.length && !assistant.appliedConditions?.length)) return null
   const baseQuery = parent.assistantBaseQuery ?? parent.draft.query
-  const child = createSearchRecord('gallery', {
+  const draft = snapshotSearchDraft('gallery', {
     query: combineGalleryQuery(baseQuery, conditions),
     photo: parent.draft.photo,
-  }, parent.gallery)
+  })
   return {
-    ...child,
-    parentRecordId: parent.id,
+    ...parent,
+    draft,
+    gallery: { name: parent.gallery.name, files: [...parent.gallery.files] },
+    assistantBaseQuery: baseQuery,
+    assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions] }),
+  }
+}
+
+export function refineLostRecord(parent: SearchRecord, assistant: GalleryAssistantState): SearchRecord | null {
+  const conditions = assistant.conditions.filter(condition => condition.trim().length > 0)
+  if (parent.mode !== 'lost' || (!conditions.length && !assistant.appliedConditions?.length)) return null
+  const baseQuery = parent.assistantBaseQuery ?? parent.draft.query
+  const draft = { ...parent.draft, query: combineGalleryQuery(baseQuery, conditions) }
+  if (validateSearch('lost', draft, null)) return null
+  return {
+    ...parent,
+    draft: snapshotSearchDraft('lost', draft),
+    gallery: null,
     assistantBaseQuery: baseQuery,
     assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions] }),
   }
@@ -86,10 +102,28 @@ export function overwriteGallerySearch(records: SearchRecord[], id: string, draf
   } : record)
 }
 
+export function overwriteLostSearch(records: SearchRecord[], id: string, draft: SearchDraft): SearchRecord[] {
+  if (validateSearch('lost', draft, null)) return records
+  return records.map(record => record.id === id && record.mode === 'lost' ? {
+    ...record,
+    draft: snapshotSearchDraft('lost', draft),
+    assistant: createGalleryAssistantState(),
+    assistantBaseQuery: draft.query.trim(),
+  } : record)
+}
+
 // An old refined record has its applied conditions in the query, but only
 // pending conditions in assistant.conditions. Recover that distinction without
 // changing the stored record or guessing at missing ancestry.
 export function resolveGalleryAssistant(records: readonly SearchRecord[], record: SearchRecord): { baseQuery: string; assistant: GalleryAssistantState } {
+  return resolveAssistant(records, record, 'gallery')
+}
+
+export function resolveLostAssistant(records: readonly SearchRecord[], record: SearchRecord): { baseQuery: string; assistant: GalleryAssistantState } {
+  return resolveAssistant(records, record, 'lost')
+}
+
+function resolveAssistant(records: readonly SearchRecord[], record: SearchRecord, mode: SearchMode): { baseQuery: string; assistant: GalleryAssistantState } {
   const state = record.assistant ?? { draft: '', conditions: [], messages: [] }
   if (state.appliedConditions !== undefined) {
     return { baseQuery: record.assistantBaseQuery ?? record.draft.query, assistant: copyAssistant(state) }
@@ -103,7 +137,7 @@ export function resolveGalleryAssistant(records: readonly SearchRecord[], record
     visited.add(current.id)
     if (current.assistantBaseQuery !== undefined) { baseQuery = current.assistantBaseQuery; resolved = true; break }
     if (!current.parentRecordId) { baseQuery = current.draft.query; resolved = true; break }
-    const parent = records.find(candidate => candidate.id === current.parentRecordId && candidate.mode === 'gallery')
+    const parent = records.find(candidate => candidate.id === current.parentRecordId && candidate.mode === mode)
     if (!parent) break
     current = parent
   }

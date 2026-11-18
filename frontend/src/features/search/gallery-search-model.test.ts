@@ -7,15 +7,15 @@ import {
 } from './gallery-search-model'
 
 describe('갤러리 세 검색 채널의 미리보기', () => {
-  it('종합·이미지·맥락 순서와 최대3개의 계약을 제공한다', () => {
+  it('종합·이미지·맥락 순서와 최대4개의 계약을 제공한다', () => {
     expect(GALLERY_CHANNELS).toEqual(['combined', 'image', 'context'])
-    expect(GALLERY_PREVIEW_LIMIT).toBe(3)
+    expect(GALLERY_PREVIEW_LIMIT).toBe(4)
   })
 
-  it.each([0, 1, 2, 3, 4, 7])('실제 %i개에서 채우지 않고 최대3개만 미리 보여준다', count => {
+  it.each([0, 1, 2, 3, 4, 5, 7])('실제 %i개에서 채우지 않고 최대4개만 미리 보여준다', count => {
     const items = Array.from({ length: count }, (_, index) => ({ id: String(index), order: index }))
     const preview = galleryPreviewItems(items)
-    expect(preview).toEqual(items.slice(0, 3))
+    expect(preview).toEqual(items.slice(0, 4))
     expect(items).toHaveLength(count)
     preview.forEach((item, index) => expect(item).toBe(items[index]))
   })
@@ -23,12 +23,14 @@ describe('갤러리 세 검색 채널의 미리보기', () => {
   it('한 채널의 ID 중복만 제거하고 첫 원참조·독립 순서를 보존한다', () => {
     const first = { id: 'same', name: '원본' }
     const second = { id: 'second', name: '다음' }
-    const third = { id: 'third', name: '마지막' }
-    const source = Object.freeze([first, { id: 'same', name: '중복' }, second, third])
-    expect(uniqueGalleryItems(source)).toEqual([first, second, third])
-    expect(galleryPreviewItems(source)).toEqual([first, second, third])
+    const third = { id: 'third', name: '셋째' }
+    const fourth = { id: 'fourth', name: '넷째' }
+    const fifth = { id: 'fifth', name: '더보기의 첫 후보' }
+    const source = Object.freeze([first, { id: 'same', name: '중복' }, second, third, fourth, fifth])
+    expect(uniqueGalleryItems(source)).toEqual([first, second, third, fourth, fifth])
+    expect(galleryPreviewItems(source)).toEqual([first, second, third, fourth])
     expect(galleryPreviewItems(source)[0]).toBe(first)
-    expect(source).toHaveLength(4)
+    expect(source).toHaveLength(6)
   })
 
   it('다른 채널에 이미 나온 ID도 제거하지 않는다', () => {
@@ -145,5 +147,21 @@ describe('검색 도우미의 명시적 조건 편집', () => {
     expect(galleryConditionsChanged(removeGalleryCondition(state, 0))).toBe(true)
     expect(galleryConditionsChanged({ ...state, conditions: [] })).toBe(true)
     expect(galleryConditionsChanged({ ...state, conditions: ['바닷가', '파란색'] })).toBe(true)
+  })
+
+  it('조건 조합 계산은 적용 상태와 원래 질의를 바꾸지 않는다', () => {
+    const base = '여행 사진\n제주 바다'
+    const initial = createGalleryAssistantState()
+    const added = addGalleryCondition(initial, '파란 가방')
+    expect(combineGalleryQuery(base, added.conditions)).toBe('여행 사진\n제주 바다\n파란 가방')
+    const edited = editGalleryCondition(added, 0, '노란 가방')
+    expect(combineGalleryQuery(base, edited.conditions)).toBe('여행 사진\n제주 바다\n노란 가방')
+    const removed = removeGalleryCondition(edited, 0)
+    expect(combineGalleryQuery(base, removed.conditions)).toBe(base)
+    expect(initial.conditions).toEqual([])
+    expect(added.conditions).toEqual(['파란 가방'])
+    expect(edited.conditions).toEqual(['노란 가방'])
+    expect(removed.appliedConditions).toEqual([])
+    expect(base).toBe('여행 사진\n제주 바다')
   })
 })

@@ -7,6 +7,8 @@ import { canSubmitWithEnter } from '../search/model'
 interface Props {
   id: string
   wide: boolean
+  hideHeading?: boolean
+  mode?: 'gallery' | 'lost'
   state: GalleryAssistantState
   inputRef: RefObject<HTMLTextAreaElement | null>
   onChange: (patch: Partial<GalleryAssistantState>) => void
@@ -20,11 +22,12 @@ const prompts = [
   { label: '사진 속 글자', text: '사진 속 글자: ' },
 ]
 
-export default function GallerySearchAssistant({ id, wide, state, inputRef, onChange, onClose, onApply }: Props) {
+export default function GallerySearchAssistant({ id, wide, hideHeading = false, mode = 'gallery', state, inputRef, onChange, onClose, onApply }: Props) {
   const log = useRef<HTMLDivElement>(null)
   const conditionInput = useRef<HTMLTextAreaElement>(null)
   const [feedback, setFeedback] = useState('')
   const [editing, setEditing] = useState<{ original: string; text: string } | null>(null)
+  const conditionPrompts = mode === 'lost' ? [{ label: '물건 특징', text: '물건 특징: ' }, { label: '분실 시기', text: '분실 시기: ' }, { label: '분실 장소', text: '분실 장소: ' }] : prompts
   useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight }, [state.messages.length])
 
   function addCondition(event?: FormEvent) {
@@ -51,12 +54,12 @@ export default function GallerySearchAssistant({ id, wide, state, inputRef, onCh
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
-  return <aside id={id} className="gallery-assistant" role={wide ? 'complementary' : 'region'} aria-labelledby={id + '-title'}
+  return <aside id={id} className="gallery-assistant" role={wide ? 'complementary' : 'region'} aria-labelledby={hideHeading ? undefined : id + '-title'} aria-label={hideHeading ? '검색 조건 도우미' : undefined}
     onKeyDown={event => { if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
-    <header className="gallery-assistant__heading"><h2 id={id + '-title'}>검색 도우미</h2><button type="button" className="icon-button" aria-label="검색 도우미 닫기" onClick={onClose}><X aria-hidden="true" /></button></header>
+    {!hideHeading && <header className="gallery-assistant__heading"><h2 id={id + '-title'}>검색 도우미</h2><button type="button" className="icon-button" aria-label="검색 도우미 닫기" onClick={onClose}><X aria-hidden="true" /></button></header>}
     <p className="gallery-assistant__notice">조건 정리 미리보기 · AI 답변 미연결</p>
     <div className="gallery-assistant__body" ref={log} role="log" tabIndex={0} aria-label="현재 검색의 추가 조건" aria-live="polite" aria-relevant="additions">
-      {!state.conditions.length && <p className="gallery-assistant__intro">{state.appliedConditions?.length ? '추가 조건을 모두 뺐어요.' : '기억나는 색상·시기·글자를 더해 보세요.'}</p>}
+      {!state.conditions.length && <p className="gallery-assistant__intro">{state.appliedConditions?.length ? '추가 조건을 모두 뺐어요.' : mode === 'lost' ? '기억나는 특징·분실 시기·장소를 더해 보세요.' : '기억나는 색상·시기·글자를 더해 보세요.'}</p>}
       {state.conditions.map((condition, index) => <div className="gallery-assistant__condition" key={condition}>
         {editing?.original === condition ? <form className="gallery-assistant__condition-editor" onSubmit={saveCondition}
           onKeyDown={event => { if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); event.stopPropagation(); cancelConditionEdit() } }}>
@@ -70,19 +73,19 @@ export default function GallerySearchAssistant({ id, wide, state, inputRef, onCh
       {galleryConditionsChanged(state) && <p className="gallery-assistant__pending">다시 검색하면 반영돼요.</p>}
     </div>
     {onApply ? <>
-      <div className="gallery-assistant__prompts" aria-label="조건 작성 도움">{prompts.map(prompt => <button type="button" key={prompt.label} disabled={!!editing} onClick={() => {
+      <div className="gallery-assistant__prompts" aria-label="조건 작성 도움">{conditionPrompts.map(prompt => <button type="button" key={prompt.label} disabled={!!editing} onClick={() => {
         const next = state.draft + (state.draft && !state.draft.endsWith('\n') ? '\n' : '') + prompt.text
         if (next.length > 400) { setFeedback('조건은 400자까지 적을 수 있어요.'); inputRef.current?.focus(); return }
         onChange({ draft: next }); setFeedback(''); requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(next.length, next.length) })
       }}>{prompt.label}</button>)}</div>
       <form className="gallery-assistant__composer" onSubmit={addCondition}>
         <label htmlFor={id + '-input'}>추가할 조건</label>
-        <textarea id={id + '-input'} ref={inputRef} value={state.draft} rows={3} maxLength={400} disabled={!!editing} placeholder="예: 파란 바다가 보이는 사진" onChange={event => { onChange({ draft: event.target.value }); setFeedback('') }}
+        <textarea id={id + '-input'} ref={inputRef} value={state.draft} rows={3} maxLength={400} disabled={!!editing} placeholder={mode === 'lost' ? '예: 앞면에 작은 금색 로고가 있어요' : '예: 파란 바다가 보이는 사진'} onChange={event => { onChange({ draft: event.target.value }); setFeedback('') }}
           onKeyDown={event => { if (canSubmitWithEnter(event.nativeEvent)) { event.preventDefault(); addCondition() } }} />
         <button type="submit" className="button button--secondary" aria-label="조건 추가" title="조건 추가" disabled={!!editing || !state.draft.trim()}><ArrowUp aria-hidden="true" /></button>
       </form>
       {galleryConditionsChanged(state) && <button type="button" className="button button--primary gallery-assistant__apply" disabled={!!editing} onClick={() => onApply(state)}>이 조건으로 다시 검색</button>}
-    </> : <Link className="button button--secondary" to="/gallery">검색 입력으로</Link>}
+    </> : <Link className="button button--secondary" to={mode === 'lost' ? '/lost-found' : '/gallery'}>검색 입력으로</Link>}
     <p className="gallery-assistant__feedback" role="status">{feedback}</p>
   </aside>
 }

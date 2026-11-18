@@ -2,11 +2,12 @@ import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import type { GallerySource, SearchDraft } from '../search/model'
 import type { GalleryImportHandler } from '../search/useGalleryImport'
 import type { GalleryAssistantState } from '../search/gallery-search-model'
-import { findSearchRecord, resolveGalleryAssistant, type SearchRecord } from '../search/history'
+import { findSearchRecord, resolveGalleryAssistant, resolveLostAssistant, type SearchRecord } from '../search/history'
 import HistoryPage from './HistoryPage'
 import { GalleryPhoto, GalleryResults } from './GalleryPages'
 import GallerySearchResults, { type GallerySearchActions } from './GallerySearchResults'
 import { FoundDetail, LostResults } from './LostFoundPages'
+import type { LostSearchActions } from './LostSearchResults'
 import { ValuableDetail, ValuableEditor, ValuablesList, type ValuableProps } from './ValuablesPages'
 import { AccountPage, InfoPage, LoginPage, PreviewIndex, SettingsPage } from './AccountPages'
 import { EmptyState, PageHeading } from './components'
@@ -20,6 +21,7 @@ interface Props extends ValuableProps {
   onAssistantChange: (id: string, patch: Partial<GalleryAssistantState>) => void
   onRefineRecord: (parent: SearchRecord, assistant: GalleryAssistantState) => void
   onCommitGallerySearch: (id: string | null, draft: SearchDraft) => void
+  onCommitLostSearch: (id: string | null, draft: SearchDraft) => void
   onOpenGallery: () => void
   onAddGallery: GalleryImportHandler
   onDisconnect: () => void
@@ -37,14 +39,21 @@ export default function WorkspaceRouter(props: Props) {
   }
   const onEdit = record ? () => props.onEditRecord(record) : undefined
   const gallery = { gallery: record ? record.gallery : props.gallery, draft: record?.draft ?? props.drafts.gallery, onOpenGallery: props.onOpenGallery, onTransfer: props.onTransfer, onEdit, fromHistory: !!record }
+  const resolvedAssistant = record?.mode === 'gallery' ? resolveGalleryAssistant(props.records, record) : undefined
   const galleryActions: GallerySearchActions = {
-    assistant: record?.mode === 'gallery' ? resolveGalleryAssistant(props.records, record).assistant : undefined,
+    assistant: resolvedAssistant?.assistant,
     onAssistantChange: record?.mode === 'gallery' ? patch => props.onAssistantChange(record.id, patch) : undefined,
     onRefine: record?.mode === 'gallery' ? assistant => props.onRefineRecord(record, assistant) : undefined,
     onCommitSearch: draft => props.onCommitGallerySearch(record?.mode === 'gallery' ? record.id : null, draft),
   }
   const browse = new URLSearchParams(search).get('view') === 'all' && !record
   const lost = { draft: record?.draft ?? props.drafts.lost, onEdit, fromHistory: !!record }
+  const lostActions: LostSearchActions = {
+    assistant: record?.mode === 'lost' ? resolveLostAssistant(props.records, record).assistant : undefined,
+    onAssistantChange: record?.mode === 'lost' ? patch => props.onAssistantChange(record.id, patch) : undefined,
+    onRefine: record?.mode === 'lost' ? assistant => props.onRefineRecord(record, assistant) : undefined,
+    onCommitSearch: draft => props.onCommitLostSearch(record?.mode === 'lost' ? record.id : null, draft),
+  }
   return <Routes>
     <Route path="/history" element={<HistoryPage records={props.records} onDeleteRecord={props.onDeleteRecord} />} />
     <Route path="/gallery/results" element={browse ? <GalleryResults {...gallery} onAddGallery={props.onAddGallery} /> : <GallerySearchResults key={record?.id ?? 'gallery-draft'} {...gallery} {...galleryActions} />} />
@@ -53,9 +62,10 @@ export default function WorkspaceRouter(props: Props) {
     <Route path="/gallery/results/context" element={<GallerySearchResults key={record?.id ?? 'gallery-draft'} {...gallery} {...galleryActions} channel="context" />} />
     <Route path="/gallery/photo/:localId" element={<GalleryPhoto key={pathname} {...gallery} />} />
     <Route path="/gallery/photo/:localId/transfer" element={<GalleryPhoto key={pathname} {...gallery} />} />
-    <Route path="/lost-found/results" element={<LostResults {...lost} />} />
-    <Route path="/lost-found/results/image" element={<LostResults {...lost} channel="image" />} />
-    <Route path="/lost-found/results/context" element={<LostResults {...lost} channel="context" />} />
+    <Route path="/lost-found/results" element={<LostResults key={record?.id ?? 'lost-draft'} {...lost} {...lostActions} />} />
+    <Route path="/lost-found/results/combined" element={<LostResults key={record?.id ?? 'lost-draft'} {...lost} {...lostActions} channel="combined" />} />
+    <Route path="/lost-found/results/image" element={<LostResults key={record?.id ?? 'lost-draft'} {...lost} {...lostActions} channel="image" />} />
+    <Route path="/lost-found/results/context" element={<LostResults key={record?.id ?? 'lost-draft'} {...lost} {...lostActions} channel="context" />} />
     <Route path="/lost-found/item/:source/:id" element={<FoundDetail key={pathname} />} />
     <Route path="/valuables" element={<ValuablesList {...props} />} />
     <Route path="/valuables/new" element={<ValuableEditor {...props} />} />

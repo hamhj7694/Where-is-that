@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  canShowMap, registrationComplete, selectSummary, transferPayload,
+  canShowMap, registrationComplete, selectSummary, transferPayload, transferPayloads,
   type Candidate, type CandidateLocation, type StorageState,
 } from './catalog-model'
 
@@ -122,6 +122,15 @@ describe('선택한 사진의 명시적 전달 확인', () => {
   it('확인했어도 빈 식별자로 전달을 만들지 않는다', () => {
     expect(transferPayload('', true)).toBeNull()
     expect(transferPayload('  ', true)).toBeNull()
+  })
+  it('확인한 여러 사진의 식별자를 중복 없이 순서대로 반환한다', () => {
+    expect(transferPayloads(['photo-a', ' photo-b ', 'photo-a'], true)).toEqual(['photo-a', 'photo-b'])
+    expect(transferPayloads(['photo-a', 'photo-b'], false)).toBeNull()
+  })
+  it('최대 여섯 장은 허용하고 일곱 장은 전달하지 않는다', () => {
+    const sixPhotos = Array.from({ length: 6 }, (_, index) => `photo-${index}`)
+    expect(transferPayloads(sixPhotos, true)).toEqual(sixPhotos)
+    expect(transferPayloads([...sixPhotos, 'photo-6'], true)).toBeNull()
   })
 })
 

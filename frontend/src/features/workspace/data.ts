@@ -1,4 +1,5 @@
 import type { Candidate } from '../search/catalog-model'
+import type { ReferencePhotoView } from '../search/model'
 
 export interface AppPhoto {
   id: string
@@ -6,6 +7,7 @@ export interface AppPhoto {
   file: File | null
   sampleUrl: string | null
   kind: 'photo' | 'screenshot'
+  photoView?: ReferencePhotoView
   path?: string
   updatedAt?: number
 }
@@ -21,6 +23,10 @@ export interface Valuable {
   category: string
   status: ValuableStatus
   photos: AppPhoto[]
+  /** Registration time for the valuables list; optional for older in-memory records. */
+  createdAt?: number
+  /** Last time the item detail was opened in this browser session. */
+  viewedAt?: number
   updatedAt: number
 }
 
@@ -49,10 +55,17 @@ const records = [
   ['12', '작은 가죽 지갑', '지갑', '남색', null],
 ] as const
 
+// Explicit fictional fixture metadata; these labels were not inferred from photos.
+const sampleCandidateViews: Record<string, ReferencePhotoView> = {
+  '01': 'front', '02': 'back', '03': 'side', '04': 'top',
+  '05': 'bottom', '06': 'diagonal', '07': 'unspecified',
+}
+
 /** Fictional UI fixtures, never official police records or actual search output. */
 export const sampleCandidates: Candidate[] = records.map(([id, title, category, color, image], index) => ({
   id: 'demo-' + id, title, category, color, image,
   photoStatus: image ? 'verified_photo' : 'no_photo',
+  ...(image ? { photoView: sampleCandidateViews[id] ?? 'unspecified' } : {}),
   description: category === '지갑' ? '카드 수납 공간이 있는 지갑' : category === '가방' ? '인쇄된 무늬가 있는 천 가방' : '금속 열쇠 여러 개와 고리',
   foundAt: '2026-11-' + String(15 - index).padStart(2, '0'),
   foundPlace: (index % 2 ? '경기' : '서울') + ' · 샘플 장소',
@@ -63,9 +76,13 @@ export const sampleCandidates: Candidate[] = records.map(([id, title, category, 
 }))
 
 export const initialValuables: Valuable[] = [
-  { id: 'sample-v1', name: '매일 쓰는 지갑', category: '지갑', status: 'kept', notes: '검정 가죽 · 반지갑', photos: [samplePhotos[1]], updatedAt: 0 },
-  { id: 'sample-v2', name: '집 열쇠', category: '열쇠', status: 'lost', notes: '은색 열쇠고리', photos: [samplePhotos[3]], updatedAt: 0 },
+  { id: 'sample-v1', name: '매일 쓰는 지갑', category: '지갑', status: 'kept', notes: '검정 가죽 · 반지갑', photos: [samplePhotos[1]], createdAt: Date.UTC(2026, 10, 17, 9), viewedAt: Date.UTC(2026, 10, 17, 12), updatedAt: Date.UTC(2026, 10, 17, 9) },
+  { id: 'sample-v2', name: '집 열쇠', category: '열쇠', status: 'lost', notes: '은색 열쇠고리', photos: [samplePhotos[3]], createdAt: Date.UTC(2026, 10, 16, 18), viewedAt: Date.UTC(2026, 10, 16, 20), updatedAt: Date.UTC(2026, 10, 16, 18) },
 ]
+
+export function valuableCreatedAt(item: Valuable) {
+  return item.createdAt ?? item.updatedAt
+}
 
 export function photoFromFile(file: File, id: string): AppPhoto {
   return { id, name: file.name, file, sampleUrl: null, kind: /screen|screenshot|capture|스크린|캡처/i.test(file.name) ? 'screenshot' : 'photo', path: file.webkitRelativePath || file.name, updatedAt: file.lastModified }

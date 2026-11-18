@@ -1,3 +1,5 @@
+import { MAX_LOST_REFERENCE_PHOTOS, type ReferencePhotoView } from './model'
+
 export type ResultChannel = 'image' | 'context'
 export type PhotoStatus = 'verified_photo' | 'no_photo' | 'invalid'
 export type LocationStatus = 'verified' | 'address_only' | 'ambiguous' | 'missing' | 'provider_error'
@@ -14,6 +16,7 @@ export interface Candidate {
   title: string
   image: string | null
   photoStatus: PhotoStatus
+  photoView?: ReferencePhotoView
   category: string
   color: string
   description: string
@@ -71,5 +74,12 @@ export function registrationComplete(progress: RegistrationProgress): boolean {
 
 /** A selection is not a transfer authorization; cancellation produces no payload. */
 export function transferPayload(photoId: string, confirmed: boolean): string | null {
-  return confirmed && photoId.trim() ? photoId : null
+  return transferPayloads([photoId], confirmed)?.[0] ?? null
+}
+
+/** Multiple selected photos are transferred only after explicit confirmation. */
+export function transferPayloads(photoIds: readonly string[], confirmed: boolean): string[] | null {
+  if (!confirmed) return null
+  const ids = [...new Set(photoIds.map(photoId => photoId.trim()).filter(Boolean))]
+  return ids.length && ids.length <= MAX_LOST_REFERENCE_PHOTOS ? ids : null
 }

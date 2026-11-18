@@ -69,9 +69,11 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
   function openAttachment() {
     sequence.current++
     attachmentOpen.current = true
-    setPendingPhoto(draft.photo)
-    setPendingOriginal(originalReferencePhoto(draft.photo))
-    setCropSession(null)
+    if (!pendingPhoto) {
+      setPendingPhoto(draft.photo)
+      setPendingOriginal(originalReferencePhoto(draft.photo))
+    }
+    setCropSession(current => current ? { ...current, token: sequence.current } : null)
     setAttachmentError('')
     setUploadOpen(true)
   }
@@ -82,9 +84,6 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
     readingRef.current = false
     setReading(false)
     setUploadOpen(false)
-    setPendingPhoto(null)
-    setPendingOriginal(null)
-    setCropSession(null)
     setAttachmentError('')
     if (initialAttachmentOpen) requestAnimationFrame(() => textareaRef.current?.focus())
   }
@@ -136,7 +135,7 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
   function handleKey(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (canSubmitWithEnter({ key: event.key, shiftKey: event.shiftKey, isComposing: composing.current || event.nativeEvent.isComposing, keyCode: event.nativeEvent.keyCode })) {
       event.preventDefault()
-      if (!readingRef.current && !cropSession) form.current?.requestSubmit()
+      if (!readingRef.current && !(attachmentOpen.current && cropSession)) form.current?.requestSubmit()
     }
   }
 
@@ -148,7 +147,7 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
   const attachedPreview = preview ? <img src={preview} alt="검색에 참고할 사진 미리보기" width="64" height="64" draggable={false} /> : <span className="attachment__placeholder" />
 
   return <><form ref={form} className={`composer ${error ? 'composer--error' : ''}`} onSubmit={event => {
-    if (readingRef.current || cropSession) { event.preventDefault(); return }
+    if (readingRef.current || (attachmentOpen.current && cropSession)) { event.preventDefault(); return }
     onSubmit(event)
   }} aria-label={`${copy[mode].name} 입력`}
     onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
@@ -162,7 +161,7 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
       {draft.photo && <div className="attachment">
         <button type="button" className="attachment__preview-button" aria-label="참고 사진 추가 창 열기" title="참고 사진 편집" aria-haspopup="dialog" onClick={openAttachment} disabled={reading}>{attachedPreview}</button>
         <div className="attachment__text"><span>참고 사진</span><strong title={draft.photo.name}>{draft.photo.name}</strong><small>{formatFileSize(draft.photo.size)}</small></div>
-        <button type="button" className="icon-button" aria-label="참고 사진 빼기" onClick={() => { sequence.current++; readingRef.current = false; setReading(false); onDraft({ photo: null }) }}><X /></button>
+        <button type="button" className="icon-button" aria-label="참고 사진 빼기" onClick={() => { sequence.current++; readingRef.current = false; setReading(false); setPendingPhoto(null); setPendingOriginal(null); setCropSession(null); onDraft({ photo: null }) }}><X /></button>
       </div>}
     </div>
     <div className="composer__toolbar">

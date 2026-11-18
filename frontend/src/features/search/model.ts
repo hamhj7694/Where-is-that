@@ -1,12 +1,28 @@
 export type SearchMode = 'gallery' | 'lost'
-export interface SearchDraft { query: string; photo: File | null; photos?: File[] }
-export const MAX_LOST_REFERENCE_PHOTOS = 3
+export type ReferencePhotoView = 'unspecified' | 'front' | 'back' | 'side' | 'top' | 'bottom' | 'diagonal'
+export const REFERENCE_PHOTO_VIEWS: readonly { value: ReferencePhotoView; label: string }[] = [
+  { value: 'unspecified', label: '미지정' },
+  { value: 'front', label: '정면(앞)' },
+  { value: 'back', label: '뒤' },
+  { value: 'side', label: '옆' },
+  { value: 'top', label: '위' },
+  { value: 'bottom', label: '아래' },
+  { value: 'diagonal', label: '대각선' },
+]
+export interface SearchDraft {
+  query: string
+  photo: File | null
+  photos?: File[]
+  photoViews?: ReferencePhotoView[]
+}
+export const MAX_LOST_REFERENCE_PHOTOS = 6
 export interface GallerySource { name: string; files: File[] }
 export interface SearchPreview {
   mode: SearchMode
   query: string
   photo: File | null
   photos?: File[]
+  photoViews?: ReferencePhotoView[]
   gallery: { name: string; count: number } | null
   channels: readonly ('image' | 'context' | 'gallery')[]
 }
@@ -33,12 +49,20 @@ export function getReferencePhotos(draft: SearchDraft): File[] {
   return draft.photos ?? (draft.photo ? [draft.photo] : [])
 }
 
+/** View labels are manual metadata, never inferred from the image contents. */
+export function getReferencePhotoViews(draft: SearchDraft): ReferencePhotoView[] {
+  return getReferencePhotos(draft).map((_, index) => {
+    const value = draft.photoViews?.[index]
+    return value && REFERENCE_PHOTO_VIEWS.some(option => option.value === value) ? value : 'unspecified'
+  })
+}
+
 /** Keep file identities, while isolating the selected list from later edits. */
 export function snapshotSearchDraft(mode: SearchMode, draft: SearchDraft): SearchDraft {
   const query = draft.query.trim()
   if (mode === 'gallery') return { query, photo: draft.photo }
   const photos = [...getReferencePhotos(draft)]
-  return { query, photo: photos[0] ?? null, photos }
+  return { query, photo: photos[0] ?? null, photos, photoViews: getReferencePhotoViews(draft) }
 }
 
 export function isImageFile(file: File) {

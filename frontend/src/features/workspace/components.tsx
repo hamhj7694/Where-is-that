@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, ImageOff, Info, MapPin, RotateCcw, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ImageOff, Info, MapPin, RotateCcw, ShieldCheck } from 'lucide-react'
 import Modal from '../../components/Modal'
 import { usePhotoPreview } from '../search/SearchComposer'
-import { canShowMap, transferPayload, type Candidate, type CandidateLocation } from '../search/catalog-model'
+import { MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from '../search/model'
+import { canShowMap, transferPayloads, type Candidate, type CandidateLocation } from '../search/catalog-model'
 import { localPhotoId, OFFICIAL_SEARCH_URL, photoFromFile, type AppPhoto } from './data'
 
 export function PageHeading({ title, description, action, back }: { title: string; description?: string; action?: ReactNode; back?: { to: string; label: string } }) {
@@ -57,19 +58,22 @@ export function FoundCard({ item, to, context = false }: { item: Candidate; to: 
   </Link>
 }
 
-function QueryReferencePhoto({ file, index }: { file: File; index: number }) {
+function QueryReferencePhoto({ file, index, view = 'unspecified' }: { file: File; index: number; view?: ReferencePhotoView }) {
   const [open, setOpen] = useState(false)
   const photo = photoFromFile(file, localPhotoId(file))
-  return <><button type="button" className="query-summary__photo-button" aria-label={'참고 사진 ' + (index + 1) + ' 크게 보기: ' + file.name} aria-haspopup="dialog" onClick={() => setOpen(true)}><PhotoImage photo={photo} /></button>
+  const viewLabel = REFERENCE_PHOTO_VIEWS.find(option => option.value === view)?.label ?? '미지정'
+  const direction = view === 'unspecified' ? '방향 미지정' : '선택한 방향 ' + viewLabel
+  return <div className="query-summary__photo-item"><button type="button" className="query-summary__photo-button" aria-label={'참고 사진 ' + (index + 1) + ', ' + direction + ', 크게 보기: ' + file.name} aria-haspopup="dialog" onClick={() => setOpen(true)}><PhotoImage photo={photo} /></button>
+    <span className="query-summary__photo-view">{viewLabel}</span>
     <PhotoViewer photo={photo} open={open} onClose={() => setOpen(false)} />
-  </>
+  </div>
 }
 
-export function QuerySummary({ query, photo, photos, editTo, onEdit }: { query: string; photo: File | null; photos?: readonly File[]; editTo: string; onEdit?: () => void }) {
+export function QuerySummary({ query, photo, photos, photoViews, editTo, onEdit }: { query: string; photo: File | null; photos?: readonly File[]; photoViews?: readonly ReferencePhotoView[]; editTo: string; onEdit?: () => void }) {
   const preview = usePhotoPreview(photos === undefined ? photo : null)
   const hasPhoto = photos === undefined ? !!photo : photos.length > 0
   return <div className="query-summary">{photos === undefined ? preview && <img className="query-summary__photo" src={preview} alt="검색에 참고한 사진" />
-    : photos.length > 0 && <div className="query-summary__photos" role="group" aria-label={'검색에 참고한 사진 ' + photos.length + '장'}>{photos.map((file, index) => <QueryReferencePhoto file={file} index={index} key={localPhotoId(file) + '-' + index} />)}{photos.length > 1 && <span className="query-summary__photo-count">사진 {photos.length}장</span>}</div>}
+    : photos.length > 0 && <div className="query-summary__photos" role="group" aria-label={'검색에 참고한 사진 ' + photos.length + '장'}>{photos.map((file, index) => <QueryReferencePhoto file={file} index={index} view={photoViews?.[index]} key={localPhotoId(file) + '-' + index} />)}{photos.length > 1 && <span className="query-summary__photo-count">사진 {photos.length}장</span>}</div>}
     <p>{query || (hasPhoto ? '참고 사진으로 찾기' : '샘플 검색')}</p><SearchEditAction to={editTo} onEdit={onEdit} /></div>
 }
 
@@ -93,22 +97,51 @@ export function LocationCard({ item, location = item.location }: { item: Candida
   </section>
 }
 
-export function TransferDialog({ photo, open, onClose, onTransfer }: { photo: AppPhoto; open: boolean; onClose: () => void; onTransfer: (photo: AppPhoto) => Promise<void> }) {
+export function TransferDialog({ photos, open, onClose, onTransfer, initialPhotoId }: { photos: readonly AppPhoto[]; open: boolean; onClose: () => void; onTransfer: (photos: readonly AppPhoto[]) => Promise<void>; initialPhotoId?: string }) {
+  const availablePhotos = photos.slice(0, MAX_LOST_REFERENCE_PHOTOS)
+  const photoKey = availablePhotos.map(photo => photo.id).join('|')
+  const [activeId, setActiveId] = useState(initialPhotoId ?? availablePhotos[0]?.id ?? '')
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialPhotoId && availablePhotos.some(photo => photo.id === initialPhotoId) ? [initialPhotoId] : availablePhotos[0] ? [availablePhotos[0].id] : [])
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  useEffect(() => { if (open) { setConfirmed(false); setError('') } }, [open, photo.id])
-  return <Modal open={open} title="이 사진으로 분실물 찾기" focusKey={photo.id} onClose={() => { if (!busy) onClose() }}>
-    <PhotoImage photo={photo} className="transfer-photo" /><p>선택한 사진 한 장으로 새 검색을 시작해요.</p>
-    <p className="storage-note">정식 검색에서는 이 사진만 서버에서 일시 처리해요. 소중한 것들에 자동 저장하지 않아요.</p>
-    <label className="checkbox-row"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />선택한 사진만 사용해요</label>
+  useEffect(() => {
+    if (!open && photoKey === '') return
+    const firstId = initialPhotoId && availablePhotos.some(photo => photo.id === initialPhotoId) ? initialPhotoId : availablePhotos[0]?.id ?? ''
+    setActiveId(firstId)
+    setSelectedIds(firstId ? [firstId] : [])
+    setConfirmed(false)
+    setError('')
+  }, [open, photoKey, initialPhotoId])
+  const activePhoto = availablePhotos.find(photo => photo.id === activeId) ?? availablePhotos[0]
+  function togglePhoto(photoId: string) {
+    if (busy) return
+    if (selectedIds.includes(photoId)) {
+      const next = selectedIds.filter(id => id !== photoId)
+      setSelectedIds(next)
+      if (activeId === photoId) setActiveId(next[0] ?? photoId)
+      return
+    }
+    if (selectedIds.length >= MAX_LOST_REFERENCE_PHOTOS) return
+    setSelectedIds([...selectedIds, photoId])
+    setActiveId(photoId)
+  }
+  if (!activePhoto) return null
+  const selectedPhotos = availablePhotos.filter(photo => selectedIds.includes(photo.id))
+  return <Modal open={open} title="분실물 찾기에 사용할 사진" focusKey={'transfer-' + activePhoto.id} onClose={() => { if (!busy) onClose() }}>
+    <PhotoImage photo={activePhoto} className="transfer-photo" />
+    {availablePhotos.length > 1 && <><p className="transfer-photo-picker__label">검색에 사용할 사진 <span>{selectedPhotos.length}/{MAX_LOST_REFERENCE_PHOTOS}</span></p><div className="transfer-photo-picker" role="group" aria-label="분실물 검색에 사용할 사진 선택">{availablePhotos.map((photo, index) => { const selected = selectedIds.includes(photo.id); return <button type="button" key={photo.id} className={'transfer-photo-picker__item' + (selected ? ' is-selected' : '')} aria-pressed={selected} aria-label={'사진 ' + (index + 1) + (selected ? ' 선택 해제' : ' 선택')} onClick={() => togglePhoto(photo.id)}><PhotoImage photo={photo} /><span className="transfer-photo-picker__mark">{selected ? <Check aria-hidden="true" /> : index + 1}</span></button> })}</div></>}
+    <p>선택한 사진 {selectedPhotos.length}장으로 새 검색을 시작해요.</p>
+    <p className="storage-note">정식 검색에서는 선택한 사진만 서버에서 일시 처리해요. 사진 보관함에 자동 저장하지 않아요.</p>
+    <label className="checkbox-row"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />선택한 사진만 분실물 검색에 사용해요</label>
     {error && <p role="alert" className="form-error">{error}</p>}
     <div className="button-row"><button type="button" className="button button--secondary" onClick={onClose} disabled={busy}>취소</button>
-      <button type="button" className="button button--primary" disabled={!confirmed || busy} onClick={async () => {
-        if (!transferPayload(photo.id, confirmed)) return
+      <button type="button" className="button button--primary" disabled={!confirmed || !selectedPhotos.length || busy} onClick={async () => {
+        const payload = transferPayloads(selectedIds, confirmed)
+        if (!payload) return
         setBusy(true)
-        try { await onTransfer(photo) } catch { setError('사진을 열지 못했어요. 다시 선택해 주세요.') } finally { setBusy(false) }
-      }}>{busy ? '사진 준비 중' : '이 사진으로 찾기'}</button></div>
+        try { await onTransfer(selectedPhotos) } catch { setError('사진을 열지 못했어요. 다시 선택해 주세요.') } finally { setBusy(false) }
+      }}>{busy ? '사진 준비 중' : selectedPhotos.length > 1 ? `사진 ${selectedPhotos.length}장으로 찾기` : '이 사진으로 찾기'}</button></div>
     <p className="field__help"><ShieldCheck aria-hidden="true" />현재 체험에서는 서버 전송이 없어요.</p>
   </Modal>
 }

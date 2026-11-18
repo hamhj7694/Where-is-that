@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { prepareLostReferenceFiles } from './lost-reference-import'
 
-const photos = ['front.jpg', 'back.jpg', 'detail.jpg'].map((name, index) => new File([String(index)], name, { type: 'image/jpeg' }))
+const photos = ['front.jpg', 'back.jpg', 'detail.jpg', 'left.jpg', 'right.jpg', 'bottom.jpg'].map((name, index) => new File([String(index)], name, { type: 'image/jpeg' }))
 const noRead = async () => undefined
 
 describe('분실물 참고 사진 선택 준비', () => {
-  it('최대3장을 순차 확인하고 원본 File·순서·입력 배열을 보존한다', async () => {
+  it('최대6장을 순차 확인하고 원본 File·순서·입력 배열을 보존한다', async () => {
     const selected = Object.freeze([...photos])
     const visited: File[] = []
     let active = 0
@@ -24,18 +24,18 @@ describe('분실물 참고 사진 선택 준비', () => {
     expect(selected).toEqual(photos)
   })
 
-  it('기존2장 뒤1장은 허용하고3장 초과는 읽기 전에 친절한 오류로 중단한다', async () => {
+  it('기존5장 뒤1장은 허용하고5장 뒤2장·전체7장은 읽기 전에 거절한다', async () => {
     const read = vi.fn(noRead)
-    expect(await prepareLostReferenceFiles([photos[0]], 2, { read })).toEqual([photos[0]])
+    expect(await prepareLostReferenceFiles([photos[0]], 5, { read })).toEqual([photos[0]])
     read.mockClear()
-    await expect(prepareLostReferenceFiles([photos[0], photos[1]], 2, { read })).rejects.toThrow('참고 사진은 최대 3장까지 추가할 수 있어요.')
-    await expect(prepareLostReferenceFiles([...photos, photos[0]], 0, { read })).rejects.toThrow('최대 3장')
+    await expect(prepareLostReferenceFiles([photos[0], photos[1]], 5, { read })).rejects.toThrow('참고 사진은 최대 6장까지 추가할 수 있어요.')
+    await expect(prepareLostReferenceFiles([...photos, photos[0]], 0, { read })).rejects.toThrow('최대 6장')
     expect(read).not.toHaveBeenCalled()
   })
 
-  it('교체는 기존3장에서도 한 장만 허용하며 여러 장이면 읽기 전에 중단한다', async () => {
+  it('교체는 기존6장에서도 한 장만 허용하며 여러 장이면 읽기 전에 중단한다', async () => {
     const read = vi.fn(noRead)
-    expect(await prepareLostReferenceFiles([photos[1]], 3, { replace: true, read })).toEqual([photos[1]])
+    expect(await prepareLostReferenceFiles([photos[1]], 6, { replace: true, read })).toEqual([photos[1]])
     read.mockClear()
     await expect(prepareLostReferenceFiles(photos, 1, { replace: true, read })).rejects.toThrow('사진을 바꿀 때는 한 장만 선택해 주세요.')
     expect(read).not.toHaveBeenCalled()
@@ -43,8 +43,8 @@ describe('분실물 참고 사진 선택 준비', () => {
 
   it('빈 선택은 아무 파일도 읽지 않고 빈 배열로 유지한다', async () => {
     const read = vi.fn(noRead)
-    expect(await prepareLostReferenceFiles([], 3, { read })).toEqual([])
-    expect(await prepareLostReferenceFiles([], 3, { replace: true, read })).toEqual([])
+    expect(await prepareLostReferenceFiles([], 6, { read })).toEqual([])
+    expect(await prepareLostReferenceFiles([], 6, { replace: true, read })).toEqual([])
     expect(read).not.toHaveBeenCalled()
   })
 

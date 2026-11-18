@@ -1,6 +1,6 @@
 export const GALLERY_CHANNELS = ['combined', 'image', 'context'] as const
 export type GallerySearchChannel = typeof GALLERY_CHANNELS[number]
-export const GALLERY_PREVIEW_LIMIT = 3
+export const GALLERY_PREVIEW_LIMIT = 4
 
 export interface GalleryAssistantMessage {
   id: string

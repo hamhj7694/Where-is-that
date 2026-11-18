@@ -1,14 +1,15 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowRight, MessageSquare } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { GALLERY_CHANNELS, createGalleryAssistantState, galleryPreviewItems, uniqueGalleryItems, type GalleryAssistantState, type GallerySearchChannel } from '../search/gallery-search-model'
+import { GALLERY_CHANNELS, GALLERY_PREVIEW_LIMIT, createGalleryAssistantState, galleryPreviewItems, uniqueGalleryItems, type GalleryAssistantState, type GallerySearchChannel } from '../search/gallery-search-model'
 import { validateSearch, type GallerySource, type SearchDraft } from '../search/model'
 import { copy } from '../search/copy'
 import SearchComposer from '../search/SearchComposer'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
-import { DemoNotice, EmptyState, PageHeading, PhotoImage, RetryButton } from './components'
+import { DemoNotice, EmptyState, NoPhoto, PageHeading, PhotoImage, RetryButton } from './components'
 import GallerySearchAssistant from './GallerySearchAssistant'
 import GalleryQuerySummary from './GalleryQuerySummary'
+import Modal from '../../components/Modal'
 import '../../styles/gallery-search.css'
 
 export interface GallerySearchActions {
@@ -165,19 +166,21 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     const shown = full ? photos.slice((page - 1) * 12, page * 12) : galleryPreviewItems(photos)
     return <section className="gallery-result-section" key={which} aria-labelledby={panelId + '-' + which}>
       <div className="gallery-result-section__heading"><div><h2 id={panelId + '-' + which}>{text.title}</h2><p>{text.description}</p></div>
-        {!full && state === 'preview' && photos.length > 3 && <Link className="gallery-result-section__more" to={linkTo(which)}>{text.more}<ArrowRight aria-hidden="true" /></Link>}
+        {!full && state === 'preview' && photos.length > GALLERY_PREVIEW_LIMIT && <Link className="gallery-result-section__more" to={linkTo(which)}>{text.more}<ArrowRight aria-hidden="true" /></Link>}
       </div>
       {state === 'error' ? <EmptyState title="이 검색 기준을 불러오지 못했어요" description="다른 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry(which)} /></EmptyState>
-        : state === 'loading' ? <div className="gallery-result-grid" aria-busy="true" aria-label={text.title + ' 로딩 화면 미리보기'}>{[0, 1, 2].map(index => <div className="gallery-result-skeleton" key={index} />)}</div>
+        : state === 'loading' ? <div className="gallery-result-grid" aria-busy="true" aria-label={text.title + ' 로딩 화면 미리보기'}>{Array.from({ length: GALLERY_PREVIEW_LIMIT }, (_, index) => <div className="gallery-result-skeleton" key={index} />)}</div>
         : state === 'empty' || !shown.length ? <EmptyState title="미리볼 이미지가 없어요" description="검색 조건이나 연결한 갤러리를 확인해 주세요." />
-        : <><div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} />)}</div>
+        : <><div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} />)}
+          {!full && Array.from({ length: Math.max(0, GALLERY_PREVIEW_LIMIT - shown.length) }, (_, index) => <div className="gallery-result-placeholder" key={'empty-' + index}><div className="gallery-result-card__image"><NoPhoto /></div></div>)}
+        </div>
           {full && totalPages > 1 && <div className="pagination"><button type="button" className="button button--secondary" disabled={page <= 1} onClick={() => changePage(page - 1)}>이전</button><span>{page} / {totalPages}</span><button type="button" className="button button--secondary" disabled={page >= totalPages} onClick={() => changePage(page + 1)}>다음</button></div>}
         </>}
     </section>
   }
 
   const assistantToggle = <button type="button" className="button button--secondary" ref={toggle} aria-controls={panelId} aria-expanded={open} disabled={!!editor} onClick={() => showAssistant(!open)}><MessageSquare aria-hidden="true" />{open ? '도우미 접기' : '검색 도우미'}</button>
-  return <main id="main-content" className="content-workspace gallery-results" onClickCapture={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0 && event.target instanceof Element && event.target.closest('a')) rememberScroll() }}>
+  return <div className={'gallery-search-shell' + (wide && open ? ' gallery-search-shell--open' : '')}><main id="main-content" className="content-workspace gallery-results" onClickCapture={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0 && event.target instanceof Element && event.target.closest('a')) rememberScroll() }}>
     <PageHeading title={channel ? channelCopy[channel].title + ' 결과' : '찾은 이미지'} back={channel ? { to: linkTo(), label: '찾은 이미지로' } : fromHistory ? { to: '/history', label: '찾은 기록으로' } : undefined} action={wide ? assistantToggle : undefined} />
     <DemoNotice>결과 배치 미리보기 · AI 검색 미연결</DemoNotice>
     {editor ? <div className="gallery-query-editor"><SearchComposer mode="gallery" draft={editor.draft} error={editorError} textareaRef={editorInput} initialAttachmentOpen={editor.photoEdit} submitLabel="다시 검색"
@@ -189,9 +192,9 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</p>
       {!wide && assistantToggle}
     </div>
-    <div className={'gallery-results__layout' + (open ? ' gallery-results__layout--open' : '')}>
-      {open && <GallerySearchAssistant id={panelId} wide={wide} state={assistant} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} />}
-      <div className="gallery-results__sections">{channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>
-    </div>
+    <div className="gallery-results__sections">{channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>
   </main>
+    {wide ? open && <div className="gallery-assistant-dock"><GallerySearchAssistant id={panelId} wide state={assistant} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} /></div>
+      : <Modal open={open} title="검색 도우미" focusKey={panelId} className="gallery-assistant-modal" initialFocus={assistantInput} onClose={() => showAssistant(false)}><GallerySearchAssistant id={panelId} wide={false} hideHeading state={assistant} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} /></Modal>}
+  </div>
 }

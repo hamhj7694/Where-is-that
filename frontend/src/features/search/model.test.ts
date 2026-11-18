@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendGallery, canSubmitWithEnter, collectGallery, createSearchPreview, getReferencePhotos, MAX_LOST_REFERENCE_PHOTOS, snapshotSearchDraft, validateSearch, type SearchDraft } from './model'
+import { appendGallery, canSubmitWithEnter, collectGallery, createSearchPreview, getReferencePhotos, getReferencePhotoViews, MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, snapshotSearchDraft, validateSearch, type ReferencePhotoView, type SearchDraft } from './model'
 
 const photo = new File(['fixture'], 'wallet.jpg', { type: 'image/jpeg' })
 const screenshot = new File(['fixture'], 'schedule.png', { type: 'image/png' })
@@ -113,7 +113,7 @@ describe('F2 다중 참고 사진과 F1 한 장 입력의 경계', () => {
   it('목록이 없는 이전 입력은 대표사진 한 장과 호환된다', () => {
     const draft = { query: '', photo }
     expect(getReferencePhotos(draft)).toEqual([photo])
-    expect(snapshotSearchDraft('lost', draft)).toEqual({ query: '', photo, photos: [photo] })
+    expect(snapshotSearchDraft('lost', draft)).toEqual({ query: '', photo, photos: [photo], photoViews: ['unspecified'] })
     expect(getReferencePhotos({ query: '', photo: null })).toEqual([])
     expect(validateSearch('lost', draft, null)).toBeNull()
   })
@@ -122,7 +122,7 @@ describe('F2 다중 참고 사진과 F1 한 장 입력의 경계', () => {
     const photos: File[] = []
     const draft = { query: '', photo, photos }
     expect(getReferencePhotos(draft)).toBe(photos)
-    expect(snapshotSearchDraft('lost', draft)).toEqual({ query: '', photo: null, photos: [] })
+    expect(snapshotSearchDraft('lost', draft)).toEqual({ query: '', photo: null, photos: [], photoViews: [] })
     expect(validateSearch('lost', draft, null)).toBe('empty')
     expect(validateSearch('lost', { ...draft, query: '사진 없이 설명만' }, null)).toBeNull()
   })
@@ -139,12 +139,31 @@ describe('F2 다중 참고 사진과 F1 한 장 입력의 경계', () => {
     snapshot.photos!.forEach((item, index) => expect(item).toBe(photos[index]))
   })
 
-  it('F2 3장 상한을 검사하며 목록을 조용히 잘라내지 않는다', () => {
-    const photos = [photo, screenshot, third, new File(['fourth'], 'fourth.jpg', { type: 'image/jpeg' })]
-    expect(MAX_LOST_REFERENCE_PHOTOS).toBe(3)
+  it('F2 6장은 허용하고7장은 거절하며 목록을 조용히 잘라내지 않는다', () => {
+    const photos = [photo, screenshot, third, ...Array.from({ length: 4 }, (_, index) => new File([String(index)], `extra-${index}.jpg`, { type: 'image/jpeg' }))]
+    expect(MAX_LOST_REFERENCE_PHOTOS).toBe(6)
+    expect(validateSearch('lost', { query: '', photo: null, photos: photos.slice(0, 6) }, null)).toBeNull()
     expect(validateSearch('lost', { query: '추가 설명', photo, photos }, null)).toBe('too-many-photos')
-    expect(photos).toHaveLength(4)
-    expect(getReferencePhotos({ query: '', photo, photos })).toHaveLength(4)
+    expect(photos).toHaveLength(7)
+    expect(getReferencePhotos({ query: '', photo, photos })).toHaveLength(7)
+  })
+
+  it('6장 미리보기는 전체 사진을 별도 배열로 보존하고 첫 장 호환을 유지한다', () => {
+    const photos = Array.from({ length: 6 }, (_, index) => new File([String(index)], `view-${index}.png`, { type: 'image/png' }))
+    const original = [...photos]
+    const draft = { query: '  같은 지갑의 여러 방향  ', photo: null, photos }
+    const snapshot = snapshotSearchDraft('lost', draft)
+    const preview = createSearchPreview('lost', draft, null)
+    expect(snapshot.photos).toEqual(original)
+    expect(preview.photos).toEqual(original)
+    expect(snapshot.photos).not.toBe(photos)
+    expect(preview.photos).not.toBe(photos)
+    expect(preview.photos).not.toBe(snapshot.photos)
+    expect(preview.photo).toBe(original[0])
+    photos.splice(0, photos.length)
+    expect(snapshot.photos).toEqual(original)
+    expect(preview.photos).toEqual(original)
+    preview.photos!.forEach((file, index) => expect(file).toBe(original[index]))
   })
 
   it('스냅샷과 미리보기는 목록 배열을 복사하고 현재 입력·File 정체성을 보존한다', () => {
@@ -175,5 +194,69 @@ describe('F2 다중 참고 사진과 F1 한 장 입력의 경계', () => {
     expect(preview.gallery).toEqual({ name: gallery.name, count: 2 })
     expect(validateSearch('gallery', { query: '', photo: null, photos: [third] }, gallery)).toBe('empty')
     expect(draft.photos).toEqual([third, screenshot])
+  })
+})
+
+describe('F2 사진별 수동 방향 메타데이터', () => {
+  const photos = Array.from({ length: 6 }, (_, index) => new File([String(index)], `view-${index}.jpg`, { type: 'image/jpeg' }))
+
+  it('수동 선택값과 한국어 라벨을 일관되게 제공한다', () => {
+    expect(REFERENCE_PHOTO_VIEWS).toEqual([
+      { value: 'unspecified', label: '미지정' },
+      { value: 'front', label: '정면(앞)' },
+      { value: 'back', label: '뒤' },
+      { value: 'side', label: '옆' },
+      { value: 'top', label: '위' },
+      { value: 'bottom', label: '아래' },
+      { value: 'diagonal', label: '대각선' },
+    ])
+  })
+
+  it('이전 한 장 입력과 방향 없는 여섯 장은 자동 추정하지 않고 미지정으로 채운다', () => {
+    expect(getReferencePhotoViews({ query: '', photo })).toEqual(['unspecified'])
+    expect(getReferencePhotoViews({ query: '', photo: null, photos })).toEqual(Array(6).fill('unspecified'))
+  })
+
+  it('부족·잘못된 방향은 해당 인덱스만 미지정으로 정규화하고 원본을 수정하지 않는다', () => {
+    const raw = ['front', 'invalid-value', undefined, 'side', 'top']
+    const draft = { query: '', photo: null, photos, photoViews: raw as ReferencePhotoView[] }
+    const first = getReferencePhotoViews(draft)
+    const second = getReferencePhotoViews(draft)
+    expect(first).toEqual(['front', 'unspecified', 'unspecified', 'side', 'top', 'unspecified'])
+    expect(first).not.toBe(second)
+    expect(first).not.toBe(raw)
+    expect(raw).toEqual(['front', 'invalid-value', undefined, 'side', 'top'])
+  })
+
+  it('사진보다 많은 방향은 무시하고 빈 photos가 이전 photo·방향보다 우선한다', () => {
+    expect(getReferencePhotoViews({ query: '', photo, photos: photos.slice(0, 2), photoViews: ['back', 'bottom', 'top'] })).toEqual(['back', 'bottom'])
+    expect(getReferencePhotoViews({ query: '', photo, photos: [], photoViews: ['front'] })).toEqual([])
+  })
+
+  it('여섯 사진의 수동 방향을 스냅샷·미리보기에 별도 배열로 보존한다', () => {
+    const views: ReferencePhotoView[] = ['front', 'back', 'side', 'top', 'bottom', 'diagonal']
+    const draft = { query: '같은 지갑', photo: null, photos: [...photos], photoViews: views }
+    const snapshot = snapshotSearchDraft('lost', draft)
+    const preview = createSearchPreview('lost', draft, gallery)
+    expect(snapshot.photoViews).toEqual(views)
+    expect(preview.photoViews).toEqual(views)
+    expect(snapshot.photoViews).not.toBe(views)
+    expect(preview.photoViews).not.toBe(views)
+    expect(preview.photoViews).not.toBe(snapshot.photoViews)
+    views.splice(0, views.length, 'unspecified')
+    draft.photos.splice(0, 1)
+    expect(snapshot.photoViews).toEqual(['front', 'back', 'side', 'top', 'bottom', 'diagonal'])
+    expect(preview.photoViews).toEqual(snapshot.photoViews)
+    expect(snapshot.photos).toEqual(photos)
+    expect(preview.photo).toBe(photos[0])
+  })
+
+  it('F1 스냅샷과 미리보기에는 F2 목록·방향을 넣지 않는다', () => {
+    const draft: SearchDraft = { query: '내 사진', photo, photos, photoViews: ['front', 'back'] }
+    expect(snapshotSearchDraft('gallery', draft)).toEqual({ query: '내 사진', photo })
+    const preview = createSearchPreview('gallery', draft, gallery)
+    expect(preview.photos).toBeUndefined()
+    expect(preview.photoViews).toBeUndefined()
+    expect(draft.photoViews).toEqual(['front', 'back'])
   })
 })

@@ -15,7 +15,11 @@ export default function Modal({ open, title, onClose, children, focusKey, classN
   }, [open, focusKey, initialFocus])
 
   return <dialog ref={dialog} className={`modal ${className}`} aria-labelledby={titleId} aria-describedby={descriptionId}
-    onCancel={(event) => { event.preventDefault(); onClose() }}
+    onCancel={(event) => {
+      // File inputs also emit a bubbling cancel when their picker is dismissed.
+      if (event.target !== event.currentTarget) return
+      event.preventDefault(); onClose()
+    }}
     onClick={(event) => { if (event.target === event.currentTarget) {
       const bounds = event.currentTarget.getBoundingClientRect()
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose()

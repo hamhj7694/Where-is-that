@@ -22,7 +22,10 @@ h1, h2, h3, p, figure { margin: 0; }
 .brand { min-height: 48px; display: inline-flex; align-items: center; flex-shrink: 0; font-size: 26px; font-weight: 600; letter-spacing: -.8px; }
 .brand__question { display: inline-block; position: relative; z-index: 0; margin-left: 2px; }
 .brand__question::before { content: ''; position: absolute; z-index: -1; width: 25px; height: 25px; border-radius: 50%; background: var(--accent); top: 4px; left: -3px; }
-.brand-description { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.brand-description { display: inline-flex; align-items: center; min-height: 32px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 4px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; text-decoration: none; cursor: pointer; }
+.brand-description:hover { color: var(--ink); background: var(--raised); border-color: var(--line); }
+.brand-description:active { background: var(--accent-soft); }
+.brand-description:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; color: var(--ink); }
 .desktop-nav { display: flex; align-items: center; justify-content: flex-end; gap: 28px; flex: 1; }
 .desktop-nav a, .desktop-nav button { border: 0; background: none; font-size: 14px; white-space: nowrap; color: var(--text-secondary); min-height: 48px; display: inline-flex; align-items: center; position: relative; padding: 0; }
 .desktop-nav .active { color: var(--ink); font-weight: 500; }
@@ -338,4 +341,32 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1; padding: 4px; borde
 .lost-photo-tab.is-selected { border: 2px solid var(--ink); padding: 3px; color: var(--ink); }
 .lost-photo-add { min-height: 48px; }
 .lost-photo-add:disabled { cursor: not-allowed; }
+.lost-photo-angle-hint { margin-top: 8px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; word-break: keep-all; }
+.photo-guide__angles { margin-bottom: 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; word-break: keep-all; }
+.photo-guide__angles p + p { margin-top: 4px; }
+.photo-direction-guide { --angle-bag: #dfddd3; --angle-panel: #eceae2; --angle-side: #bab9af; margin-top: 16px; padding-block: 12px; border-block: 1px solid var(--line); color: var(--ink); }
+.photo-direction-guide__heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.photo-direction-guide h3 { font-size: 14px; font-weight: 500; line-height: 1.6; }
+.photo-direction-guide__heading > span { color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.photo-direction-guide__views { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-block: 8px; }
+.photo-direction-guide__views figure { display: grid; justify-items: center; gap: 4px; margin: 0; }
+.photo-direction-guide__views svg { display: block; width: 100%; height: 64px; max-width: 88px; }
+.photo-direction-guide__views figcaption { font-size: 12px; line-height: 1.6; }
+.photo-direction-guide > p { color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.photo-direction-guide--compact { padding-block: 8px; }
+.photo-direction-guide--compact .photo-direction-guide__views { margin-block: 4px; }
+.photo-direction-guide--compact .photo-direction-guide__views svg { height: 40px; }
+.photo-guide > .photo-direction-guide { margin-top: 0; padding-top: 0; border-top: 0; margin-bottom: 20px; }
+.lost-photo-strip { gap: 8px; }
+.lost-photo-item { width: 84px; flex-shrink: 0; display: grid; gap: 4px; }
+.lost-photo-item .lost-photo-tab { width: 84px; height: 80px; padding: 7px 9px; }
+.lost-photo-item .lost-photo-tab.is-selected { padding: 6px 8px; }
+.lost-photo-item > label { min-width: 0; display: block; }
+.lost-photo-item select { display: block; width: 100%; height: 44px; padding: 0 4px; border: 1px solid var(--control-line); border-radius: 6px; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); }
+.lost-attachment { align-items: flex-start; }
+.lost-attachment__view { display: block; max-width: 80px; padding-top: 4px; text-align: center; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+@media (max-width: 600px) {
+  .photo-direction-guide__views { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .photo-direction-guide__views svg { height: 48px; }
+}
 .attachment__preview-button > img, .attachment__preview-button > .attachment__placeholder { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }

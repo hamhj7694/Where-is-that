@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Copy, FolderOpen, Plus } from 'lucide-react'
+import { ArrowRight, FolderOpen, Plus } from 'lucide-react'
 import { usePhotoPreview } from '../search/SearchComposer'
 import GalleryAddDialog from '../search/GalleryAddDialog'
 import type { GalleryImportHandler } from '../search/useGalleryImport'
-import { formatFileSize, type GallerySource, type SearchDraft } from '../search/model'
+import type { GallerySource, SearchDraft } from '../search/model'
 import { DemoNotice, EmptyState, PageHeading, PhotoImage, PhotoViewer, QuerySummary, RetryButton, SearchEditAction, TransferDialog } from './components'
 import CropDialog from './CropDialog'
+import FileLocationDetails from './FileLocationDetails'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
 
-interface Props { gallery: GallerySource | null; draft: SearchDraft; onOpenGallery: () => void; onTransfer: (photo: AppPhoto) => Promise<void>; onEdit?: () => void; fromHistory?: boolean }
+interface Props { gallery: GallerySource | null; draft: SearchDraft; onOpenGallery: () => void; onTransfer: (photos: readonly AppPhoto[]) => Promise<void>; onEdit?: () => void; fromHistory?: boolean }
 
 interface GalleryResultsProps extends Props { onAddGallery: GalleryImportHandler }
 
@@ -73,7 +74,6 @@ export function GalleryPhoto({ gallery, onOpenGallery, onTransfer }: Props) {
   const [copied, setCopied] = useState('')
   const actual = gallery?.files.map(file => photoFromFile(file, localPhotoId(file))) ?? []
   const photo = actual.find(item => item.id === localId)
-  const fileLocation = photo?.file?.webkitRelativePath || null
   const url = usePhotoPreview(photo?.file ?? null)
   const source = url ?? photo?.sampleUrl
   const back = params.get('back')?.startsWith('/gallery/results') ? params.get('back')! : '/gallery/results'
@@ -82,14 +82,10 @@ export function GalleryPhoto({ gallery, onOpenGallery, onTransfer }: Props) {
     {!photo.file && <DemoNotice>샘플 이미지 · 개인 갤러리 사진이 아니에요.</DemoNotice>}
     <div className="detail-layout"><div className="detail-photo"><button type="button" className="photo-open" onClick={() => setViewerOpen(true)} aria-label={photo.name + ' 크게 보기'}><PhotoImage photo={cropPhoto ?? photo} /><span>크게 보기</span></button></div><div>
       {cropPhoto && <p className="status-badge">선택 영역 사용 중</p>}
-      <dl className="detail-facts"><div><dt>파일</dt><dd>{photo.name}</dd></div>{photo.file && <><div><dt>파일 위치</dt><dd>{fileLocation || '위치 정보 없음'}</dd></div><div><dt>크기</dt><dd>{formatFileSize(photo.file.size)}</dd></div><div><dt>형식</dt><dd>{photo.file.type || '이미지'}</dd></div>{photo.updatedAt ? <div><dt>파일 수정일</dt><dd>{new Date(photo.updatedAt).toLocaleDateString('ko-KR')}</dd></div> : null}</>}</dl>
-      {photo.file && <p id="photo-location-help" className="field__help">{fileLocation ? '연결한 폴더 기준 위치예요.' : '사진만 선택하면 위치를 알 수 없어요. 폴더로 연결해 주세요.'}</p>}
-      <div className="detail-actions">{source && <a className="button button--secondary" href={source} target="_blank" rel="noreferrer">원본 열기<ArrowRight aria-hidden="true" /></a>}
-        {photo.file && <button type="button" className="button button--secondary file-location-copy" disabled={!fileLocation} aria-describedby="photo-location-help" onClick={async () => { if (!fileLocation) return; try { await navigator.clipboard.writeText(fileLocation); setCopied('폴더 기준 파일 위치를 복사했어요.') } catch { setCopied('복사하지 못했어요. 위 파일 위치를 직접 복사해 주세요.') } }}><Copy aria-hidden="true" />파일 위치 복사</button>}
-        {(photo.file || photo.sampleUrl) && <><button type="button" className="button button--secondary" onClick={() => setCropOpen(true)}>사진 일부 선택</button>{cropPhoto && <button type="button" className="button button--secondary" onClick={() => setCropPhoto(null)}>전체 사진으로</button>}<button className="button button--primary" onClick={() => setTransferOpen(true)}>{cropPhoto ? '선택 영역으로 분실물 찾기' : '이 사진으로 분실물 찾기'}</button></>}</div>
-      <p role="status" className="field__help">{copied}</p>
+      <FileLocationDetails key={photo.id} photo={photo} copied={copied} onCopied={setCopied} beforeCopy={source && <a className="button button--secondary" href={source} target="_blank" rel="noreferrer">원본 열기<ArrowRight aria-hidden="true" /></a>}
+        afterCopy={(photo.file || photo.sampleUrl) && <><button type="button" className="button button--secondary" onClick={() => setCropOpen(true)}>사진 일부 선택</button>{cropPhoto && <button type="button" className="button button--secondary" onClick={() => setCropPhoto(null)}>전체 사진으로</button>}<button className="button button--primary" onClick={() => setTransferOpen(true)}>{cropPhoto ? '선택 영역으로 분실물 찾기' : '이 사진으로 분실물 찾기'}</button></>} />
     </div></div>
-    <TransferDialog photo={cropPhoto ?? photo} open={transferOpen || location.pathname.endsWith('/transfer')} onClose={() => { setTransferOpen(false); if (location.pathname.endsWith('/transfer')) navigate('/gallery/photo/' + photo.id + location.search, { replace: true }) }} onTransfer={onTransfer} />
+    <TransferDialog photos={[cropPhoto ?? photo]} initialPhotoId={(cropPhoto ?? photo).id} open={transferOpen || location.pathname.endsWith('/transfer')} onClose={() => { setTransferOpen(false); if (location.pathname.endsWith('/transfer')) navigate('/gallery/photo/' + photo.id + location.search, { replace: true }) }} onTransfer={onTransfer} />
     <CropDialog photo={photo} open={cropOpen} onClose={() => setCropOpen(false)} onCrop={setCropPhoto} />
     <PhotoViewer photo={cropPhoto ?? photo} open={viewerOpen} onClose={() => setViewerOpen(false)} />
   </main>

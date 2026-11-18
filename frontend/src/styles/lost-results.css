@@ -1,0 +1,20 @@
+.lost-query-summary__photos { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.lost-query-summary__photo { min-width: 0; width: 72px; display: grid; gap: 4px; }
+.lost-query-summary .gallery-query-summary__photo { width: 72px; height: 72px; }
+.lost-query-summary__photo > span { text-align: center; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.lost-query-summary .lost-query-summary__photos, .lost-query-summary .gallery-query-summary__content { grid-column: 1 / -1; }
+.lost-result-grid .found-card { min-width: 0; display: block; }
+.lost-result-grid .found-card__image { aspect-ratio: 4 / 3; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.lost-result-grid .found-card__image > img { width: 100%; height: 100%; object-fit: contain; }
+.lost-result-grid .found-card__body { padding-top: 12px; }
+.lost-result-grid .found-card__body h3 { font-size: 15px; font-weight: 500; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lost-result-grid .found-card__body p, .lost-result-grid .found-card__body small { font-size: 12px; }
+.lost-results__partial { margin-bottom: 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+.lost-results__partial button { min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 600px) {
+  .lost-query-summary .lost-query-summary__photo, .lost-query-summary .gallery-query-summary__photo { width: 64px; }
+  .lost-query-summary .gallery-query-summary__photo { height: 64px; }
+  .lost-query-summary__photos { gap: 8px; }
+  .lost-result-grid .found-card__body { padding-top: 8px; }
+  .lost-result-grid .found-card__body h3 { font-size: 14px; }
+}

@@ -51,10 +51,11 @@ export default function CropDialog({ photo, open, onClose, onCrop, inline = fals
     operation.current++
     active.current = open
     drag.current = null
-    setRect({ ...INITIAL_CROP })
+    // An inline reference editor stays mounted while its parent is hidden.
+    if (!inline || loaded?.source !== source) setRect({ ...INITIAL_CROP })
     setError('')
     setBusy(false)
-  }, [open, photo.id, source])
+  }, [open, photo.id, source, inline, loaded?.source])
 
   useEffect(() => () => { active.current = false; operation.current++ }, [])
   useEffect(() => {

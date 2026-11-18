@@ -17,7 +17,7 @@ export async function prepareLostReferenceFiles(
   const selected = [...files]
   if (replace && selected.length > 1) throw new Error('사진을 바꿀 때는 한 장만 선택해 주세요.')
   if (!replace && currentCount + selected.length > MAX_LOST_REFERENCE_PHOTOS) {
-    throw new Error('참고 사진은 최대 3장까지 추가할 수 있어요.')
+    throw new Error(`참고 사진은 최대 ${MAX_LOST_REFERENCE_PHOTOS}장까지 추가할 수 있어요.`)
   }
 
   const prepared: File[] = []

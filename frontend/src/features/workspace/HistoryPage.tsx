@@ -40,20 +40,23 @@ function HistoryRow({ record, onDelete, deleteRef }: { record: SearchRecord; onD
 export default function HistoryPage({ records, onDeleteRecord }: { records: SearchRecord[]; onDeleteRecord: (id: string) => void }) {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
-  const cancelButton = useRef<HTMLButtonElement>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const deleteConfirmationInput = useRef<HTMLInputElement>(null)
   const warningId = useId()
+  const confirmationId = useId()
   const deleteButtons = useRef(new Map<string, HTMLButtonElement>())
   const startLinks = useRef(new Map<string, HTMLAnchorElement>())
   const pending = records.find(record => record.id === pendingId)
 
   function confirmDelete() {
-    if (!pending) return
+    if (!pending || deleteConfirmation !== '삭제') return
     const sameSection = records.filter(record => record.mode === pending.mode)
     const index = sameSection.findIndex(record => record.id === pending.id)
     const next = sameSection[index + 1] ?? sameSection[index - 1]
     const mode = pending.mode
     onDeleteRecord(pending.id)
     setPendingId(null)
+    setDeleteConfirmation('')
     setMessage('기록을 삭제했어요.')
     requestAnimationFrame(() => {
       const nextButton = next ? deleteButtons.current.get(next.id) : null
@@ -74,14 +77,15 @@ export default function HistoryPage({ records, onDeleteRecord }: { records: Sear
       return <section key={section.mode} className="history-section" aria-labelledby={'history-' + section.mode}>
         <div className="section-heading"><h2 id={'history-' + section.mode}>{section.title} <span>{items.length}</span></h2></div>
         <Link ref={node => { if (node) startLinks.current.set(section.mode, node); else startLinks.current.delete(section.mode) }} to={section.to} className="button button--secondary history-start">{section.cta}<ArrowUpRight aria-hidden="true" /></Link>
-        {items.length ? <ul className="history-list">{items.map(record => <HistoryRow key={record.id} record={record} onDelete={() => { setMessage(''); setPendingId(record.id) }} deleteRef={node => { if (node) deleteButtons.current.set(record.id, node); else deleteButtons.current.delete(record.id) }} />)}</ul>
+        {items.length ? <ul className="history-list">{items.map(record => <HistoryRow key={record.id} record={record} onDelete={() => { setMessage(''); setDeleteConfirmation(''); setPendingId(record.id) }} deleteRef={node => { if (node) deleteButtons.current.set(record.id, node); else deleteButtons.current.delete(record.id) }} />)}</ul>
           : <p className="history-empty">{section.empty}</p>}
       </section>
     })}</div>
-    <Modal open={!!pending} title="기록을 삭제할까요?" descriptionId={warningId} focusKey={pendingId ?? 'history-delete'} initialFocus={cancelButton} onClose={() => setPendingId(null)}>
+    <Modal open={!!pending} title="기록을 삭제할까요?" descriptionId={warningId} focusKey={pendingId ?? 'history-delete'} initialFocus={deleteConfirmationInput} onClose={() => { setPendingId(null); setDeleteConfirmation('') }}>
       {pending && <><p className="history-delete-query">{pending.draft.query || '참고 사진으로 찾기'}</p><p className="field__help">{new Date(pending.createdAt).toLocaleString('ko-KR')}</p></>}
       <p id={warningId}>삭제한 기록은 복구할 수 없어요.<br />사진 원본은 그대로 유지돼요.</p>
-      <div className="button-row history-delete-actions"><button ref={cancelButton} type="button" className="button button--secondary" onClick={() => setPendingId(null)}>취소</button><button type="button" className="button button--primary" onClick={confirmDelete}>삭제</button></div>
+      <label className="field history-delete-confirmation" htmlFor={confirmationId}><span>삭제하려면 ‘삭제’를 입력해 주세요.</span><input id={confirmationId} ref={deleteConfirmationInput} autoComplete="off" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} /></label>
+      <div className="button-row history-delete-actions"><button type="button" className="button button--secondary" onClick={() => { setPendingId(null); setDeleteConfirmation('') }}>취소</button><button type="button" className="button button--primary" disabled={deleteConfirmation !== '삭제'} onClick={confirmDelete}>삭제</button></div>
     </Modal>
   </main>
 }
