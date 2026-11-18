@@ -6,7 +6,7 @@ import { MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, type ReferencePhotoVi
 import { registrationComplete, type RegistrationProgress } from '../search/catalog-model'
 import LostReferenceDialog from '../search/LostReferenceDialog'
 import { DemoNotice, EmptyState, PageHeading, PhotoImage, PhotoViewer, TransferDialog } from './components'
-import { localPhotoId, photoFromFile, valuableCreatedAt, valuableStatusLabels, type AppPhoto, type Valuable, type ValuableStatus } from './data'
+import { isDeleteConfirmation, localPhotoId, photoFromFile, valuableCreatedAt, valuableStatusLabels, type AppPhoto, type Valuable, type ValuableStatus } from './data'
 
 export interface ValuableProps {
   session: boolean
@@ -103,12 +103,15 @@ function ValuableForm({ item, onSave }: ValuableProps & { item?: Valuable }) {
   const [notes, setNotes] = useState(item?.notes ?? '')
   const [photos, setPhotos] = useState<AppPhoto[]>(item?.photos ?? [])
   const [photoDialogOpen, setPhotoDialogOpen] = useState(false)
+  const [photoDeleteIndex, setPhotoDeleteIndex] = useState<number | null>(null)
+  const [photoDeleteConfirmation, setPhotoDeleteConfirmation] = useState('')
   const [photoIndex, setPhotoIndex] = useState(0)
   const [agreed, setAgreed] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [error, setError] = useState('')
   const photoButton = useRef<HTMLButtonElement>(null)
   const nameInput = useRef<HTMLInputElement>(null)
+  const photoDeleteInput = useRef<HTMLInputElement>(null)
   const dialogPhotos = photos.filter(photo => photo.file).map(photo => photo.file!)
   const dialogKey = dialogPhotos.map(file => localPhotoId(file)).join('|') || 'empty'
   const selectedPhoto = photos[Math.min(photoIndex, Math.max(0, photos.length - 1))]
@@ -131,6 +134,12 @@ function ValuableForm({ item, onSave }: ValuableProps & { item?: Valuable }) {
       return next
     })
   }
+  function confirmPhotoRemoval() {
+    if (photoDeleteIndex === null || !isDeleteConfirmation(photoDeleteConfirmation)) return
+    removePhoto(photoDeleteIndex)
+    setPhotoDeleteIndex(null)
+    setPhotoDeleteConfirmation('')
+  }
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!name.trim()) { setError('물건 이름을 적어 주세요.'); nameInput.current?.focus(); return }
@@ -146,7 +155,7 @@ function ValuableForm({ item, onSave }: ValuableProps & { item?: Valuable }) {
   return <main id="main-content" className="content-workspace"><PageHeading title={item ? '물건 수정' : '소중한 물건 남기기'} back={{ to: item ? '/valuables/' + item.id : '/valuables', label: item ? '수정 취소' : '목록으로' }} /><DemoNotice>임시 항목 · 새로고침하면 사라져요.</DemoNotice>
     <RegistrationState state={params.get('state') ?? ''} />
     <form className="form-layout" onSubmit={submit}><div><div className="section-heading"><h2>물건 사진 <span>{photos.length}장</span></h2><button ref={photoButton} type="button" className="button button--secondary" onClick={() => setPhotoDialogOpen(true)} disabled={photos.length >= MAX_LOST_REFERENCE_PHOTOS}><ImagePlus aria-hidden="true" />사진 추가</button></div>
-      {photos.length ? <div className="valuable-photo-browser"><div className="valuable-photo-thumbnails" aria-label="물건 사진 목록">{photos.map((photo, index) => <div className="valuable-photo-thumbnail-item" key={photo.id}><button type="button" className={'valuable-photo-thumbnail' + (photoIndex === index ? ' is-selected' : '')} aria-label={`${photo.name} · ${valuablePhotoViewLabel(photo)} 방향 사진`} aria-pressed={photoIndex === index} onClick={() => setPhotoIndex(index)}><PhotoImage photo={photo} /></button><span>{valuablePhotoViewLabel(photo)}</span></div>)}</div><div className="valuable-photo-main"><div className="valuable-photo-main__image"><PhotoImage photo={selectedPhoto} /></div><div className="valuable-photo-main__caption"><strong>{selectedPhoto.name}</strong><span className="valuable-photo-main__view">{valuablePhotoViewLabel(selectedPhoto)}</span><button type="button" className="icon-button" aria-label={selectedPhoto.name + ' 빼기'} onClick={() => removePhoto(Math.min(photoIndex, photos.length - 1))}><X aria-hidden="true" /></button></div></div></div>
+      {photos.length ? <div className="valuable-photo-browser"><div className="valuable-photo-thumbnails" aria-label="물건 사진 목록">{photos.map((photo, index) => <div className="valuable-photo-thumbnail-item" key={photo.id}><button type="button" className={'valuable-photo-thumbnail' + (photoIndex === index ? ' is-selected' : '')} aria-label={`${photo.name} · ${valuablePhotoViewLabel(photo)} 방향 사진`} aria-pressed={photoIndex === index} onClick={() => setPhotoIndex(index)}><PhotoImage photo={photo} /></button><span>{valuablePhotoViewLabel(photo)}</span></div>)}</div><div className="valuable-photo-main"><div className="valuable-photo-main__image"><PhotoImage photo={selectedPhoto} /></div><div className="valuable-photo-main__caption"><strong>{selectedPhoto.name}</strong><span className="valuable-photo-main__view">{valuablePhotoViewLabel(selectedPhoto)}</span><button type="button" className="icon-button" aria-label={selectedPhoto.name + ' 빼기'} onClick={() => { setPhotoDeleteIndex(Math.min(photoIndex, photos.length - 1)); setPhotoDeleteConfirmation('') }}><X aria-hidden="true" /></button></div></div></div>
         : <div className="empty-state photo-empty"><p>물건 전체와 특징을 담아 주세요.</p></div>}
     </div><div><div className="field"><label htmlFor="valuable-name">물건 이름</label><input ref={nameInput} id="valuable-name" value={name} maxLength={60} onChange={e => { setName(e.target.value); setError('') }} placeholder="예: 매일 쓰는 지갑" /></div>
       <div className="form-pair"><div className="field"><label htmlFor="valuable-category">분류</label><select id="valuable-category" value={category} onChange={e => setCategory(e.target.value)}>{['지갑', '가방', '열쇠', '전자기기', '기타'].map(value => <option key={value}>{value}</option>)}</select></div><div className="field"><label htmlFor="valuable-status">물건 상태</label><select id="valuable-status" value={status} onChange={e => setStatus(e.target.value as ValuableStatus)}>{(Object.keys(valuableStatusLabels) as ValuableStatus[]).map(value => <option value={value} key={value}>{valuableStatusLabels[value]}</option>)}</select></div></div>
@@ -156,6 +165,7 @@ function ValuableForm({ item, onSave }: ValuableProps & { item?: Valuable }) {
       {error && <p className="form-error" role="alert">{error}</p>}<div className="button-row"><Link className="button button--secondary" to={item ? '/valuables/' + item.id : '/valuables'}>취소</Link><button className="button button--primary" type="submit">{item ? '변경 내용 확인' : '등록 내용 확인'}</button></div>
     </div></form>
     <LostReferenceDialog key={dialogKey} open={photoDialogOpen} photos={dialogPhotos} views={dialogPhotos.map(file => photos.find(photo => photo.file === file)?.photoView ?? 'unspecified')} selected={0} dropped={[]} guideOpen={false} onGuideToggle={() => undefined} onClose={() => setPhotoDialogOpen(false)} onConfirm={commitPhotos} variant="valuable" />
+    <Modal open={photoDeleteIndex !== null} title="사진을 제외할까요?" focusKey="valuable-photo-delete" initialFocus={photoDeleteInput} onClose={() => { setPhotoDeleteIndex(null); setPhotoDeleteConfirmation('') }}><p><strong>{photos[photoDeleteIndex ?? -1]?.name}</strong> 사진을 이 물건에서 제외해요. 기기의 원본 파일은 그대로 유지돼요.</p><label className="field photo-delete-confirmation"><span>계속하려면 ‘삭제’를 입력해 주세요.</span><input ref={photoDeleteInput} autoComplete="off" value={photoDeleteConfirmation} onChange={event => setPhotoDeleteConfirmation(event.target.value)} /></label><div className="button-row"><button type="button" className="button button--secondary" onClick={() => { setPhotoDeleteIndex(null); setPhotoDeleteConfirmation('') }}>취소</button><button type="button" className="button button--primary" disabled={!isDeleteConfirmation(photoDeleteConfirmation)} onClick={confirmPhotoRemoval}>삭제</button></div></Modal>
     <Modal open={reviewOpen} title={item ? '변경 내용 확인' : '등록 내용 확인'} focusKey="review-valuable" onClose={() => setReviewOpen(false)} footer={<div className="button-row"><button type="button" className="button button--secondary" onClick={() => setReviewOpen(false)}>취소</button><button type="button" className="button button--primary" disabled={!agreed} onClick={saveDraft}>{item ? '변경 적용' : '임시로 추가'}</button></div>}>
       <dl className="detail-facts"><div><dt>물건</dt><dd>{name.trim()}</dd></div><div><dt>사진</dt><dd>원본 {photos.length}장</dd></div><div><dt>분류·상태</dt><dd>{category} · {valuableStatusLabels[status]}</dd></div></dl>
       <p className="storage-note">체험용 임시 항목이에요. 계정 서버에 저장하지 않아요.</p><label className="checkbox-row"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} />저장 범위를 확인했어요</label>

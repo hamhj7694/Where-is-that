@@ -441,6 +441,7 @@ a.found-card:hover h3, button.found-card:hover h3 { text-decoration: underline; 
 .valuable-photo-main__caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 0 2px; }
 .valuable-photo-main__caption strong { min-width: 0; color: var(--ink); font-size: 14px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
 .valuable-photo-main__view { flex: 0 0 auto; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.photo-delete-confirmation { margin-top: 20px; }
 .upload-list__item { display: grid; grid-template-columns: 72px minmax(0, 1fr) 44px; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .upload-list__item > span { min-width: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .photo-thumbnails { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }

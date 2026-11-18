@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { localPhotoId, safeReturn } from './data'
+import { isDeleteConfirmation, localPhotoId, safeReturn } from './data'
+
+describe('valuable photo deletion confirmation', () => {
+  it('only accepts the exact delete phrase', () => {
+    expect(isDeleteConfirmation('삭제')).toBe(true)
+    expect(isDeleteConfirmation('')).toBe(false)
+    expect(isDeleteConfirmation(' 삭제')).toBe(false)
+    expect(isDeleteConfirmation('삭제 ')).toBe(false)
+    expect(isDeleteConfirmation('삭제합니다')).toBe(false)
+  })
+})
 
 describe('local photo identity across reconnection', () => {
   it('keeps the same File identity while the source is alive', () => {

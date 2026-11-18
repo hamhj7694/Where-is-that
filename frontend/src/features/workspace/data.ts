@@ -30,6 +30,10 @@ export interface Valuable {
   updatedAt: number
 }
 
+export function isDeleteConfirmation(value: string) {
+  return value === '삭제'
+}
+
 export const samplePhotos: AppPhoto[] = [
   { id: 'sample-coast', name: '바닷가에서', file: null, sampleUrl: '/images/coast.jpg', kind: 'photo' },
   { id: 'sample-wallet', name: '검정 지갑', file: null, sampleUrl: '/images/wallet.jpg', kind: 'photo' },
