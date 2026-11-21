@@ -174,7 +174,7 @@ const DATA = {
     { n:"4", label:"점검 영역" },
     { n:"2", label:"AI 역할(멀티모달/유사도)" },
     { n:"490", label:"테스트 통과(프론트424+백66)" },
-    { n:"DML-123", label:"최신 작업로그" },
+    { n:"DML-124", label:"최신 작업로그" },
   ],
   summary: [
     { title:"동의 팝업 제거 · 즉시 검색", body:"[비슷한 물건 찾기] 제출 시 동의 모달 없이 AI 해석 → 경찰청 검색 → 후보 순위화가 바로 이어집니다. 실패 시 원문 검색으로 폴백해 목록이 막히지 않습니다.", tone:"ok" },
@@ -230,6 +230,7 @@ const DATA = {
     ["공개 사진·설명 분석","ok","POST /api/ai/vision/match-public","허용 호스트+512px 썸네일, basis=photo|description, 사진/설명 항목 동시 우선순위화"],
     ["유사도 정렬 연결","ok","matchPublicItemImages()","이미지 채널 1차·종합 채널 결합 점수, 실패 시 공개 순서 폴백"],
     ["결과 섹션 순서·구분선","ok","LOST_RESULT_CHANNELS","종합→설명·조건→사진 특징, 섹션 사이에만 1px 선·일정 여백"],
+    ["전체 스캔 속도 개선","ok","police_api.py 공용 httpx.Client","연결 풀 + 12 워커, 20페이지 30.8→13.5초, 50페이지 73.9→31.5초"],
   ],
   defects: [
     { sev:"P2", title:"직접 찾기 스캔 상한(수정 후 잔여)", where:"backend/app/police_api.py browse_all max_pages", impact:"기본 20페이지(약 1,600건)까지만 스캔해 '앞쪽 기준'으로 표시", fix:"코드표 확보 후 전용 필터 API 또는 증분 스캔으로 전체 범위 보장" },
@@ -294,6 +295,7 @@ const DATA = {
     ["P1","Origin 헤더 누락 거부","backend/app/main.py:101-102"],
     ["문서","DML-115~121을 11·12 문서에 반영","최신 항목·대체 관계 갱신 완료"],
     ["완료","결과 섹션 순서·구분선 정리","LOST_RESULT_CHANNELS 단일 원천, 섹션 사이 1px 선·22/32px 여백"],
+    ["완료","직접 찾기 스캔 연결 재사용·동시성","공용 httpx.Client + 12 워커, 20페이지 30.8→13.5초(오류 0)"],
     ["완료","AI 2역할 재구성·상태 응답","multimodal/imageSimilarity, /api/ai/status가 키 값 없이 역할만 반환"],
     ["완료","공개 사진·설명 분석 엔드포인트","match-public — 허용 호스트, 512px 다운스케일, basis=photo/description"],
     ["완료","텍스트 유도 imageFeatures 프롬프트","interpret_search.txt — 참고 사진 없이도 시각 특징 추출"],

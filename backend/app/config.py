@@ -60,6 +60,10 @@ KAKAO_STATE_MAX_AGE_SECONDS = 10 * 60
 # 카카오와 동일하게 경찰청 서비스키도 서버 .env에만 둔다.
 POLICE_SERVICE_KEY = os.environ.get("POLICE_SERVICE_KEY", "").strip()
 POLICE_API_TIMEOUT = _float_env("POLICE_API_TIMEOUT", 8.0)
+# 직접 찾기 전체 스캔은 페이지별 요청이 많다. 연결 재사용 + 제한된 동시성으로
+# 공개 API에 무리를 주지 않으면서 스캔 시간을 줄인다.
+POLICE_API_MAX_CONNECTIONS = max(2, _int_env("GEUGEO_POLICE_API_MAX_CONNECTIONS", 16))
+BROWSE_MAX_WORKERS = max(2, min(32, _int_env("GEUGEO_BROWSE_MAX_WORKERS", 12)))
 LOSTFOUND_SEARCH_TTL = _int_env("LOSTFOUND_SEARCH_TTL", 300)
 LOSTFOUND_DETAIL_TTL = _int_env("LOSTFOUND_DETAIL_TTL", 86400)
 GEO_CACHE_TTL = _int_env("GEO_CACHE_TTL", 2592000)

@@ -24,6 +24,15 @@ DETAIL_PATHS = {
 SOURCES = ("police", "portal")
 IMAGE_BASE = "https://www.lost112.go.kr"
 MAX_XML_BYTES = 2_000_000
+# 요청마다 새 커넥션을 만들면 TLS 핸드셰이크 때문에 전체 스캔이 몇 배 느려진다.
+# 스레드 안전한 공용 클라이언트로 연결을 재사용한다.
+_http_client = httpx.Client(
+    timeout=config.POLICE_API_TIMEOUT,
+    limits=httpx.Limits(
+        max_connections=config.POLICE_API_MAX_CONNECTIONS,
+        max_keepalive_connections=config.POLICE_API_MAX_CONNECTIONS,
+    ),
+)
 # 실제 응답은 F2018113000002322뿐 아니라 V0007722L11170002 같은 영문+숫자 형식도 온다.
 ATC_ID_PATTERN = re.compile(r"[A-Za-z0-9]{6,40}")
 
@@ -43,8 +52,7 @@ def _request(path: str, params: dict[str, str | int]) -> ET.Element:
     query = {"serviceKey": config.POLICE_SERVICE_KEY}
     query.update({key: str(value) for key, value in params.items()})
     try:
-        with httpx.Client(timeout=config.POLICE_API_TIMEOUT) as client:
-            response = client.get(BASE_URL + path, params=query)
+        response = _http_client.get(BASE_URL + path, params=query)
     except httpx.TimeoutException:
         raise PoliceError("lostfound_timeout", "경찰청 유실물 서버 응답이 늦어요.")
     except httpx.HTTPError:
@@ -348,7 +356,7 @@ def browse_all(
     results: dict[str, list[dict]] = {}
     errors: list[dict] = []
     reported_totals: dict[str, int] = {}
-    with ThreadPoolExecutor(max_workers=max(2, len(api_keywords) * 2)) as executor:
+    with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
         futures = {
             (term, source, number): executor.submit(search, source, term, number, rows)
             for term in api_keywords
@@ -411,7 +419,7 @@ def search_all(keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = 
     results: dict[str, list[dict]] = {}
     errors: list[dict] = []
     totals: dict[str, int] = {}
-    with ThreadPoolExecutor(max_workers=max(2, len(api_keywords) * 2)) as executor:
+    with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
         futures = {
             (term, source): executor.submit(search, source, term, page, rows)
             for term in api_keywords

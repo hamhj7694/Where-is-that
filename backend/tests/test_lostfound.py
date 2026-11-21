@@ -156,6 +156,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(police_api.config, "POLICE_SERVICE_KEY", "test-service-key")
     monkeypatch.setattr(geo.config, "KAKAO_REST_API_KEY", "test-kakao-key")
     monkeypatch.setattr(police_api.httpx, "Client", FakeClient)
+    # 공용 연결 풀을 쓰므로 모듈에 만든 클라이언트도 가짜로 교체한다.
+    monkeypatch.setattr(police_api, "_http_client", FakeClient())
     FakeClient.calls.clear()
     with TestClient(main.app) as test_client:
         yield test_client
