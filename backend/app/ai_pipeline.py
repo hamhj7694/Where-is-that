@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import httpx
 from pydantic import ValidationError
 
-from . import config, image_similarity
+from . import ai_graph, config, image_similarity
 from .ai_schemas import (
     AiContextRankRequest,
     AiContextRankResponse,
@@ -40,7 +40,12 @@ Role = Literal["multimodal", "llm", "vlm", "vision"]
 _DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$")
 
 
-def _role_config(_role: Role) -> tuple[str, str, str, str]:
+def _role_config(role: Role) -> tuple[str, str, str, str]:
+    """역할별 설정. 텍스트 전용/이미지 전용 모델을 따로 지정할 수 있다."""
+    if role == "llm":
+        return config.AI_LLM_PROVIDER, config.AI_LLM_API_KEY, config.AI_LLM_BASE_URL, config.AI_LLM_MODEL
+    if role in {"vlm", "vision"}:
+        return config.AI_VLM_PROVIDER, config.AI_VLM_API_KEY, config.AI_VLM_BASE_URL, config.AI_VLM_MODEL
     return (
         config.AI_MULTIMODAL_PROVIDER,
         config.AI_MULTIMODAL_API_KEY,
@@ -134,7 +139,7 @@ def _describe_images(images: list[str]) -> list[str]:
         if not _DATA_URL.fullmatch(image):
             raise AiPipelineError(422, "invalid_image", "참고 사진 형식을 확인해 주세요.")
         content.append({"type": "image_url", "image_url": {"url": image, "detail": "low"}})
-    value = _json_object(_completion("multimodal", [
+    value = _json_object(_completion("vlm", [
         {"role": "system", "content": _prompt("describe_images.txt")},
         {"role": "user", "content": content},
     ]))
@@ -178,25 +183,8 @@ def _normalize_criteria(value: object, channels: dict) -> dict[str, list[str]]:
 
 
 def prepare_search(request: AiSearchRequest) -> AiSearchPlan:
-    descriptions = _describe_images(request.images)
-    today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
-    value = _json_object(_completion("multimodal", [
-        {"role": "system", "content": _prompt("interpret_search.txt")},
-        {"role": "user", "content": json.dumps({
-            "mode": request.mode,
-            "todayInSeoul": today,
-            "originalQuery": request.query,
-            "imageDescriptions": descriptions,
-            "existingFilters": request.filters,
-        }, ensure_ascii=False)},
-    ]))
-    value["originalQuery"] = request.query
-    value["imageDescriptions"] = descriptions
-    value["criteria"] = _normalize_criteria(value.get("criteria"), value.get("channels"))
-    try:
-        return AiSearchPlan.model_validate(value)
-    except ValidationError as error:
-        raise AiPipelineError(502, "ai_invalid_response", "AI가 검색 조건을 올바르게 만들지 못했어요.") from error
+    # LangGraph가 사진 설명(VLM) → 조건 해석(LLM 또는 joint) 경로를 선택한다.
+    return ai_graph.prepare(request)
 
 
 def rank_candidates(request: AiRankRequest) -> AiRankResponse:
@@ -221,7 +209,8 @@ def rank_candidates(request: AiRankRequest) -> AiRankResponse:
             raise AiPipelineError(422, "invalid_image", "검색 후보 사진 형식을 확인해 주세요.")
         content.append({"type": "text", "text": "후보 ID: " + candidate.id})
         content.append({"type": "image_url", "image_url": {"url": candidate.image, "detail": "low"}})
-    value = _json_object(_completion("multimodal", [
+    role = "multimodal" if request.query.strip() else "vlm"
+    value = _json_object(_completion(role, [
         {"role": "system", "content": _prompt("compare_candidates.txt")},
         {"role": "user", "content": content},
     ]))
@@ -235,9 +224,11 @@ def rank_candidates(request: AiRankRequest) -> AiRankResponse:
         raise AiPipelineError(502, "ai_invalid_response", "AI 후보 비교 결과가 일부 누락되거나 중복됐어요.")
 
     # 이미지 유사도는 텍스트 추론이 아니라 전용 비전 임베딩으로만 갱신한다.
+    # 로컬 비전은 검색어·사진 설명에서 관심 물건을 뽑아 그 부분만 크롭해 비교한다.
     vision_scores = image_similarity.score_similarity(
         request.references,
         {candidate.id: candidate.image for candidate in request.candidates},
+        " ".join([request.query, *descriptions]),
     )
     source = "vision-model" if vision_scores else "multimodal"
     ranked = [
@@ -346,51 +337,12 @@ def _multimodal_visual_scores(
 
 def match_visual_features(request: AiVisualMatchRequest) -> AiVisualMatchResponse:
     """참고 사진 유무와 무관하게 공개 항목의 사진·설명을 모두 분석해 우선순위를 만든다."""
-    photo_images: dict[str, str] = {}
-    description_texts: dict[str, str] = {}
-    for candidate in request.candidates:
-        photo = _fetch_public_image(candidate.imageUrl) if candidate.imageUrl else None
-        if photo:
-            photo_images[candidate.id] = photo
-        elif candidate.text.strip():
-            description_texts[candidate.id] = candidate.text
-
-    scores: dict[str, int] = {}
-    basis: dict[str, str] = {}
-    vision_used = False
-    if photo_images:
-        computed = image_similarity.score_similarity(request.references, photo_images) if request.references \
-            else image_similarity.score_text_image_similarity(request.imageFeatures, photo_images)
-        if computed:
-            vision_used = True
-            scores.update(computed)
-        else:
-            scores.update(_multimodal_visual_scores(request.query, request.imageFeatures, request.references, photo_images))
-        basis.update({candidate_id: "photo" for candidate_id in photo_images})
-
-    for candidate_id, text in description_texts.items():
-        scores[candidate_id] = _text_feature_score(request.imageFeatures, text)
-        basis[candidate_id] = "description"
-
-    results = [
-        AiVisualMatchResult(
-            id=candidate.id,
-            imageSimilarity=scores.get(candidate.id, 0),
-            basis=basis.get(candidate.id, "description" if candidate.id in description_texts else "photo"),
-            reason="공개 사진과 시각 특징을 비교했어요." if basis.get(candidate.id) == "photo" else "설명에 시각 특징이 있는지 확인했어요.",
-        )
-        for candidate in request.candidates
-    ]
-    results.sort(key=lambda item: item.imageSimilarity, reverse=True)
-    return AiVisualMatchResponse(
-        results=results,
-        source="vision-model" if vision_used else "multimodal",
-        usedFeatures=request.imageFeatures,
-    )
+    # LangGraph가 사진 수집 → 카테고리 범위 → 로컬 임베딩 → 멀티모달 폴백을 분기한다.
+    return ai_graph.match_visual_features(request)
 
 
 def rank_context_candidates(request: AiContextRankRequest) -> AiContextRankResponse:
-    value = _json_object(_completion("multimodal", [
+    value = _json_object(_completion("llm", [
         {"role": "system", "content": _prompt("rank_context_candidates.txt")},
         {"role": "user", "content": json.dumps({
             "originalQuery": request.originalQuery,

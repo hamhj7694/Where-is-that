@@ -14,10 +14,10 @@ from typing import Any
 
 import httpx
 
-from . import config
+from . import config, local_vision
 
 _DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$")
-_SUPPORTED_PROVIDERS = {"openai-compatible", "clip-http"}
+_SUPPORTED_PROVIDERS = {"local-clip", "openai-compatible", "clip-http"}
 _BATCH_SIZE = 8
 # ("text", value) 또는 ("image", data_url)
 EmbeddingItem = tuple[str, str]
@@ -25,6 +25,8 @@ EmbeddingItem = tuple[str, str]
 
 def is_configured() -> bool:
     provider = config.AI_SIMILARITY_PROVIDER
+    if provider == "local-clip":
+        return local_vision.clip_available()
     if provider not in _SUPPORTED_PROVIDERS or not config.AI_SIMILARITY_MODEL:
         return False
     if not config.AI_SIMILARITY_BASE_URL:
@@ -34,9 +36,21 @@ def is_configured() -> bool:
 
 def status_payload() -> dict[str, Any]:
     available = is_configured()
+    provider = config.AI_SIMILARITY_PROVIDER
+    if provider == "local-clip":
+        return {
+            "available": available,
+            "provider": provider,
+            "model": f"{config.LOCAL_CLIP_MODEL}/{config.LOCAL_CLIP_PRETRAINED}",
+            "source": "vision-model" if available else "multimodal",
+            "crop": {
+                "enabled": config.YOLOE_ENABLED and local_vision.yoloe_available(),
+                "model": config.YOLOE_MODEL.rsplit("/", 1)[-1],
+            },
+        }
     return {
         "available": available,
-        "provider": config.AI_SIMILARITY_PROVIDER,
+        "provider": provider,
         "model": config.AI_SIMILARITY_MODEL,
         "source": "vision-model" if available else "multimodal",
     }
@@ -158,8 +172,12 @@ def _valid_images(candidates: dict[str, str]) -> bool:
     )
 
 
-def score_similarity(references: list[str], candidates: dict[str, str]) -> dict[str, int]:
+def score_similarity(
+    references: list[str], candidates: dict[str, str], targets: str = ""
+) -> dict[str, int]:
     """참고 사진 각각과 후보 사진의 유사도 중 최대값을 0~100으로 반환한다."""
+    if config.AI_SIMILARITY_PROVIDER == "local-clip":
+        return local_vision.score_similarity(references, candidates, targets)
     if not references or not _valid_images(candidates) or not is_configured():
         return {}
     if any(not isinstance(image, str) or not _DATA_URL.fullmatch(image) for image in references):
@@ -178,11 +196,15 @@ def score_similarity(references: list[str], candidates: dict[str, str]) -> dict[
     return scores
 
 
-def score_text_image_similarity(texts: list[str], candidates: dict[str, str]) -> dict[str, int]:
+def score_text_image_similarity(
+    texts: list[str], candidates: dict[str, str], targets: str = ""
+) -> dict[str, int]:
     """텍스트에서 읽은 시각 특징과 공개 사진의 유사도를 0~100으로 반환한다.
 
     참고 사진이 없을 때 사용하는 경로다. 여러 특징 중 가장 높은 일치도를 후보 점수로 쓴다.
     """
+    if config.AI_SIMILARITY_PROVIDER == "local-clip":
+        return local_vision.score_text_image_similarity(texts, candidates, targets)
     clean_texts = [text.strip()[:120] for text in texts if isinstance(text, str) and text.strip()]
     if not clean_texts or not _valid_images(candidates) or not is_configured():
         return {}
@@ -198,3 +220,10 @@ def score_text_image_similarity(texts: list[str], candidates: dict[str, str]) ->
         best = max((_cosine(vector, text) for text in text_vectors), default=0.0)
         scores[candidate_id] = int(round(max(0.0, min(1.0, best)) * 100))
     return scores
+
+
+def crop_notes(targets: str, candidates: dict[str, str]) -> dict[str, str]:
+    """로컬 비전이 타깃을 크롭한 후보의 근거 문구를 반환한다."""
+    if config.AI_SIMILARITY_PROVIDER != "local-clip":
+        return {}
+    return local_vision.crop_notes(targets, candidates)

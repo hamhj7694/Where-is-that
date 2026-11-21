@@ -93,7 +93,8 @@ AI_MULTIMODAL_BASE_URL = (
 AI_MULTIMODAL_MODEL = os.environ.get("GEUGEO_AI_MULTIMODAL_MODEL", "").strip() or AI_VLM_MODEL or "gpt-6-luna"
 
 # 이미지 유사도만 추적하는 전용 비전. 미설정(none)이면 멀티모달 점수를 그대로 사용한다.
-AI_SIMILARITY_PROVIDER = os.environ.get("GEUGEO_AI_SIMILARITY_PROVIDER", "none").strip().lower()
+# local-clip은 사전학습 가중치를 서버에서 직접 띄운다(별도 학습 불필요).
+AI_SIMILARITY_PROVIDER = os.environ.get("GEUGEO_AI_SIMILARITY_PROVIDER", "local-clip").strip().lower()
 AI_SIMILARITY_API_KEY = os.environ.get("GEUGEO_AI_SIMILARITY_API_KEY", "").strip() or OPENAI_API_KEY
 AI_SIMILARITY_BASE_URL = (
     os.environ.get("GEUGEO_AI_SIMILARITY_BASE_URL", "").strip().rstrip("/")
@@ -102,6 +103,22 @@ AI_SIMILARITY_BASE_URL = (
 AI_SIMILARITY_MODEL = os.environ.get("GEUGEO_AI_SIMILARITY_MODEL", "").strip()
 AI_SIMILARITY_INPUT_STYLE = os.environ.get("GEUGEO_AI_SIMILARITY_INPUT_STYLE", "image_url").strip().lower()
 AI_SIMILARITY_TIMEOUT = _float_env("GEUGEO_AI_SIMILARITY_TIMEOUT", 20.0)
+
+# 로컬 사전학습 비전: YOLOE가 관심 물건만 크롭하고 CLIP이 벡터 유사도를 계산한다.
+# 별도 파인튜닝 없이 공개 가중치만 사용한다.
+LOCAL_VISION_ENABLED = os.environ.get("GEUGEO_LOCAL_VISION_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+LOCAL_CLIP_MODEL = os.environ.get("GEUGEO_LOCAL_CLIP_MODEL", "ViT-B-32").strip() or "ViT-B-32"
+LOCAL_CLIP_PRETRAINED = os.environ.get("GEUGEO_LOCAL_CLIP_PRETRAINED", "laion2b_s34b_b79k").strip() or "laion2b_s34b_b79k"
+LOCAL_CLIP_BATCH_SIZE = max(1, _int_env("GEUGEO_LOCAL_CLIP_BATCH_SIZE", 16))
+YOLOE_ENABLED = os.environ.get("GEUGEO_YOLOE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+YOLOE_MODEL = os.environ.get("GEUGEO_YOLOE_MODEL", "").strip() or str(DATA_DIR / "models" / "yoloe-11s-seg.pt")
+YOLOE_CONFIDENCE = _float_env("GEUGEO_YOLOE_CONFIDENCE", 0.12)
+YOLOE_MAX_DETECTIONS = max(1, _int_env("GEUGEO_YOLOE_MAX_DETECTIONS", 10))
+# 단순 배경이면 크롭 이득이 없으므로 YOLOE 호출 자체를 건너뛴다.
+CROP_CLUTTER_THRESHOLD = _float_env("GEUGEO_CROP_CLUTTER_THRESHOLD", 0.15)
+# 물건이 이미 화면 대부분을 차지하면 크롭 대신 원본을 쓴다.
+CROP_MAX_BOX_RATIO = _float_env("GEUGEO_CROP_MAX_BOX_RATIO", 0.60)
+VISUAL_MATCH_MAX_COMPARE = max(1, _int_env("GEUGEO_VISUAL_MATCH_MAX_COMPARE", 8))
 
 # 공개 습득물 사진을 서버에서 받아 분석할 때의 출처 제한(SSRF 방지).
 # 경찰청/포털기관 이미지는 lost112 와 minwon24 두 호스트로 내려온다.

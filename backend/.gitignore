@@ -4,3 +4,5 @@ data/
 __pycache__/
 *.pyc
 .pytest_cache/
+# YOLOE가 첫 텍스트 프롬프트에서 작업 디렉터리에 내려받는 MobileCLIP 가중치(572MB).
+mobileclip_blt.ts

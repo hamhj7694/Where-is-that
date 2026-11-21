@@ -9,6 +9,8 @@ from app import ai_pipeline, config, db, main
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "ai-test.db")
+    # 기본 로컬 CLIP은 무거운 모델을 로드하므로 기존 회귀 테스트는 멀티모달 폴백으로 고정한다.
+    monkeypatch.setattr(config, "AI_SIMILARITY_PROVIDER", "none")
     with TestClient(main.app) as test_client:
         yield test_client
 
@@ -87,8 +89,32 @@ def test_ai_prepare_describes_images_before_interpreting(client, monkeypatch):
     })
 
     assert response.status_code == 200
-    assert calls == ["multimodal", "multimodal"]
+    assert calls == ["vlm", "multimodal"]
     assert response.json()["imageDescriptions"] == ["검은색 가죽 지갑"]
+
+
+def test_ai_prepare_without_images_uses_llm_only(client, monkeypatch):
+    roles = []
+
+    def fake_completion(role, _messages):
+        roles.append(role)
+        return json.dumps({
+            "channels": {
+                "combined": {"query": "검은 지갑", "keywords": ["검은", "지갑"]},
+                "image": {"query": "", "keywords": []},
+                "context": {"query": "검은 지갑", "keywords": ["지갑"]},
+            },
+            "filters": {"category": "", "region": "", "view": "", "fromDate": "", "toDate": ""},
+            "clarificationQuestions": [],
+        }, ensure_ascii=False)
+
+    monkeypatch.setattr(ai_pipeline, "_completion", fake_completion)
+    response = client.post("/api/ai/search/prepare", json={
+        "mode": "lost", "query": "검은 지갑", "externalProcessingConfirmed": True,
+    })
+
+    assert response.status_code == 200
+    assert roles == ["llm"]
 
 
 def test_ai_prepare_returns_boolean_and_image_criteria(client, monkeypatch):
@@ -214,7 +240,7 @@ def test_ai_compare_analyzes_reference_photo_before_scoring(client, monkeypatch)
     })
 
     assert response.status_code == 200
-    assert [role for role, _ in calls] == ["multimodal", "multimodal"]
+    assert [role for role, _ in calls] == ["vlm", "multimodal"]
     assert response.json()["referenceDescriptions"] == ["검정 가죽 지갑에 카드와 동전이 보임"]
     assert "referenceDescriptions" in calls[1][1]
     assert "검정 가죽 지갑에 카드와 동전이 보임" in calls[1][1]
@@ -274,7 +300,7 @@ def test_context_rank_sends_full_candidate_text_and_sorts_results(client, monkey
     })
 
     assert response.status_code == 200
-    assert captured["role"] == "multimodal"
+    assert captured["role"] == "llm"
     assert captured["input"]["candidates"][0]["subject"] == "앞면에 작은 금색 로고가 있어요."
     assert captured["input"]["candidates"][0]["notes"] == "교통카드 포함"
     assert captured["input"]["candidates"][0]["foundPlace"] == "서울 관악구 신림동"
