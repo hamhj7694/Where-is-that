@@ -173,11 +173,14 @@ def _valid_images(candidates: dict[str, str]) -> bool:
 
 
 def score_similarity(
-    references: list[str], candidates: dict[str, str], targets: str = ""
+    references: list[str],
+    candidates: dict[str, str],
+    targets: str = "",
+    vlm_multi: dict[str, bool] | None = None,
 ) -> dict[str, int]:
     """참고 사진 각각과 후보 사진의 유사도 중 최대값을 0~100으로 반환한다."""
     if config.AI_SIMILARITY_PROVIDER == "local-clip":
-        return local_vision.score_similarity(references, candidates, targets)
+        return local_vision.score_similarity(references, candidates, targets, vlm_multi)
     if not references or not _valid_images(candidates) or not is_configured():
         return {}
     if any(not isinstance(image, str) or not _DATA_URL.fullmatch(image) for image in references):
@@ -197,14 +200,17 @@ def score_similarity(
 
 
 def score_text_image_similarity(
-    texts: list[str], candidates: dict[str, str], targets: str = ""
+    texts: list[str],
+    candidates: dict[str, str],
+    targets: str = "",
+    vlm_multi: dict[str, bool] | None = None,
 ) -> dict[str, int]:
     """텍스트에서 읽은 시각 특징과 공개 사진의 유사도를 0~100으로 반환한다.
 
     참고 사진이 없을 때 사용하는 경로다. 여러 특징 중 가장 높은 일치도를 후보 점수로 쓴다.
     """
     if config.AI_SIMILARITY_PROVIDER == "local-clip":
-        return local_vision.score_text_image_similarity(texts, candidates, targets)
+        return local_vision.score_text_image_similarity(texts, candidates, targets, vlm_multi)
     clean_texts = [text.strip()[:120] for text in texts if isinstance(text, str) and text.strip()]
     if not clean_texts or not _valid_images(candidates) or not is_configured():
         return {}
@@ -222,8 +228,10 @@ def score_text_image_similarity(
     return scores
 
 
-def crop_notes(targets: str, candidates: dict[str, str]) -> dict[str, str]:
+def crop_notes(
+    targets: str, candidates: dict[str, str], vlm_multi: dict[str, bool] | None = None
+) -> dict[str, str]:
     """로컬 비전이 타깃을 크롭한 후보의 근거 문구를 반환한다."""
     if config.AI_SIMILARITY_PROVIDER != "local-clip":
         return {}
-    return local_vision.crop_notes(targets, candidates)
+    return local_vision.crop_notes(targets, candidates, vlm_multi)

@@ -8,18 +8,21 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
-from . import image_similarity, local_vision
+from . import config, image_similarity, local_vision
 from .ai_schemas import (
     AiSearchPlan,
     AiVisualMatchResponse,
     AiVisualMatchResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SearchState(TypedDict, total=False):
@@ -36,6 +39,7 @@ class VisualState(TypedDict, total=False):
     target_hints: str
     basis: dict[str, str]
     scoped: dict[str, str]
+    vlm_multi: dict[str, bool]
     computed: dict[str, int]
     notes: dict[str, str]
     scores: dict[str, int]
@@ -125,12 +129,92 @@ def _visual_fetch(state: VisualState) -> dict:
     }
 
 
+def _vlm_available() -> bool:
+    from . import ai_pipeline
+
+    provider, key, base_url, model = ai_pipeline._role_config("vlm")
+    return provider == "openai-compatible" and bool(key and base_url and model)
+
+
 def _visual_route_after_fetch(state: VisualState) -> str:
     if not state["photo_images"]:
         return "describe"
     if not image_similarity.is_configured():
         return "fallback"
+    # 크롭이 실제로 쓰이는 로컬 CLIP 경로에서만 VLM 판정을 한 번 호출한다.
+    if (
+        config.VLM_CROP_CENSUS
+        and config.AI_SIMILARITY_PROVIDER == "local-clip"
+        and local_vision.yoloe_available()
+        and _vlm_available()
+    ):
+        return "census"
     return "select"
+
+
+def _visual_census(state: VisualState) -> dict:
+    """참고 사진·공개 사진 전체를 한 번의 VLM 호출로 세어 크롭 근거를 만든다.
+
+    실패하면 빈 힌트를 돌려 YOLOE 게이팅으로 되돌아간다. 검색 자체는 실패하지 않는다.
+    """
+    from . import ai_pipeline
+
+    request = state["request"]
+    image_by_key: dict[str, str] = {}
+    for index, image in enumerate(request.references):
+        if isinstance(image, str) and ai_pipeline._DATA_URL.fullmatch(image):
+            image_by_key[f"r{index}"] = image
+    for index, (candidate_id, image) in enumerate(state["photo_images"].items()):
+        if isinstance(image, str) and ai_pipeline._DATA_URL.fullmatch(image):
+            image_by_key[f"c{index}"] = image
+    if not image_by_key:
+        return {"vlm_multi": {}}
+
+    content: list[dict[str, object]] = [{
+        "type": "text",
+        "text": json.dumps({
+            "task": "각 사진의 객체 개수와 서로 다른 객체 종류 수를 세어 크롭 여부를 판단합니다.",
+            "images": [{"id": key} for key in image_by_key],
+        }, ensure_ascii=False),
+    }]
+    for image in image_by_key.values():
+        content.append({"type": "image_url", "image_url": {"url": image, "detail": "low"}})
+    try:
+        value = ai_pipeline._json_object(ai_pipeline._completion("vlm", [
+            {"role": "system", "content": ai_pipeline._prompt("crop_census.txt")},
+            {"role": "user", "content": content},
+        ]))
+    except (ai_pipeline.AiPipelineError, OSError) as error:
+        logger.warning("VLM crop census failed: %s", error)
+        return {"vlm_multi": {}}
+
+    rows = value.get("results")
+    if not isinstance(rows, list):
+        return {"vlm_multi": {}}
+    hints: dict[str, bool] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = row.get("id")
+        if not isinstance(key, str) or key not in image_by_key:
+            continue
+        count = row.get("objectCount")
+        types = row.get("objectTypes")
+        count_ok = (
+            isinstance(count, int) and not isinstance(count, bool)
+            and count >= config.CROP_MIN_OBJECTS
+        )
+        distinct_types = {
+            item.strip().lower() for item in types
+            if isinstance(item, str) and item.strip()
+        } if isinstance(types, list) else set()
+        types_ok = len(distinct_types) >= config.CROP_MIN_OBJECT_TYPES
+        hints[image_by_key[key]] = count_ok or types_ok
+    return {"vlm_multi": hints}
+
+
+def _visual_route_after_census(state: VisualState) -> str:
+    return "fallback" if not image_similarity.is_configured() else "select"
 
 
 def _visual_select(state: VisualState) -> dict:
@@ -140,15 +224,16 @@ def _visual_select(state: VisualState) -> dict:
 
 def _visual_embed(state: VisualState) -> dict:
     request = state["request"]
+    hints = state.get("vlm_multi") or {}
     if request.references:
         computed = image_similarity.score_similarity(
-            request.references, state["scoped"], state["target_hints"]
+            request.references, state["scoped"], state["target_hints"], hints
         )
     else:
         computed = image_similarity.score_text_image_similarity(
-            request.imageFeatures, state["scoped"], state["target_hints"]
+            request.imageFeatures, state["scoped"], state["target_hints"], hints
         )
-    notes = image_similarity.crop_notes(state["target_hints"], state["scoped"]) if computed else {}
+    notes = image_similarity.crop_notes(state["target_hints"], state["scoped"], hints) if computed else {}
     return {
         "computed": computed,
         "notes": notes,
@@ -219,6 +304,7 @@ def _visual_finish(state: VisualState) -> dict:
 def _build_visual_graph():
     builder = StateGraph(VisualState)
     builder.add_node("fetch", _visual_fetch)
+    builder.add_node("census", _visual_census)
     builder.add_node("select", _visual_select)
     builder.add_node("embed", _visual_embed)
     builder.add_node("fallback", _visual_fallback)
@@ -228,7 +314,17 @@ def _build_visual_graph():
     builder.add_conditional_edges(
         "fetch",
         _visual_route_after_fetch,
-        {"select": "select", "fallback": "fallback", "describe": "describe"},
+        {
+            "census": "census",
+            "select": "select",
+            "fallback": "fallback",
+            "describe": "describe",
+        },
+    )
+    builder.add_conditional_edges(
+        "census",
+        _visual_route_after_census,
+        {"select": "select", "fallback": "fallback"},
     )
     builder.add_edge("select", "embed")
     builder.add_conditional_edges(
@@ -255,6 +351,7 @@ def match_visual_features(request) -> AiVisualMatchResponse:
         "description_texts": {},
         "target_hints": "",
         "basis": {},
+        "vlm_multi": {},
         "computed": {},
         "notes": {},
         "scores": {},

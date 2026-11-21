@@ -224,16 +224,21 @@ def needs_crop(image, labels: tuple[str, ...]) -> bool:
 
 
 @lru_cache(maxsize=128)
-def crop_target(data_url: str, labels: tuple[str, ...]) -> tuple[str, bool]:
-    """타깃 물건만 남긴(data url, 크롭 여부)을 반환한다. 실패하면 원본을 쓴다."""
+def crop_target(data_url: str, labels: tuple[str, ...], vlm_multi: bool = False) -> tuple[str, bool]:
+    """타깃 물건만 남긴(data url, 크롭 여부)을 반환한다. 실패하면 원본을 쓴다.
+
+    vlm_multi는 VLM이 '객체 종류가 2가지 이상'이라고 판정한 사진에만 True다.
+    YOLOE 게이팅과 OR로 더해지므로 VLM이 단일 객체라고 해도 YOLOE 판정은 유지된다.
+    """
     if not labels or not yoloe_available():
         return data_url, False
     try:
         image = _decode(data_url)
         image.thumbnail((1024, 1024))
         count, types, detections = object_census(image, labels)
-        # 객체가 하나뿐이면 원본이 곧 관심 물건이다. 억지로 자르지 않는다.
-        if count < config.CROP_MIN_OBJECTS and types < config.CROP_MIN_OBJECT_TYPES:
+        yolo_multi = count >= config.CROP_MIN_OBJECTS or types >= config.CROP_MIN_OBJECT_TYPES
+        # 두 판정 모두 단일 객체일 때만 원본을 그대로 쓴다.
+        if not yolo_multi and not vlm_multi:
             return data_url, False
         best: tuple[float, float, tuple[float, float, float, float]] | None = None
         for name, confidence, box in detections:
@@ -306,16 +311,20 @@ def _score(vector: tuple[float, ...], references: list[tuple[float, ...]]) -> in
 
 
 def score_similarity(
-    references: list[str], candidates: dict[str, str], targets: str = ""
+    references: list[str],
+    candidates: dict[str, str],
+    targets: str = "",
+    vlm_multi: dict[str, bool] | None = None,
 ) -> dict[str, int]:
     """참고 사진과 공개 사진을 타깃 크롭 후 CLIP 코사인 유사도로 비교한다."""
     if not references or not candidates or not clip_available():
         return {}
     labels = target_labels(targets)
+    flags = vlm_multi or {}
     try:
-        reference_images = [crop_target(image, labels)[0] for image in references]
+        reference_images = [crop_target(image, labels, flags.get(image, False))[0] for image in references]
         candidate_images = {
-            candidate_id: crop_target(image, labels)[0]
+            candidate_id: crop_target(image, labels, flags.get(image, False))[0]
             for candidate_id, image in candidates.items()
         }
         reference_vectors = [embed_image(image) for image in reference_images]
@@ -329,7 +338,10 @@ def score_similarity(
 
 
 def score_text_image_similarity(
-    texts: list[str], candidates: dict[str, str], targets: str = ""
+    texts: list[str],
+    candidates: dict[str, str],
+    targets: str = "",
+    vlm_multi: dict[str, bool] | None = None,
 ) -> dict[str, int]:
     """텍스트 시각 특징을 영어 프롬프트로 바꿔 공개 사진(크롭)과 비교한다."""
     clean_texts = tuple(text.strip()[:120] for text in texts if isinstance(text, str) and text.strip())
@@ -337,10 +349,13 @@ def score_text_image_similarity(
         return {}
     labels = target_labels(" ".join(clean_texts) + " " + targets)
     prompts = text_prompts(clean_texts, targets)
+    flags = vlm_multi or {}
     try:
         text_vectors = [embed_text(prompt) for prompt in prompts]
         return {
-            candidate_id: _score(embed_image(crop_target(image, labels)[0]), text_vectors)
+            candidate_id: _score(
+                embed_image(crop_target(image, labels, flags.get(image, False))[0]), text_vectors
+            )
             for candidate_id, image in candidates.items()
         }
     except (ValueError, OSError, RuntimeError, ImportError) as error:
@@ -348,17 +363,20 @@ def score_text_image_similarity(
         return {}
 
 
-def crop_notes(targets: str, candidates: dict[str, str]) -> dict[str, str]:
+def crop_notes(
+    targets: str, candidates: dict[str, str], vlm_multi: dict[str, bool] | None = None
+) -> dict[str, str]:
     """어느 후보에서 타깃을 크롭했는지 근거 문구를 만든다."""
     if not candidates or not yoloe_available():
         return {}
     labels = target_labels(targets)
     if not labels:
         return {}
+    flags = vlm_multi or {}
     notes: dict[str, str] = {}
     for candidate_id, image in candidates.items():
         try:
-            if crop_target(image, labels)[1]:
+            if crop_target(image, labels, flags.get(image, False))[1]:
                 notes[candidate_id] = "사진에서 관심 물건 부분만 잘라 비교했어요."
         except (ValueError, OSError, RuntimeError, ImportError):
             continue

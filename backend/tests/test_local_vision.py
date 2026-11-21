@@ -168,7 +168,7 @@ def test_text_similarity_uses_english_prompts_and_crops(monkeypatch):
     monkeypatch.setattr(local_vision, "embed_image", lambda _image: (1.0, 0.0))
     monkeypatch.setattr(local_vision, "yoloe_available", lambda: True)
     monkeypatch.setattr(local_vision, "_yoloe_model", lambda: None)
-    monkeypatch.setattr(local_vision, "crop_target", lambda image, _labels: (image, False))
+    monkeypatch.setattr(local_vision, "crop_target", lambda image, _labels, _vlm=False: (image, False))
 
     scores = local_vision.score_text_image_similarity(
         ["딸기 그림", "지갑"], {"one": _data_url()}, "딸기가 그려진 지갑"
@@ -199,3 +199,46 @@ def test_local_status_reports_crop_without_exposing_keys(monkeypatch):
     assert role["source"] == "vision-model"
     assert role["crop"]["enabled"] is True
     assert "secret" not in str(role)
+
+
+def test_vlm_multi_forces_crop_for_single_detection(monkeypatch):
+    # YOLOE는 지갑 하나만 봤지만 VLM이 객체 종류 2가지라고 판정하면 자른다.
+    monkeypatch.setattr(
+        local_vision, "_yoloe_model",
+        lambda: _fake_model([("wallet", 0.9, [10, 10, 100, 100])]),
+    )
+    original = _busy_data_url()
+
+    cropped, changed = local_vision.crop_target(original, ("wallet",), True)
+
+    assert changed is True
+    assert cropped != original
+
+
+def test_vlm_false_does_not_override_yolo_multi(monkeypatch):
+    # VLM이 단일 객체라고 해도 YOLOE가 여러 객체를 보면 크롭을 유지한다(OR 조건).
+    detections = [
+        ("wallet", 0.9, [10, 10, 100, 100]),
+        ("key", 0.8, [120, 120, 150, 150]),
+    ]
+    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: _fake_model(detections))
+
+    assert local_vision.crop_target(_busy_data_url(), ("wallet",), False)[1] is True
+
+
+def test_vlm_flags_reach_clip_scoring(monkeypatch):
+    seen: dict[str, bool] = {}
+
+    def fake_crop(image, _labels, vlm=False):
+        seen[image] = vlm
+        return image, vlm
+
+    monkeypatch.setattr(local_vision, "clip_available", lambda: True)
+    monkeypatch.setattr(local_vision, "embed_text", lambda _prompt: (1.0, 0.0))
+    monkeypatch.setattr(local_vision, "embed_image", lambda _image: (1.0, 0.0))
+    monkeypatch.setattr(local_vision, "crop_target", fake_crop)
+    image = _data_url()
+
+    local_vision.score_text_image_similarity(["지갑"], {"one": image}, "지갑", {image: True})
+
+    assert seen[image] is True
