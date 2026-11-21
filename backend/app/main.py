@@ -207,6 +207,12 @@ def health() -> dict:
     return {"service": "geugeo-eodi-auth", "version": 1}
 
 
+# 외부 폴러가 /health를 찌르므로 같은 응답을 별도 스키마 없이 노출한다.
+@app.get("/health", include_in_schema=False)
+def root_health() -> dict:
+    return health()
+
+
 @app.post("/api/auth/signup", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 def signup(payload: SignupRequest, response: Response) -> dict:
     with closing(db.connect()) as connection:

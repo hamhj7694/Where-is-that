@@ -135,6 +135,10 @@ CROP_MAX_BOX_RATIO = _float_env("GEUGEO_CROP_MAX_BOX_RATIO", 0.60)
 # YOLOE가 놓친 '서로 다른 객체 종류'를 VLM이 사진별로 판정해 OR 조건에 더한다.
 # 한 번의 멀티모달 호출로 후보 사진 전체를 세고, 실패하면 YOLOE 게이팅만 쓴다.
 VLM_CROP_CENSUS = _bool_env("GEUGEO_VLM_CROP_CENSUS", True)
+# 사진 없이 텍스트 특징만으로 비교할 때 CLIP 점수가 평평하면 멀티모달 폴백을 쓴다.
+# 실측에서 짧은 한국어 설명은 대부분 같은 '지갑' 프롬프트로 수렴해 순위가 무작위였다.
+TEXT_FALLBACK_MAX_SCORE = _int_env("GEUGEO_TEXT_FALLBACK_MAX_SCORE", 70)
+TEXT_FALLBACK_MIN_GAP = _int_env("GEUGEO_TEXT_FALLBACK_MIN_GAP", 5)
 VISUAL_MATCH_MAX_COMPARE = max(1, _int_env("GEUGEO_VISUAL_MATCH_MAX_COMPARE", 8))
 
 # 공개 습득물 사진을 서버에서 받아 분석할 때의 출처 제한(SSRF 방지).

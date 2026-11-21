@@ -81,6 +81,24 @@ def test_vlm_census_failure_keeps_yolo_gating(monkeypatch):
     assert ai_graph._visual_census(state) == {"vlm_multi": {}}
 
 
+def test_text_only_scores_fall_back_when_clip_cannot_discriminate():
+    state = _state()
+    state["request"].references = []
+    state["computed"] = {"one": 52, "two": 50}
+
+    assert ai_graph._visual_route_after_embed(state) == "fallback"
+
+    state["computed"] = {"one": 90, "two": 40}
+    assert ai_graph._visual_route_after_embed(state) == "describe"
+
+
+def test_photo_query_keeps_local_score_without_fallback():
+    state = _state()
+    state["computed"] = {"one": 90, "two": 88}
+
+    assert ai_graph._visual_route_after_embed(state) == "describe"
+
+
 def test_embed_passes_vlm_flags_to_local_clip(monkeypatch):
     captured = {}
 

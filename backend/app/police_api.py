@@ -458,6 +458,9 @@ def browse_all(
     pages_scanned = 0
     limit_reached = False
     use_codes = bool(param_sets)
+    # 지역 텍스트 검사를 건너뛸 수 있는 건 공식 코드로 지역을 실제 좁혔을 때뿐이다.
+    # 코드 없는 지역값(구·동 등)은 다른 필터가 코드로 가도 텍스트 검사를 유지한다.
+    region_applied = bool(lostfound_codes.region_param(str((filters or {}).get("region") or "")))
 
     if use_codes:
         results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(param_sets, cleaned, page, rows, max_pages)
@@ -493,7 +496,7 @@ def browse_all(
         for row in results.get(source, []):
             if row["id"] in merged:
                 continue
-            if not metadata_pass(row, filters, skip_region=use_codes):
+            if not metadata_pass(row, filters, skip_region=use_codes and region_applied):
                 continue
             if use_codes and not _keyword_item_match(row, cleaned):
                 continue

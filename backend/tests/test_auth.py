@@ -26,6 +26,10 @@ def signup_payload(email="user@example.com", password="password123", nickname="í
     }
 
 
+def test_health_alias_for_external_poller(client):
+    assert client.get("/api/health").json() == client.get("/health").json()
+
+
 def test_signup_sets_http_only_cookie_and_me(client):
     response = client.post("/api/auth/signup", json=signup_payload(email="User@Example.com"))
     assert response.status_code == 201

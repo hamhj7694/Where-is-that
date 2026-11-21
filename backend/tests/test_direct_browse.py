@@ -149,3 +149,20 @@ def test_browse_uses_official_codes_and_reads_all_filtered_pages(monkeypatch):
     assert {page for _source, _params, page in seen} <= {1, 2, 3}
     assert result["total"] >= 1
 
+
+def test_browse_keeps_text_region_check_when_region_has_no_official_code(monkeypatch):
+    def fake_search_filtered(source: str, params: dict, page: int = 1, rows: int = 20) -> dict:
+        assert "N_FD_LCT_CD" not in params
+        return {"items": [row(f"{source}:{page}", "2026-04-01", region="")], "totalCount": 1}
+
+    monkeypatch.setattr(police_api, "search_filtered", fake_search_filtered)
+    result = police_api.browse_all(
+        "지갑", 1, 10,
+        filters={"category": "지갑 > 남성용 지갑", "region": "강남구"},
+        max_pages=1,
+    )
+
+    # 분류는 코드로 좁혀졌지만 지역은 코드가 없으므로 텍스트 검사를 유지해야 한다.
+    assert result["filterApi"] is True
+    assert result["total"] == 0
+

@@ -55,6 +55,30 @@ _SKIP_LABELS = {
 # 실서비스 점수로 쓰기 위해 그 구간을 0~100으로 늘린다.
 _CLIP_SCORE_BASE = 0.10
 _CLIP_SCORE_SPAN = 0.35
+# 사진↔사진은 같은 종류끼리도 0.58~0.80으로 높게 나온다. 텍스트 보정치를 그대로
+# 쓰면 0.45 이상이 모두 100점이 되어 1위가 사전순으로 깨진다(실측 R@1 1.0→0.167).
+# 사진↔사진은 더 높은 기준선을 써 100점이 자기 사진에만 붙게 한다.
+_CLIP_IMAGE_SCORE_BASE = 0.45
+_CLIP_IMAGE_SCORE_SPAN = 0.55
+
+# 한국어 시각 형용사·재질·무늬는 객체 라벨(_LABEL_MAP)과 분리해 텍스트 프롬프트에만 쓴다.
+# YOLOE 타깃 라벨에 색상을 넣으면 오탐이 늘므로 target_labels에는 영향이 없다.
+_VISUAL_FEATURE_MAP = {
+    "검정": "black", "검은": "black", "블랙": "black",
+    "하양": "white", "흰": "white", "화이트": "white",
+    "빨강": "red", "빨간": "red", "레드": "red",
+    "파랑": "blue", "파란": "blue", "블루": "blue",
+    "노랑": "yellow", "노란": "yellow", "옐로": "yellow",
+    "초록": "green", "녹색": "green", "그린": "green",
+    "갈색": "brown", "브라운": "brown", "회색": "gray", "그레이": "gray",
+    "실버": "silver", "은색": "silver", "퓨시아": "fuchsia", "자홍": "fuchsia",
+    "베이지": "beige", "피치": "peach", "오렌지색": "orange", "핑크": "pink",
+    "코발트": "teal", "청록": "teal", "철제": "metal", "토끼": "rabbit",
+    "가죽": "leather", "천": "fabric", "금속": "metal", "체인": "chain",
+    "지퍼": "zipper", "무늬": "pattern", "그림": "print", "패턴": "pattern",
+    "로고": "logo", "글씨": "text", "스트랩": "strap", "손잡이": "handle",
+    "작은": "small", "큰": "large",
+}
 
 # YOLOE는 텍스트 프롬프트로 열린 어휘 탐지를 한다. 타깃 라벨만 주면 사진 속 다른
 # 물건을 보지 못하므로, 흔한 습득물·배경 사물 목록을 함께 넣어 객체 수와 종류를
@@ -103,6 +127,14 @@ def text_prompts(texts: tuple[str, ...], targets: str) -> tuple[str, ...]:
     combined = " ".join([*texts, targets])
     labels = target_labels(combined)
     prompts = [f"a photo of {label}" for label in labels]
+    features: list[str] = []
+    for korean, english in _VISUAL_FEATURE_MAP.items():
+        if korean in combined and english not in features:
+            features.append(english)
+    for feature in features:
+        prompts.append(
+            f"a photo of {labels[0]} with {feature}" if labels else f"a photo of {feature}"
+        )
     for text in texts:
         if re.search(r"[A-Za-z]{3,}", text):
             prompts.append(text.strip()[:120])
@@ -304,9 +336,15 @@ def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     return max(-1.0, min(1.0, dot / (left_norm * right_norm)))
 
 
-def _score(vector: tuple[float, ...], references: list[tuple[float, ...]]) -> int:
+def _score(
+    vector: tuple[float, ...], references: list[tuple[float, ...]], *, image: bool = False
+) -> int:
     best = max((_cosine(vector, reference) for reference in references), default=0.0)
-    calibrated = (best - _CLIP_SCORE_BASE) / _CLIP_SCORE_SPAN
+    base, span = (
+        (_CLIP_IMAGE_SCORE_BASE, _CLIP_IMAGE_SCORE_SPAN) if image
+        else (_CLIP_SCORE_BASE, _CLIP_SCORE_SPAN)
+    )
+    calibrated = (best - base) / span
     return int(round(max(0.0, min(1.0, calibrated)) * 100))
 
 
@@ -329,7 +367,7 @@ def score_similarity(
         }
         reference_vectors = [embed_image(image) for image in reference_images]
         return {
-            candidate_id: _score(embed_image(image), reference_vectors)
+            candidate_id: _score(embed_image(image), reference_vectors, image=True)
             for candidate_id, image in candidate_images.items()
         }
     except (ValueError, OSError, RuntimeError, ImportError) as error:

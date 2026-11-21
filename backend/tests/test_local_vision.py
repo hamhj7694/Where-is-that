@@ -186,6 +186,24 @@ def test_clip_score_calibrates_typical_similarity_range():
     assert local_vision._score((1.0, 0.0), [(0.0, 1.0)]) == 0
 
 
+def test_image_score_does_not_saturate_same_category_photos():
+    # 지갑 사진끼리는 코사인 0.8까지 올라간다. 텍스트 보정치를 쓰면 모두 100점이 된다.
+    similar = (0.8, 0.6)
+    identical = (1.0, 0.0)
+
+    assert local_vision._score(identical, [similar], image=True) == 64
+    assert local_vision._score(identical, [identical], image=True) == 100
+    assert local_vision._score(identical, [similar]) == 100
+
+
+def test_text_prompts_translate_korean_visual_features():
+    prompts = local_vision.text_prompts(("검은 가죽 지갑",), "")
+
+    assert "a photo of wallet" in prompts
+    assert "a photo of wallet with black" in prompts
+    assert "a photo of wallet with leather" in prompts
+
+
 def test_local_status_reports_crop_without_exposing_keys(monkeypatch):
     monkeypatch.setattr(config, "AI_SIMILARITY_PROVIDER", "local-clip")
     monkeypatch.setattr(config, "AI_SIMILARITY_API_KEY", "secret")

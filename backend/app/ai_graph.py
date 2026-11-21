@@ -241,8 +241,25 @@ def _visual_embed(state: VisualState) -> dict:
     }
 
 
+def _low_confidence_text_scores(scores: dict[str, int]) -> bool:
+    """짧은 한국어 설명이 같은 객체 프롬프트로 수렴했는지 점수 분포로 판단한다."""
+    values = sorted(scores.values(), reverse=True)
+    if len(values) < 2:
+        return True
+    return (
+        values[0] < config.TEXT_FALLBACK_MAX_SCORE
+        or values[0] - values[1] < config.TEXT_FALLBACK_MIN_GAP
+    )
+
+
 def _visual_route_after_embed(state: VisualState) -> str:
-    return "describe" if state["computed"] else "fallback"
+    if not state["computed"]:
+        return "fallback"
+    # 참고 사진이 있는 CLIP 비교는 실측 R@1 1.0이므로 폴백을 생략한다.
+    # 텍스트만 있는 비교는 점수가 평평하면 멀티모달이 사진을 직접 보게 한다.
+    if not state["request"].references and _low_confidence_text_scores(state["computed"]):
+        return "fallback"
+    return "describe"
 
 
 def _visual_fallback(state: VisualState) -> dict:
