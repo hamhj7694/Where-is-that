@@ -1,7 +1,8 @@
 import type { Candidate } from './catalog-model'
 import { REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from './model'
 
-export const LOST_RESULT_CHANNELS = ['combined', 'image', 'context'] as const
+// 사진 특징 후보를 마지막에 배치해 설명·조건 후보를 먼저 보여준다.
+export const LOST_RESULT_CHANNELS = ['combined', 'context', 'image'] as const
 export type LostResultChannel = typeof LOST_RESULT_CHANNELS[number]
 export type LostResultState = 'success' | 'partial' | 'empty' | 'error' | 'loading' | 'confirmation'
 type SourceState = Exclude<LostResultState, 'partial'>

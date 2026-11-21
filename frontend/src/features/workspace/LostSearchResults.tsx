@@ -9,7 +9,7 @@ import { getReferencePhotos, snapshotSearchDraft, validateSearch, MAX_LOST_REFER
 import { LOST_RESULT_CHANNELS, filterCandidateRecords, lostResultChannelState, readLostResultFilters, type LostResultChannel } from '../search/lost-result-model'
 import type { Candidate } from '../search/catalog-model'
 import { dedupeLostFound, REGIONS, searchLostFound, toCandidate, type FoundItem, type LostSearchHints } from '../search/lostfound-api'
-import { rankLostContextCandidates, type AiContextRankCandidate, type AiContextRankedCandidate, type AiLocationRelation } from '../search/ai-search-api'
+import { matchPublicItemImages, rankLostContextCandidates, type AiContextRankCandidate, type AiContextRankedCandidate, type AiLocationRelation, type AiVisualMatchResult } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaToHints, criteriaLabels, hasSearchCriteria, matchPublicItem, resolveApiKeyword, type AiSearchCriteria } from '../search/ai-match-model'
 import { EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
 import { localPhotoId, OFFICIAL_SEARCH_URL } from './data'
@@ -51,6 +51,15 @@ const locationRelationLabels: Record<AiLocationRelation, string> = {
   regional_context: '넓은 지역 맥락',
   uncertain: '장소 근거 불확실',
   not_applicable: '장소 조건 없음',
+}
+
+function toVisualMatchCandidate(item: FoundItem): { id: string; imageUrl: string; text: string } {
+  const candidate = toCandidate(item)
+  return {
+    id: candidate.id,
+    imageUrl: item.imageUrl ?? '',
+    text: [item.name, item.subject, item.notes, item.color, item.category].filter(Boolean).join(' ').slice(0, 2000),
+  }
 }
 
 function toAiContextRankCandidate(item: FoundItem): AiContextRankCandidate {
@@ -131,6 +140,9 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   const [rankBusy, setRankBusy] = useState(false)
   const [rankError, setRankError] = useState('')
   const [contextRank, setContextRank] = useState<{ scope: string; results: AiContextRankedCandidate[] } | null>(null)
+  const [visualMatch, setVisualMatch] = useState<{ scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' } | null>(null)
+  const [visualBusy, setVisualBusy] = useState(false)
+  const [visualError, setVisualError] = useState('')
   const wide = useWideResults()
   const id = useId()
   const toggle = useRef<HTMLButtonElement>(null)
@@ -139,6 +151,9 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   const editButton = useRef<HTMLButtonElement>(null)
   const restoringScroll = useRef(true)
   const rankRequestSequence = useRef(0)
+  const visualRequestSequence = useRef(0)
+  const visualScopeRef = useRef('')
+  const visualAutoConsumed = useRef(false)
   const autoRankConsumed = useRef(false)
   const consumeAutoRankRef = useRef(onConsumeAutoRankConsent)
   const assistant = savedAssistant ?? localAssistant
@@ -252,6 +267,20 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     const raw = rawByCandidateId.get(item.id)
     return raw ? [toAiContextRankCandidate(raw)] : []
   })
+  // 사진이 있는 후보를 우선하되, 사진이 없는 공개 항목도 설명으로 같은 풀에서 비교한다.
+  const visualCandidates: ReturnType<typeof toVisualMatchCandidate>[] = []
+  const visualSeen = new Set<string>()
+  for (const item of [...imageSourceBase.slice(0, 12), ...contextPageItems]) {
+    if (visualSeen.has(item.id) || visualCandidates.length >= 12) continue
+    const raw = rawByCandidateId.get(item.id)
+    if (!raw) continue
+    visualSeen.add(item.id)
+    visualCandidates.push(toVisualMatchCandidate(raw))
+  }
+  const visualRankScope = JSON.stringify([
+    keyword, hintsKey, criteria.imageFeatures, draft.photo ? localPhotoId(draft.photo) : '',
+    draft.query, contextPage, reloadToken, visualCandidates.map(candidate => candidate.id),
+  ])
   const contextFilters = readLostResultFilters(params)
   const contextRankScope = JSON.stringify([
     keyword, hintsKey, draft.aiPlan?.originalQuery ?? draft.query, draft.aiPlan?.channels.context.query ?? draft.query,
@@ -261,10 +290,13 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   const rankScopeRef = useRef(contextRankScope)
   const activeRank = contextRank?.scope === contextRankScope ? contextRank.results : null
   const rankScores = new Map(activeRank?.map(result => [result.id, result.score]) ?? [])
-  const imageSource = sortByRank(imageSourceBase, rankScores, criteriaResult.scores)
+  const activeVisual = visualMatch?.scope === visualRankScope ? visualMatch.results : null
+  const visualScores = new Map(activeVisual?.map(result => [result.id, result.imageSimilarity]) ?? [])
+  const imageSource = sortByRank(imageSourceBase, visualScores, rankScores.size ? rankScores : criteriaResult.scores)
   const contextSource = sortByRank(contextSourceBase, rankScores, criteriaResult.scores)
   // 종합 채널도 이미지·문맥 채널과 동일하게 URL 필터와 JSON 조건을 적용한다.
-  const combinedSource = sortByRank(filterCandidateRecords(uniqueGalleryItems(criteriaResult.items), params), rankScores, criteriaResult.scores)
+  const combinedScores = new Map([...rankScores, ...visualScores])
+  const combinedSource = sortByRank(filterCandidateRecords(uniqueGalleryItems(criteriaResult.items), params), combinedScores, criteriaResult.scores)
   const suggestedFilters: [string, string][] = draft.aiPlan ? [
     ['category', draft.aiPlan.filters.category],
     ['region', draft.aiPlan.filters.region],
@@ -291,6 +323,20 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     if (!contextPageCandidates.length) return
     startContextRanking(contextRankScope, createContextRankInput(contextPageCandidates))
   }, [autoRankContext, contextRankScope, contextPageCandidates, contextPageLoaded, live.error, live.loading, live.loadingMore, planFiltersReady])
+  useEffect(() => {
+    if (visualScopeRef.current === visualRankScope) return
+    visualScopeRef.current = visualRankScope
+    visualRequestSequence.current += 1
+    visualAutoConsumed.current = false
+    setVisualError('')
+    setVisualBusy(false)
+  }, [visualRankScope])
+  useEffect(() => {
+    if (!autoRankContext || visualAutoConsumed.current || live.loading || live.loadingMore || live.error || !contextPageLoaded || !planFiltersReady) return
+    if (!visualCandidates.length || (!criteria.imageFeatures.length && !draft.photo)) return
+    visualAutoConsumed.current = true
+    startVisualRanking(visualRankScope)
+  }, [autoRankContext, visualRankScope, contextPageLoaded, live.error, live.loading, live.loadingMore, planFiltersReady])
   const counts = { image: imageSource.length, context: contextSource.length }
   const statusFor = (which: LostResultChannel) => {
     const explicit = params.get('state') || params.get('combinedState') || params.get(which + 'State')
@@ -350,6 +396,24 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       if (requestId === rankRequestSequence.current) setRankBusy(false)
     })
   }
+  function startVisualRanking(scope: string) {
+    if (!visualCandidates.length) return
+    const requestId = ++visualRequestSequence.current
+    setVisualBusy(true)
+    setVisualError('')
+    void matchPublicItemImages({
+      query: draft.aiPlan?.channels.image.query || draft.aiPlan?.originalQuery || draft.query,
+      imageFeatures: criteria.imageFeatures,
+      references: draft.photo ? [draft.photo] : [],
+      candidates: visualCandidates,
+    }).then(body => {
+      if (requestId === visualRequestSequence.current) setVisualMatch({ scope, results: body.results, source: body.source })
+    }).catch(cause => {
+      if (requestId === visualRequestSequence.current) setVisualError(cause instanceof Error ? cause.message : 'AI가 공개 사진·설명을 비교하지 못했어요.')
+    }).finally(() => {
+      if (requestId === visualRequestSequence.current) setVisualBusy(false)
+    })
+  }
   function rankCurrentContext() {
     if (!contextPageCandidates.length) return
     startContextRanking(contextRankScope, createContextRankInput(contextPageCandidates))
@@ -377,6 +441,10 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       {full && which === 'context' && available && contextPageCandidates.length > 0 && <div className="lost-context-ranker">
         <button type="button" className="button button--secondary" disabled={rankBusy} onClick={rankCurrentContext}><Sparkles aria-hidden="true" />{activeRank ? '다시 비교' : '비슷한 물건 찾기'}</button>
         <span>현재 페이지 공개 후보 {contextPageCandidates.length}개 · 원할 때만 분석</span>
+      </div>}
+      {full && which === 'image' && available && visualCandidates.length > 0 && <div className="lost-context-ranker">
+        <button type="button" className="button button--secondary" disabled={visualBusy} onClick={() => startVisualRanking(visualRankScope)}><Sparkles aria-hidden="true" />{activeVisual ? '다시 비교' : '사진 특징으로 비교'}</button>
+        <span>현재 공개 후보 {visualCandidates.length}건 · 참고 사진이 없으면 설명으로 비교해요</span>
       </div>}
       {status === 'loading' || waitingForMore ? <div className="gallery-result-grid" aria-busy="true" aria-label={titles[which] + ' 로딩 상태'}>{Array.from({ length: GALLERY_PREVIEW_LIMIT }, (_, index) => <div className="gallery-result-skeleton" key={index} />)}</div>
         : status === 'error' ? <EmptyState title="이 기준의 후보를 불러오지 못했어요" description="다른 검색 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry()} /></EmptyState>
@@ -408,6 +476,9 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     {rankBusy && <p className="lost-context-rank-status" role="status">AI가 공개 후보의 설명과 장소 정보를 비교해 관련도 순으로 정리하고 있어요.</p>}
     {rankError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{rankError}{contextPageCandidates.length > 0 && <> <button type="button" onClick={retryContextRanking}>다시 시도</button></>}</p>}
     {activeRank && !rankBusy && <p className="lost-context-rank-status" role="status">현재 페이지의 공개 후보 {activeRank.length}개를 AI 관련도 참고 순으로 정리했어요.</p>}
+    {visualBusy && <p className="lost-context-rank-status" role="status">AI가 공개 후보의 사진과 설명을 시각 특징과 비교하고 있어요.</p>}
+    {visualError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{visualError}{visualCandidates.length > 0 && <> <button type="button" onClick={() => startVisualRanking(visualRankScope)}>다시 시도</button></>}</p>}
+    {activeVisual && !visualBusy && <p className="lost-context-rank-status" role="status">공개 후보 {activeVisual.length}건의 사진·설명을 시각 특징과 비교해 정리했어요. 이미지 유사도는 {visualMatch?.source === 'vision-model' ? '전용 비전' : '멀티모달'} 분석 기준이에요.</p>}
     {params.get('state') === 'stale' && <p className="inline-error">공식 기록이 변경된 상태 예시예요.</p>}
     <div className="gallery-results__sections">{channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
     <p className="field__help result-disclaimer">같은 물건인지와 보관 여부는 보관기관에 확인해 주세요. AI가 잘못 찾거나 놓칠 수 있고, 공개 정보가 부족하면 검색이 제한될 수 있어요.</p>

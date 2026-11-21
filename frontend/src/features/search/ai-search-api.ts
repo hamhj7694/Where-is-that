@@ -128,6 +128,8 @@ export interface AiCompareResult {
   results: AiImageRankResult[]
   /** AI가 참고 사진에서 읽은 대상·요소 설명. 검색 문장과 함께 3축 채점에 반영된다. */
   referenceDescriptions: string[]
+  /** 이미지 유사도를 전용 비전 임베딩으로 계산했는지 여부. */
+  imageSimilaritySource: 'vision-model' | 'multimodal'
 }
 
 /** 연결 갤러리 후보 사진을 참고 사진/검색 문장과 비교해 3축 점수를 받는다. */
@@ -185,7 +187,83 @@ export async function compareCandidates(input: {
       .map(item => item.slice(0, 300))
       .slice(0, 6)
     : []
-  return { results, referenceDescriptions }
+  const imageSimilaritySource = 'imageSimilaritySource' in body && body.imageSimilaritySource === 'vision-model'
+    ? 'vision-model'
+    : 'multimodal'
+  return { results, referenceDescriptions, imageSimilaritySource }
+}
+
+/** 공개 습득물의 사진·설명을 시각 특징과 대조한 결과. */
+export interface AiVisualMatchResult {
+  id: string
+  imageSimilarity: number
+  /** photo=공개 사진 분석, description=사진 없이 설명 분석. */
+  basis: 'photo' | 'description'
+  reason: string
+}
+
+export interface AiVisualMatchResponse {
+  results: AiVisualMatchResult[]
+  source: 'vision-model' | 'multimodal'
+  usedFeatures: string[]
+}
+
+/**
+ * 참고 사진이 있어도 없어도 공개 항목의 사진과 설명을 함께 분석한다.
+ * 사진이 없는 항목은 설명만으로 시각 특징을 확인해 같은 후보 풀에서 정렬한다.
+ */
+export async function matchPublicItemImages(input: {
+  query: string
+  imageFeatures: readonly string[]
+  references: readonly File[]
+  candidates: readonly { id: string; imageUrl?: string; text?: string }[]
+}): Promise<AiVisualMatchResponse> {
+  if (!input.candidates.length || input.candidates.length > 12) throw new Error('비교할 공개 후보는 1~12건이어야 해요.')
+  const references = await Promise.all(input.references.slice(0, 6).map(fileToDataUrl))
+  const candidates = input.candidates.map(candidate => ({
+    id: candidate.id,
+    imageUrl: candidate.imageUrl ?? '',
+    text: candidate.text ?? '',
+  }))
+  let response: Response
+  try {
+    response = await fetch('/api/ai/vision/match-public', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: input.query,
+        imageFeatures: input.imageFeatures,
+        references,
+        candidates,
+        externalProcessingConfirmed: true,
+      }),
+    })
+  } catch {
+    throw new Error('서버에 연결하지 못했어요. 백엔드가 실행 중인지 확인해 주세요.')
+  }
+  const body: unknown = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(apiErrorMessage(body, 'AI가 공개 사진·설명을 비교하지 못했어요.'))
+  if (!body || typeof body !== 'object' || !('results' in body) || !Array.isArray(body.results)) {
+    throw new Error('AI 사진·설명 비교 결과를 확인할 수 없어요.')
+  }
+  const results = body.results.flatMap((item): AiVisualMatchResult[] => {
+    if (!item || typeof item !== 'object') return []
+    const raw = item as Partial<AiVisualMatchResult>
+    if (typeof raw.id !== 'string' || typeof raw.imageSimilarity !== 'number'
+      || !Number.isFinite(raw.imageSimilarity) || raw.imageSimilarity < 0 || raw.imageSimilarity > 100) return []
+    return [{
+      id: raw.id,
+      imageSimilarity: Math.round(raw.imageSimilarity),
+      basis: raw.basis === 'photo' ? 'photo' : 'description',
+      reason: typeof raw.reason === 'string' ? raw.reason.slice(0, 160) : '',
+    }]
+  })
+  const source = 'source' in body && body.source === 'vision-model' ? 'vision-model' : 'multimodal'
+  const usedFeatures = 'usedFeatures' in body && Array.isArray(body.usedFeatures)
+    ? body.usedFeatures.filter((item): item is string => typeof item === 'string').slice(0, 8)
+    : []
+  return { results, source, usedFeatures }
 }
 
 export async function rankLostContextCandidates(input: {

@@ -22,7 +22,7 @@ The public found-item API only matches one short product-name keyword (PRDT_NM).
 - include: AND terms that should all appear in the item's JSON (name, subject, notes, category, color, found place, storage place, org name, address). Use a separate short term for each fact, e.g. ["가죽", "지갑"].
 - any: OR alternatives, e.g. ["검정", "블랙", "검은색", "남색"]. Put synonyms and alternative wording here.
 - exclude: NOT terms that must not appear, only when the user clearly excludes something, e.g. ["고장", "파손"]. Otherwise [].
-- imageFeatures: concrete traits read from imageDescriptions, e.g. ["박음질", "지폐", "직사각형"]. If there is no reference photo, [].
+- imageFeatures: concrete visual traits read from imageDescriptions AND from the user's own words even when there is no reference photo, e.g. "딸기가 그려진 지갑" -> ["딸기 그림", "지갑"], "하트 모양 분홍 키링" -> ["하트 모양", "분홍색", "키링"]. These are used to visually compare the public candidates' photographs. Use [] only when the user gives no visual trait at all. Do not invent traits that were not stated or visibly described.
 
 Rules:
 - Preserve the user's original meaning; never invent facts, dates, locations, or object details.

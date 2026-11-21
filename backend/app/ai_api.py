@@ -1,7 +1,14 @@
 from fastapi import APIRouter, HTTPException
 
-from .ai_pipeline import AiPipelineError, prepare_search, rank_candidates, rank_context_candidates, status_payload
-from .ai_schemas import AiContextRankRequest, AiRankRequest, AiSearchRequest
+from .ai_pipeline import (
+    AiPipelineError,
+    match_visual_features,
+    prepare_search,
+    rank_candidates,
+    rank_context_candidates,
+    status_payload,
+)
+from .ai_schemas import AiContextRankRequest, AiRankRequest, AiSearchRequest, AiVisualMatchRequest
 
 router = APIRouter(prefix="/api/ai", tags=["AI search"])
 
@@ -27,6 +34,15 @@ def ai_prepare_search(request: AiSearchRequest) -> dict:
 def ai_compare_candidates(request: AiRankRequest) -> dict:
     try:
         return rank_candidates(request).model_dump()
+    except AiPipelineError as error:
+        raise _http_error(error) from error
+
+
+@router.post("/vision/match-public")
+def ai_match_public_images(request: AiVisualMatchRequest) -> dict:
+    """참고 사진 유무와 무관하게 공개 항목의 사진·설명을 시각 특징으로 비교한다."""
+    try:
+        return match_visual_features(request).model_dump()
     except AiPipelineError as error:
         raise _http_error(error) from error
 

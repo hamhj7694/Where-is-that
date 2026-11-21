@@ -77,5 +77,43 @@ AI_VISION_PROVIDER = os.environ.get("GEUGEO_AI_VISION_PROVIDER", "openai-compati
 AI_VISION_API_KEY = os.environ.get("GEUGEO_AI_VISION_API_KEY", "").strip() or OPENAI_API_KEY
 AI_VISION_BASE_URL = os.environ.get("GEUGEO_AI_VISION_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
 AI_VISION_MODEL = os.environ.get("GEUGEO_AI_VISION_MODEL", "gpt-6-luna").strip()
+
+# 멀티모달 한 역할이 자연어·이미지·자연어+이미지 joint 해석을 모두 맡는다.
+# 기존 LLM/VLM/VISION 설정은 호환용 별칭으로 남기고, 새 설정이 우선한다.
+AI_MULTIMODAL_PROVIDER = os.environ.get("GEUGEO_AI_MULTIMODAL_PROVIDER", "openai-compatible").strip().lower()
+AI_MULTIMODAL_API_KEY = os.environ.get("GEUGEO_AI_MULTIMODAL_API_KEY", "").strip() or AI_VLM_API_KEY or OPENAI_API_KEY
+AI_MULTIMODAL_BASE_URL = (
+    os.environ.get("GEUGEO_AI_MULTIMODAL_BASE_URL", "").strip().rstrip("/")
+    or AI_VLM_BASE_URL
+)
+AI_MULTIMODAL_MODEL = os.environ.get("GEUGEO_AI_MULTIMODAL_MODEL", "").strip() or AI_VLM_MODEL or "gpt-6-luna"
+
+# 이미지 유사도만 추적하는 전용 비전. 미설정(none)이면 멀티모달 점수를 그대로 사용한다.
+AI_SIMILARITY_PROVIDER = os.environ.get("GEUGEO_AI_SIMILARITY_PROVIDER", "none").strip().lower()
+AI_SIMILARITY_API_KEY = os.environ.get("GEUGEO_AI_SIMILARITY_API_KEY", "").strip() or OPENAI_API_KEY
+AI_SIMILARITY_BASE_URL = (
+    os.environ.get("GEUGEO_AI_SIMILARITY_BASE_URL", "").strip().rstrip("/")
+    or "https://api.openai.com/v1"
+)
+AI_SIMILARITY_MODEL = os.environ.get("GEUGEO_AI_SIMILARITY_MODEL", "").strip()
+AI_SIMILARITY_INPUT_STYLE = os.environ.get("GEUGEO_AI_SIMILARITY_INPUT_STYLE", "image_url").strip().lower()
+AI_SIMILARITY_TIMEOUT = _float_env("GEUGEO_AI_SIMILARITY_TIMEOUT", 20.0)
+
+# 공개 습득물 사진을 서버에서 받아 분석할 때의 출처 제한(SSRF 방지).
+# 경찰청/포털기관 이미지는 lost112 와 minwon24 두 호스트로 내려온다.
+VISUAL_MATCH_ALLOWED_HOSTS = {
+    host.strip().lower()
+    for host in os.environ.get(
+        "GEUGEO_VISUAL_MATCH_ALLOWED_HOSTS",
+        "www.lost112.go.kr,lost112.go.kr,minwon24.police.go.kr",
+    ).split(",")
+    if host.strip()
+}
+VISUAL_MATCH_FETCH_TIMEOUT = _float_env("GEUGEO_VISUAL_MATCH_FETCH_TIMEOUT", 10.0)
+VISUAL_MATCH_MAX_BYTES = _int_env("GEUGEO_VISUAL_MATCH_MAX_BYTES", 12 * 1024 * 1024)
+# 원본이 수 MB여도 AI 전송용으로 최대 변 길이 512px JPEG로 줄인다.
+VISUAL_MATCH_THUMBNAIL_SIDE = _int_env("GEUGEO_VISUAL_MATCH_THUMBNAIL_SIDE", 512)
+VISUAL_MATCH_THUMBNAIL_QUALITY = _int_env("GEUGEO_VISUAL_MATCH_THUMBNAIL_QUALITY", 70)
+
 AI_TIMEOUT = _float_env("GEUGEO_AI_TIMEOUT", 45.0)
 AI_PROMPT_DIR = BACKEND_DIR / "prompts"

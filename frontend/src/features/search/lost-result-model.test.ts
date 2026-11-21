@@ -61,7 +61,7 @@ describe('공개 후보 필터의 데이터 경계', () => {
 })
 
 describe('두 검색 원천과 세 결과 채널 상태', () => {
-  it('종합/이미지/맥락 독립 채널을 제공한다', () => expect(LOST_RESULT_CHANNELS).toEqual(['combined', 'image', 'context']))
+  it('종합/맥락/사진 특징 순서로 결과 채널을 제공한다', () => expect(LOST_RESULT_CHANNELS).toEqual(['combined', 'context', 'image']))
   it.each<[string, LostResultState, LostResultState]>([
     ['success', 'success', 'success'], ['loading', 'loading', 'loading'], ['empty', 'empty', 'empty'],
     ['error', 'error', 'error'], ['timeout', 'error', 'error'], ['api-error', 'error', 'error'],

@@ -106,6 +106,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   const photos = useMemo(() => uniqueGalleryItems((gallery?.files ?? []).map(file => photoFromFile(file, localPhotoId(file)))), [gallery])
   const [ranking, setRanking] = useState<GalleryRankMap | null>(null)
   const [referenceDescriptions, setReferenceDescriptions] = useState<string[]>([])
+  const [similaritySource, setSimilaritySource] = useState<'vision-model' | 'multimodal'>('multimodal')
   const [rankBusy, setRankBusy] = useState(false)
   const [rankStatus, setRankStatus] = useState('')
   const [rankError, setRankError] = useState('')
@@ -114,7 +115,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   const rankKey = [rankSeed ?? 0, rankRetry, draft.query, draft.photo ? localPhotoId(draft.photo) : '', gallery?.files.length ?? 0].join('|')
   useEffect(() => {
     if (!gallery || (!draft.query.trim() && !draft.photo)) {
-      setRanking(null); setReferenceDescriptions([]); setRankStatus(''); setRankError(''); setRankBusy(false)
+      setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError(''); setRankBusy(false)
       return
     }
     const candidates = uniqueGalleryItems(gallery.files.map(file => photoFromFile(file, localPhotoId(file))))
@@ -122,19 +123,23 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
       .slice(0, AI_GALLERY_RANK_LIMIT)
     if (!candidates.length) return
     let cancelled = false
-    setRankBusy(true); setRanking(null); setReferenceDescriptions([]); setRankStatus(''); setRankError('')
+    setRankBusy(true); setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError('')
     void requestRanking(rankKey, {
       mode: 'gallery',
       query: draft.query,
       references: draft.photo ? [draft.photo] : [],
       candidates: candidates.map(item => ({ id: item.id, file: item.file })),
-    }).then(({ results, referenceDescriptions }) => {
+    }).then(({ results, referenceDescriptions, imageSimilaritySource }) => {
       if (cancelled) return
       setRanking(toGalleryRankMap(results))
       setReferenceDescriptions(referenceDescriptions)
-      setRankStatus(referenceDescriptions.length
+      setSimilaritySource(imageSimilaritySource)
+      const similarityNote = imageSimilaritySource === 'vision-model'
+        ? '이미지 유사도는 전용 비전이 계산했어요.'
+        : '이미지 유사도는 멀티모달이 함께 추정했어요.'
+      setRankStatus(`${referenceDescriptions.length
         ? `AI가 참고 사진을 분석하고 검색어와 함께 반영해 연결된 사진 ${results.length}장의 종합·이미지·맥락 순서를 정했어요.`
-        : `AI가 검색어를 반영해 연결된 사진 ${results.length}장의 종합·이미지·맥락 순서를 정했어요.`)
+        : `AI가 검색어를 반영해 연결된 사진 ${results.length}장의 종합·이미지·맥락 순서를 정했어요.`} ${similarityNote}`)
     }).catch(cause => {
       if (cancelled) return
       setRankError(cause instanceof Error ? cause.message : 'AI 사진 분석에 실패했어요.')
@@ -250,7 +255,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     <p role="status" className="gallery-query-status">{editNotice}</p>
     {rankError && <p className="form-error" role="alert">{rankError}</p>}
     {rankError && <button type="button" className="button button--secondary" onClick={() => setRankRetry(count => count + 1)}>사진 분석 다시 시도</button>}
-    <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</p>
+    <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장 · 이미지 유사도 {similaritySource === 'vision-model' ? '전용 비전 계산' : '멀티모달 추정'}</p>
       {!wide && assistantToggle}
     </div>
     <div className="gallery-results__sections">{channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>

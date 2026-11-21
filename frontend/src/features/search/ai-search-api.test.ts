@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { compareCandidates, prepareAiSearch, rankLostContextCandidates, type AiContextRankCandidate, type AiSearchPlan } from './ai-search-api'
+import { compareCandidates, matchPublicItemImages, prepareAiSearch, rankLostContextCandidates, type AiContextRankCandidate, type AiSearchPlan } from './ai-search-api'
 
 const plan: AiSearchPlan = {
   originalQuery: '검은 지갑',
@@ -136,6 +136,7 @@ describe('갤러리 AI 사진 비교', () => {
     await expect(compareCandidates(input())).resolves.toEqual({
       results: [{ id: 'one', score: 80, imageSimilarity: 95, contextRelevance: 60, reasons: ['파란 바다'] }],
       referenceDescriptions: [],
+      imageSimilaritySource: 'multimodal',
     })
 
     const [, request] = fetch.mock.calls[0] as [string, RequestInit]
@@ -161,5 +162,63 @@ describe('갤러리 AI 사진 비교', () => {
 
     const result = await compareCandidates(input())
     expect(result.referenceDescriptions).toEqual(['검정 가죽 지갑', '카드가 보임'])
+  })
+})
+
+describe('공개 항목 사진·설명 비교', () => {
+  it('참고 사진 없이도 시각 특징과 공개 사진·설명을 함께 전송한다', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      results: [
+        { id: 'photo', imageSimilarity: 90, basis: 'photo', reason: '딸기 그림이 보임' },
+        { id: 'text', imageSimilarity: 80, basis: 'description', reason: '설명에 딸기 그림' },
+      ],
+      source: 'vision-model',
+      usedFeatures: ['딸기 그림'],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+
+    const result = await matchPublicItemImages({
+      query: '딸기가 그려진 지갑',
+      imageFeatures: ['딸기 그림'],
+      references: [],
+      candidates: [
+        { id: 'photo', imageUrl: 'https://minwon24.police.go.kr/photo.do' },
+        { id: 'text', text: '딸기 그림 지갑' },
+      ],
+    })
+
+    expect(fetch).toHaveBeenCalledWith('/api/ai/vision/match-public', expect.any(Object))
+    const [, request] = fetch.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(request.body))).toEqual({
+      query: '딸기가 그려진 지갑',
+      imageFeatures: ['딸기 그림'],
+      references: [],
+      candidates: [
+        { id: 'photo', imageUrl: 'https://minwon24.police.go.kr/photo.do', text: '' },
+        { id: 'text', imageUrl: '', text: '딸기 그림 지갑' },
+      ],
+      externalProcessingConfirmed: true,
+    })
+    expect(result.source).toBe('vision-model')
+    expect(result.results.map(item => item.basis)).toEqual(['photo', 'description'])
+    expect(result.usedFeatures).toEqual(['딸기 그림'])
+  })
+
+  it('잘못된 유사도 점수는 버리고 안전한 값만 반환한다', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      results: [
+        { id: 'good', imageSimilarity: 70, basis: 'photo' },
+        { id: 'bad', imageSimilarity: 400, basis: 'description' },
+      ],
+      source: 'multimodal',
+    }), { status: 200 })))
+
+    const result = await matchPublicItemImages({
+      query: '지갑', imageFeatures: [], references: [],
+      candidates: [{ id: 'good', text: '지갑' }, { id: 'bad', text: '지갑' }],
+    })
+
+    expect(result.results).toEqual([{ id: 'good', imageSimilarity: 70, basis: 'photo', reason: '' }])
+    expect(result.source).toBe('multimodal')
   })
 })

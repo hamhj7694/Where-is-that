@@ -14,15 +14,29 @@ def client(tmp_path, monkeypatch):
 
 
 def test_ai_status_does_not_expose_keys(client, monkeypatch):
-    monkeypatch.setattr(config, "AI_LLM_API_KEY", "secret")
-    monkeypatch.setattr(config, "AI_VLM_API_KEY", "secret")
-    monkeypatch.setattr(config, "AI_VISION_API_KEY", "secret")
+    monkeypatch.setattr(config, "AI_MULTIMODAL_API_KEY", "secret")
+    monkeypatch.setattr(config, "AI_SIMILARITY_API_KEY", "secret")
 
     response = client.get("/api/ai/status")
 
     assert response.status_code == 200
     assert response.json()["available"] is True
-    assert response.json()["roles"]["llm"]["model"] == "gpt-6-luna"
+    assert response.json()["roles"]["multimodal"]["model"] == "gpt-6-luna"
+    assert "secret" not in response.text
+
+
+def test_ai_status_reports_image_similarity_role(client, monkeypatch):
+    monkeypatch.setattr(config, "AI_SIMILARITY_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(config, "AI_SIMILARITY_MODEL", "voyage-multimodal-3")
+    monkeypatch.setattr(config, "AI_SIMILARITY_API_KEY", "secret")
+
+    response = client.get("/api/ai/status")
+
+    assert response.status_code == 200
+    role = response.json()["roles"]["imageSimilarity"]
+    assert role["available"] is True
+    assert role["provider"] == "openai-compatible"
+    assert role["source"] == "vision-model"
     assert "secret" not in response.text
 
 
@@ -36,7 +50,7 @@ def test_ai_prepare_requires_explicit_external_processing_consent(client):
 def test_ai_prepare_returns_mode_specific_plan(client, monkeypatch):
     monkeypatch.setattr(config, "AI_VLM_API_KEY", "")
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
-    monkeypatch.setattr(config, "AI_LLM_API_KEY", "test-key")
+    monkeypatch.setattr(config, "AI_MULTIMODAL_API_KEY", "test-key")
     responses = iter([
         '{"channels":{"combined":{"query":"검은 지갑","keywords":["검은","지갑"]},"image":{"query":"","keywords":[]},"context":{"query":"검은 지갑","keywords":["검은","지갑"]}},"filters":{"category":"지갑","region":"","view":"","fromDate":"","toDate":""},"clarificationQuestions":[]}',
     ])
@@ -60,7 +74,7 @@ def test_ai_prepare_describes_images_before_interpreting(client, monkeypatch):
 
     def fake_completion(role, _messages):
         calls.append(role)
-        if role == "vlm":
+        if len(calls) == 1:
             return '{"descriptions":["검은색 가죽 지갑"]}'
         return '{"channels":{"combined":{"query":"검은 지갑","keywords":["검은","지갑"]},"image":{"query":"검은색 가죽 지갑","keywords":["검은색","가죽"]},"context":{"query":"","keywords":[]}},"filters":{"category":"","region":"","view":"","fromDate":"","toDate":""},"clarificationQuestions":[]}'
 
@@ -73,7 +87,7 @@ def test_ai_prepare_describes_images_before_interpreting(client, monkeypatch):
     })
 
     assert response.status_code == 200
-    assert calls == ["vlm", "llm"]
+    assert calls == ["multimodal", "multimodal"]
     assert response.json()["imageDescriptions"] == ["검은색 가죽 지갑"]
 
 
@@ -184,7 +198,7 @@ def test_ai_compare_analyzes_reference_photo_before_scoring(client, monkeypatch)
 
     def fake_completion(role, messages):
         calls.append((role, json.dumps(messages, ensure_ascii=False)))
-        if role == "vlm":
+        if len(calls) == 1:
             return '{"descriptions":["검정 가죽 지갑에 카드와 동전이 보임"]}'
         return '{"results":[{"id":"only","score":90,"imageSimilarity":88,"contextRelevance":70,"reasons":[]}]}'
 
@@ -200,7 +214,7 @@ def test_ai_compare_analyzes_reference_photo_before_scoring(client, monkeypatch)
     })
 
     assert response.status_code == 200
-    assert [role for role, _ in calls] == ["vlm", "vision"]
+    assert [role for role, _ in calls] == ["multimodal", "multimodal"]
     assert response.json()["referenceDescriptions"] == ["검정 가죽 지갑에 카드와 동전이 보임"]
     assert "referenceDescriptions" in calls[1][1]
     assert "검정 가죽 지갑에 카드와 동전이 보임" in calls[1][1]
@@ -260,7 +274,7 @@ def test_context_rank_sends_full_candidate_text_and_sorts_results(client, monkey
     })
 
     assert response.status_code == 200
-    assert captured["role"] == "llm"
+    assert captured["role"] == "multimodal"
     assert captured["input"]["candidates"][0]["subject"] == "앞면에 작은 금색 로고가 있어요."
     assert captured["input"]["candidates"][0]["notes"] == "교통카드 포함"
     assert captured["input"]["candidates"][0]["foundPlace"] == "서울 관악구 신림동"
@@ -285,6 +299,8 @@ def test_context_rank_rejects_missing_candidate_ids(client, monkeypatch):
 
 def test_ai_prepare_reports_missing_server_key(client, monkeypatch):
     monkeypatch.setattr(config, "AI_LLM_API_KEY", "")
+    monkeypatch.setattr(config, "AI_VLM_API_KEY", "")
+    monkeypatch.setattr(config, "AI_MULTIMODAL_API_KEY", "")
     monkeypatch.setattr(config, "OPENAI_API_KEY", "")
 
     response = client.post("/api/ai/search/prepare", json={
@@ -312,13 +328,119 @@ def test_provider_request_disables_response_storage(monkeypatch):
         captured.update(kwargs)
         return FakeResponse()
 
-    monkeypatch.setattr(config, "AI_LLM_API_KEY", "test-key")
+    monkeypatch.setattr(config, "AI_MULTIMODAL_API_KEY", "test-key")
     monkeypatch.setattr(ai_pipeline.httpx, "post", fake_post)
 
-    result = ai_pipeline._completion("llm", [{"role": "user", "content": "text"}])
+    result = ai_pipeline._completion("multimodal", [{"role": "user", "content": "text"}])
 
     assert result == "{}"
     assert captured["json"]["model"] == "gpt-6-luna"
     assert captured["json"]["store"] is False
     # gpt-6-luna는 기본 temperature만 지원하므로 재전송하면 400→502가 난다.
     assert "temperature" not in captured["json"]
+
+
+def test_interpret_prompt_reads_visual_traits_from_words_without_photo():
+    prompt = (config.AI_PROMPT_DIR / "interpret_search.txt").read_text(encoding="utf-8")
+
+    assert "even when there is no reference photo" in prompt
+    assert "딸기가 그려진 지갑" in prompt
+
+
+def test_match_public_images_scores_photos_and_descriptions_together(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        ai_pipeline, "_fetch_public_image",
+        lambda url: "data:image/jpeg;base64,YQ==" if url.endswith("photo.do") else None,
+    )
+    monkeypatch.setattr(
+        ai_pipeline, "_multimodal_visual_scores",
+        lambda query, features, references, images: (calls.append(list(images)) or {"with-photo": 92}),
+    )
+
+    response = client.post("/api/ai/vision/match-public", json={
+        "query": "딸기가 그려진 지갑",
+        "imageFeatures": ["딸기 그림", "지갑"],
+        "candidates": [
+            {"id": "description-only", "text": "지갑에 딸기 그림이 있어요"},
+            {"id": "with-photo", "imageUrl": "https://minwon24.police.go.kr/photo.do"},
+            {"id": "no-trait", "text": "일반 지갑"},
+        ],
+        "externalProcessingConfirmed": True,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert calls == [["with-photo"]]
+    assert body["source"] == "multimodal"
+    assert body["usedFeatures"] == ["딸기 그림", "지갑"]
+    results = {item["id"]: item for item in body["results"]}
+    assert results["with-photo"]["basis"] == "photo"
+    assert results["with-photo"]["imageSimilarity"] == 92
+    assert results["description-only"]["basis"] == "description"
+    assert results["description-only"]["imageSimilarity"] == 100
+    assert results["no-trait"]["imageSimilarity"] == 50
+    assert [item["id"] for item in body["results"]][0] == "description-only"
+
+
+def test_match_public_images_without_photo_uses_only_text(client, monkeypatch):
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("사진이 없으면 멀티모달 사진 분석을 호출하지 않아야 한다")
+
+    monkeypatch.setattr(ai_pipeline, "_multimodal_visual_scores", fail_if_called)
+    response = client.post("/api/ai/vision/match-public", json={
+        "query": "딸기가 그려진 지갑",
+        "imageFeatures": ["딸기 그림"],
+        "candidates": [{"id": "text-only", "text": "딸기 그림이 있는 지갑"}],
+        "externalProcessingConfirmed": True,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["imageSimilarity"] == 100
+
+
+def test_match_public_images_requires_consent(client):
+    response = client.post("/api/ai/vision/match-public", json={
+        "query": "딸기가 그려진 지갑",
+        "candidates": [{"id": "one", "text": "지갑"}],
+    })
+
+    assert response.status_code == 422
+
+
+def test_fetch_public_image_rejects_unallowed_host_without_request(client, monkeypatch):
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("허용되지 않은 호스트는 요청하지 않아야 한다")
+
+    monkeypatch.setattr(ai_pipeline.httpx, "get", fail_if_called)
+
+    assert ai_pipeline._fetch_public_image("https://example.com/photo.jpg") is None
+
+
+def test_fetch_public_image_downscales_large_public_photo(client, monkeypatch):
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (2400, 1800), "red").save(buffer, format="JPEG")
+    original = buffer.getvalue()
+
+    class FakeResponse:
+        status_code = 200
+        url = "https://minwon24.police.go.kr/photo.do"
+        headers = {"content-type": "image/jpeg"}
+        content = original
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(ai_pipeline.httpx, "get", lambda *_args, **_kwargs: FakeResponse())
+
+    result = ai_pipeline._fetch_public_image("https://minwon24.police.go.kr/photo.do")
+
+    assert result is not None
+    assert result.startswith("data:image/jpeg;base64,")
+    # 원본 2400px 사진이 AI 전송용 소형 썸네일로 줄었다.
+    assert len(result) < len(original)
+

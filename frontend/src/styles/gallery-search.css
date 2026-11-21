@@ -42,8 +42,11 @@
 .gallery-results__toolbar > p { min-width: 0; flex: 1 1 160px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 .gallery-results__toolbar > .button { flex-shrink: 0; }
 .gallery-search-shell { min-width: 0; flex: 1; }
-.gallery-results__sections { min-width: 0; display: grid; gap: 32px; }
-.gallery-result-section { min-width: 0; }
+/* 섹션 사이에만 일관된 구분선을 둔다. 마지막 섹션 아래 선은 result-disclaimer가 담당한다. */
+.gallery-results__sections { min-width: 0; display: grid; gap: 0; }
+.gallery-result-section { min-width: 0; padding-block: 32px; border-top: 1px solid var(--line); }
+.gallery-results__sections > .gallery-result-section:first-child { padding-top: 0; border-top: 0; }
+.gallery-results__sections > .gallery-result-section:last-child { padding-bottom: 0; }
 .gallery-result-section__heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
 .gallery-result-section__heading > div { min-width: 0; }
 .gallery-result-section__heading h2 { font-size: 22px; line-height: 1.5; font-weight: 500; }
@@ -119,7 +122,8 @@
   .gallery-query-editor .search-button { min-width: 0; width: 100%; }
   .gallery-results__toolbar { gap: 12px; margin-bottom: 24px; }
   .gallery-results__toolbar > .button { width: 100%; }
-  .gallery-results__sections { gap: 32px; }
+  .gallery-results__sections { gap: 0; }
+  .gallery-result-section { padding-block: 24px; }
   .gallery-result-section__heading { gap: 4px 12px; margin-bottom: 12px; }
   .gallery-result-section__heading h2 { font-size: 20px; }
   .gallery-result-section__heading p { font-size: 13px; }

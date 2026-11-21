@@ -178,6 +178,8 @@ class AiRankResponse(BaseModel):
     results: list[AiRankedCandidate]
     # 참고 사진에서 AI가 읽은 대상·요소 설명(검색 문장과 함께 3축 채점에 반영).
     referenceDescriptions: list[str] = Field(default_factory=list, max_length=6)
+    # 이미지 유사도를 전용 비전 임베딩으로 계산했는지, 멀티모달 추론에 맡겼는지.
+    imageSimilaritySource: Literal["vision-model", "multimodal"] = "multimodal"
 
     @field_validator("referenceDescriptions")
     @classmethod
@@ -185,6 +187,51 @@ class AiRankResponse(BaseModel):
         if any(len(item) > 300 for item in value):
             raise ValueError("참고 사진 분석 내용을 확인해 주세요.")
         return value
+
+
+class AiVisualMatchCandidate(BaseModel):
+    id: str = Field(min_length=1, max_length=120)
+    # 사진이 없는 공개 항목도 설명만으로 점수를 받을 수 있도록 둘 다 허용한다.
+    imageUrl: str = Field(default="", max_length=500)
+    text: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_candidate_payload(self) -> AiVisualMatchCandidate:
+        if not self.imageUrl and not self.text.strip():
+            raise ValueError("사진 주소 또는 설명이 있는 후보만 분석할 수 있어요.")
+        return self
+
+
+class AiVisualMatchRequest(BaseModel):
+    query: str = Field(default="", max_length=300)
+    imageFeatures: list[str] = Field(default_factory=list, max_length=8)
+    references: list[RequiredImageDataUrl] = Field(default_factory=list, max_length=6)
+    candidates: list[AiVisualMatchCandidate] = Field(min_length=1, max_length=12)
+    externalProcessingConfirmed: bool = False
+
+    @model_validator(mode="after")
+    def validate_visual_match_input(self) -> AiVisualMatchRequest:
+        if not self.externalProcessingConfirmed:
+            raise ValueError("외부 AI 전송에 동의해 주세요.")
+        features = [term.strip()[:40] for term in self.imageFeatures if isinstance(term, str) and term.strip()]
+        if not features and not self.query.strip() and not self.references:
+            raise ValueError("검색어 또는 시각 특징이 필요해요.")
+        self.imageFeatures = list(dict.fromkeys(features))[:8]
+        return self
+
+
+class AiVisualMatchResult(BaseModel):
+    id: str
+    imageSimilarity: int = Field(ge=0, le=100)
+    # photo=공개 사진을 분석, description=사진 없이 설명 텍스트를 분석.
+    basis: Literal["photo", "description"] = "photo"
+    reason: str = Field(default="", max_length=160)
+
+
+class AiVisualMatchResponse(BaseModel):
+    results: list[AiVisualMatchResult]
+    source: Literal["vision-model", "multimodal"]
+    usedFeatures: list[str] = Field(default_factory=list, max_length=8)
 
 
 class AiContextRankedCandidate(BaseModel):
