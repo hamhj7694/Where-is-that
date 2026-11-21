@@ -50,6 +50,8 @@ describe('공개 후보 필터의 데이터 경계', () => {
     expect(filterCandidateRecords(items, new URLSearchParams('from=2026-02-30&to=invalid'))).toEqual(items)
     expect(filterCandidateRecords(items, new URLSearchParams('from=2026-11-19&to=2026-11-18'))).toEqual([])
     expect(validateLostResultDates({ from: '2026-11-19', to: '2026-11-18' })).toBe('종료일을 시작일 이후로 선택해 주세요.')
+    expect(validateLostResultDates({ from: '2026/11/19', to: '2026/11/18' })).toBe('종료일을 시작일 이후로 선택해 주세요.')
+    expect(validateLostResultDates({ from: '2026/11/18', to: '2026/11/19' })).toBeNull()
     expect(validateLostResultDates({ from: 'invalid', to: '' })).toBe('날짜를 올바르게 선택해 주세요.')
     expect(validateLostResultDates({ from: '', to: '' })).toBeNull()
   })

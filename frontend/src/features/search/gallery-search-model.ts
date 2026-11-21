@@ -1,3 +1,5 @@
+import type { AiImageRankResult, AiSearchPlan } from './ai-search-api'
+
 export const GALLERY_CHANNELS = ['combined', 'image', 'context'] as const
 export type GallerySearchChannel = typeof GALLERY_CHANNELS[number]
 export const GALLERY_PREVIEW_LIMIT = 4
@@ -14,6 +16,7 @@ export interface GalleryAssistantState {
   messages: GalleryAssistantMessage[]
   open?: boolean
   appliedConditions?: string[]
+  aiPlan?: AiSearchPlan | null
 }
 
 export function createGalleryAssistantState(): GalleryAssistantState {
@@ -78,4 +81,36 @@ export function uniqueGalleryItems<T extends { id: string }>(items: readonly T[]
 
 export function galleryPreviewItems<T extends { id: string }>(items: readonly T[]): T[] {
   return uniqueGalleryItems(items).slice(0, GALLERY_PREVIEW_LIMIT)
+}
+
+// AI 사진 비교는 한 요청당 최대 12후보다. 연결 갤러리에서 분석할 후보 수다.
+export const AI_GALLERY_RANK_LIMIT = 12
+
+export interface GalleryRankScore {
+  score: number
+  imageSimilarity: number
+  contextRelevance: number
+}
+export type GalleryRankMap = Record<string, GalleryRankScore>
+
+export function toGalleryRankMap(results: readonly AiImageRankResult[]): GalleryRankMap {
+  return Object.fromEntries(results.map(result => [result.id, {
+    score: result.score,
+    imageSimilarity: result.imageSimilarity,
+    contextRelevance: result.contextRelevance,
+  }]))
+}
+
+/** 각 채널이 담당하는 축으로 정렬한다. 점수 없는 후보는 원래 연결 순서를 뒤로 유지한다. */
+export function sortGalleryByRank<T extends { id: string }>(items: readonly T[], ranking: GalleryRankMap | null, channel: GallerySearchChannel): T[] {
+  if (!ranking) return [...items]
+  const axis: keyof GalleryRankScore = channel === 'image' ? 'imageSimilarity' : channel === 'context' ? 'contextRelevance' : 'score'
+  return [...items].sort((first, second) => {
+    const left = ranking[first.id]?.[axis]
+    const right = ranking[second.id]?.[axis]
+    if (left === undefined && right === undefined) return 0
+    if (left === undefined) return 1
+    if (right === undefined) return -1
+    return right - left
+  })
 }

@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ChevronRight, FolderOpen, Images, Menu, ShieldCheck } from 'lucide-react'
 import Modal from './components/Modal'
+import { fetchContent, saveContent } from './features/account/api'
+import { deserializeContent, isInitialValuable, mergeContent, serializeContent } from './features/account/content'
 import SearchComposer from './features/search/SearchComposer'
 import GalleryPreview from './features/search/GalleryPreview'
 import GalleryConnection from './features/search/GalleryConnection'
@@ -9,19 +11,29 @@ import { createSearchRecord, disconnectGalleryHistory, overwriteGallerySearch, o
 import type { GalleryAssistantState } from './features/search/gallery-search-model'
 import { copy } from './features/search/copy'
 import { appendGallery, collectGallery, getReferencePhotos, getReferencePhotoViews, isImageFile, MAX_LOST_REFERENCE_PHOTOS, snapshotSearchDraft, validateSearch, type GallerySource, type ReferencePhotoView, type SearchDraft, type SearchMode } from './features/search/model'
+import { loadGallery, saveGallery } from './features/search/gallery-store'
 import { prepareGallerySelection } from './features/search/gallery-deduplication'
 import type { GalleryImportOptions, GalleryImportResult } from './features/search/useGalleryImport'
 import { prepareFileLocations, rememberFileLocations, rememberNativeFileLocations, type FileLocationAssignment } from './features/search/file-location-model'
 import WorkspaceRouter from './features/workspace/WorkspaceRouter'
+import { useAuth } from './features/auth/AuthContext'
 import { initialValuables, localPhotoId, type AppPhoto, type Valuable } from './features/workspace/data'
 import './styles/pages.css'
 
 const modePaths = { gallery: '/gallery', lost: '/lost-found' } as const
 const LAST_SEARCH_PATH_KEY = 'geugeo-eodi:last-search-path'
+const LAST_DIRECT_SEARCH_PATH_KEY = 'geugeo-eodi:last-direct-search-path'
 type Overlay = 'menu' | 'disconnect' | null
 
 function readLastSearchPath(): '/gallery' | '/lost-found' {
   try { return window.localStorage.getItem(LAST_SEARCH_PATH_KEY) === '/lost-found' ? '/lost-found' : '/gallery' } catch { return '/gallery' }
+}
+
+function readLastDirectSearchPath(): string {
+  try {
+    const value = window.localStorage.getItem(LAST_DIRECT_SEARCH_PATH_KEY)
+    return value && value.startsWith('/direct-search') ? value : '/direct-search'
+  } catch { return '/direct-search' }
 }
 
 export default function App() {
@@ -29,18 +41,31 @@ export default function App() {
   const navigate = useNavigate()
   const mode: SearchMode = pathname.startsWith('/lost-found') ? 'lost' : 'gallery'
   const [lastSearchPath, setLastSearchPath] = useState<'/gallery' | '/lost-found'>(readLastSearchPath)
+  const [lastDirectSearchPath, setLastDirectSearchPath] = useState(readLastDirectSearchPath)
   const isHome = pathname === '/'
   const isInputPage = ['/', '/gallery', '/lost-found'].includes(pathname)
+  // 상세 페이지가 직접 찾기에서 열렸으면 헤더도 직접 찾기 흐름으로 표시한다.
+  const fromDirectSearch = new URLSearchParams(search).get('back')?.startsWith('/direct-search') ?? false
   const [drafts, setDrafts] = useState<Record<SearchMode, SearchDraft>>({ gallery: { query: '', photo: null }, lost: { query: '', photo: null } })
   const [errors, setErrors] = useState<Record<SearchMode, string>>({ gallery: '', lost: '' })
   const [gallery, setGallery] = useState<GallerySource | null>(null)
+  const [galleryRestored, setGalleryRestored] = useState(false)
+  const galleryRef = useRef<GallerySource | null>(null)
   const [records, setRecords] = useState<SearchRecord[]>([])
+  const [autoRankRecordId, setAutoRankRecordId] = useState<string | null>(null)
+  const [galleryRankSeed, setGalleryRankSeed] = useState(0)
   const [galleryError, setGalleryError] = useState('')
   const [showGalleryManager, setShowGalleryManager] = useState(false)
   const [overlay, setOverlay] = useState<Overlay>(null)
   const [announcement, setAnnouncement] = useState('')
-  const [session, setSession] = useState(false)
+  const { user, authenticated: session, ready, signOut } = useAuth()
   const [items, setItems] = useState<Valuable[]>(initialValuables)
+  const [contentError, setContentError] = useState('')
+  const itemsRef = useRef(items)
+  const recordsRef = useRef(records)
+  const contentUserId = useRef<number | null>(null)
+  const loadStartedFor = useRef<number | null>(null)
+  const suppressSync = useRef(false)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const draft = drafts[mode]
   const error = errors[mode]
@@ -57,6 +82,90 @@ export default function App() {
     setLastSearchPath(next)
     try { window.localStorage.setItem(LAST_SEARCH_PATH_KEY, next) } catch { /* Storage is optional; in-memory state still works. */ }
   }, [pathname, lastSearchPath])
+
+  // 직접 찾기의 페이지·검색 조건을 기억해 헤더로 다시 들어와도 유지한다.
+  useEffect(() => {
+    if (pathname !== '/direct-search') return
+    const next = pathname + search
+    if (next === lastDirectSearchPath) return
+    setLastDirectSearchPath(next)
+    try { window.localStorage.setItem(LAST_DIRECT_SEARCH_PATH_KEY, next) } catch { /* Storage is optional. */ }
+  }, [pathname, search, lastDirectSearchPath])
+
+  useEffect(() => { itemsRef.current = items }, [items])
+  useEffect(() => { recordsRef.current = records }, [records])
+  useEffect(() => { galleryRef.current = gallery }, [gallery])
+
+  // 연결한 폴더·사진은 브라우저에 보관해 페이지 이동과 새로고침 후에도 되살린다.
+  useEffect(() => {
+    let active = true
+    void loadGallery().then(source => {
+      if (!active) return
+      if (source && !galleryRef.current) setGallery(source)
+      setGalleryRestored(true)
+    })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!galleryRestored) return
+    void saveGallery(gallery)
+  }, [gallery, galleryRestored])
+
+  async function loadAccountContent(userId: number) {
+    const account = await fetchContent()
+    const local = await serializeContent(
+      itemsRef.current.filter(item => !isInitialValuable(item)),
+      recordsRef.current,
+    )
+    const merged = mergeContent(account, local)
+    if (local.valuables.length || local.records.length) await saveContent(merged)
+    const restored = deserializeContent(merged)
+    suppressSync.current = true
+    setItems(restored.items)
+    setRecords(restored.records)
+    contentUserId.current = userId
+    setContentError('')
+  }
+
+  useEffect(() => {
+    if (!ready) return
+    if (!user) {
+      if (contentUserId.current !== null || loadStartedFor.current !== null) {
+        contentUserId.current = null
+        loadStartedFor.current = null
+        suppressSync.current = true
+        setItems(initialValuables)
+        setRecords([])
+        setDrafts({ gallery: { query: '', photo: null }, lost: { query: '', photo: null } })
+        setGallery(null)
+        setErrors({ gallery: '', lost: '' })
+        setContentError('')
+      }
+      return
+    }
+    if (loadStartedFor.current === user.id) return
+    loadStartedFor.current = user.id
+    let active = true
+    void loadAccountContent(user.id).catch(reason => {
+      if (!active) return
+      contentUserId.current = user.id
+      setContentError(reason instanceof Error ? reason.message : '계정 내용을 불러오지 못했어요.')
+    })
+    return () => { active = false }
+  }, [ready, user?.id])
+
+  useEffect(() => {
+    if (!user || contentUserId.current !== user.id) return
+    if (suppressSync.current) { suppressSync.current = false; return }
+    const timer = window.setTimeout(() => {
+      void serializeContent(itemsRef.current, recordsRef.current)
+        .then(saveContent)
+        .then(() => setContentError(''))
+        .catch(reason => setContentError(reason instanceof Error ? reason.message : '계정에 저장하지 못했어요.'))
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [items, records, user?.id])
 
   function changeDraft(patch: Partial<SearchDraft>) {
     setDrafts(previous => {
@@ -88,16 +197,18 @@ export default function App() {
     changeMode(next); requestAnimationFrame(() => document.getElementById('mode-' + next)?.focus())
   }
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    const problem = validateSearch(mode, draft, gallery)
+  function submit(nextDraft: SearchDraft = draft, authorizeContextRank = false) {
+    const problem = validateSearch(mode, nextDraft, gallery)
     if (problem) {
       setErrors(previous => ({ ...previous, [mode]: problem === 'empty' ? copy.emptyInput : problem === 'too-many-photos' ? '참고 사진은 ' + MAX_LOST_REFERENCE_PHOTOS + '장까지 추가할 수 있어요.' : copy.missingGallery }))
       if (problem === 'gallery') openGallery(); else textarea.current?.focus()
       return
     }
-    const record = createSearchRecord(mode, draft, gallery)
+    const record = createSearchRecord(mode, nextDraft, gallery)
     setRecords(previous => [record, ...previous])
+    setDrafts(previous => ({ ...previous, [mode]: snapshotSearchDraft(mode, nextDraft) }))
+    setAutoRankRecordId(mode === 'lost' && authorizeContextRank ? record.id : null)
+    if (mode === 'gallery') setGalleryRankSeed(value => value + 1)
     navigate(recordPath(record))
   }
 
@@ -111,6 +222,7 @@ export default function App() {
   function commitGallerySearch(id: string | null, nextDraft: SearchDraft) {
     if (id) setRecords(previous => overwriteGallerySearch(previous, id, nextDraft))
     setDrafts(previous => ({ ...previous, gallery: snapshotSearchDraft('gallery', nextDraft) }))
+    setGalleryRankSeed(value => value + 1)
   }
   function refineLostSearch(parent: SearchRecord, assistant: GalleryAssistantState) {
     const base = resolveLostAssistant(records, parent).baseQuery
@@ -121,17 +233,21 @@ export default function App() {
   function applyRefinedSearch(next: SearchRecord) {
     setRecords(previous => previous.map(record => record.id === next.id ? next : record))
     setDrafts(previous => ({ ...previous, [next.mode]: snapshotSearchDraft(next.mode, next.draft) }))
+    if (next.mode === 'gallery') setGalleryRankSeed(value => value + 1)
     const params = new URLSearchParams(search)
     for (const key of ['page', 'state', 'combinedState', 'imageState', 'contextState']) params.delete(key)
     if (params.toString() !== search.replace(/^\?/, '')) navigate({ pathname, search: params.toString() }, { replace: true })
   }
-  function commitLostSearch(id: string | null, nextDraft: SearchDraft) {
+  function commitLostSearch(id: string | null, nextDraft: SearchDraft, authorizeContextRank = false) {
+    let recordId = id
     if (id) setRecords(previous => overwriteLostSearch(previous, id, nextDraft))
     else {
       const next = createSearchRecord('lost', nextDraft, null)
+      recordId = next.id
       setRecords(previous => [next, ...previous]); navigate(recordPath(next))
     }
     setDrafts(previous => ({ ...previous, lost: snapshotSearchDraft('lost', nextDraft) }))
+    setAutoRankRecordId(authorizeContextRank ? recordId : null)
   }
   function returnFromGallery() {
     setShowGalleryManager(false)
@@ -199,8 +315,8 @@ export default function App() {
 
   const utilityNavigation = <><NavLink to="/history" onClick={() => setOverlay(null)}>찾은 기록</NavLink><NavLink to="/valuables" onClick={() => setOverlay(null)}>사진 등록해 두기</NavLink><NavLink to="/settings" onClick={() => setOverlay(null)}>설정</NavLink></>
   return <div className={'app-shell' + (isInputPage ? '' : ' app-shell--content')}><a className="skip-link" href="#main-content">본문으로 바로 가기</a>
-    <header className="site-header"><div className="site-header__inner"><Link className="brand" to="/" aria-label="그거어디? 홈"><span>그거어디<span className="brand__question">?</span></span></Link><Link className="brand-description" to={lastSearchPath} aria-label="내 사진 · 내 물건 찾기 검색으로 이동">내 사진 · 내 물건 찾기</Link>
-      <nav className="desktop-nav" aria-label="주 메뉴">{utilityNavigation}</nav><div className="header-actions"><Link className="login-link" to={session ? '/account' : '/auth/login'}>{session ? '체험 계정' : '로그인'}</Link><button type="button" className="icon-button menu-toggle" aria-label="메뉴 열기" aria-haspopup="dialog" onClick={() => setOverlay('menu')}><Menu /></button></div></div></header>
+    <header className="site-header"><div className="site-header__inner"><Link className="brand" to="/" aria-label="그거어디? 홈"><span>그거어디<span className="brand__question">?</span></span></Link><NavLink className={({ isActive }) => 'brand-description' + (isActive && !fromDirectSearch ? ' active' : '')} to={lastSearchPath} aria-label="내 사진 · 내 물건 찾기 검색으로 이동">내 사진 · 내 물건 찾기</NavLink><NavLink className={({ isActive }) => 'header-direct-link' + (isActive || fromDirectSearch ? ' active' : '')} to={lastDirectSearchPath}>직접 찾기</NavLink>
+      <nav className="desktop-nav" aria-label="주 메뉴">{utilityNavigation}</nav><div className="header-actions"><Link className="login-link" to={session ? '/account' : '/auth/login'}>{session ? (user?.nickname ?? '내 계정') : '로그인'}</Link><button type="button" className="icon-button menu-toggle" aria-label="메뉴 열기" aria-haspopup="dialog" onClick={() => setOverlay('menu')}><Menu /></button></div></div></header>
     {isInputPage && <nav className="mode-bar" aria-label="검색 기능"><div className="mode-bar__inner"><div className="mode-tabs" role="tablist" aria-label="검색 방식 선택" onKeyDown={handleModeKeys}>
       {(['gallery', 'lost'] as const).map(item => <button type="button" key={item} id={'mode-' + item} role="tab" aria-selected={mode === item} aria-controls={isInputPage ? 'search-panel' : 'main-content'} tabIndex={mode === item ? 0 : -1} onClick={() => changeMode(item)}>{item === 'gallery' ? <Images aria-hidden="true" /> : <SearchModeIcon />}<span className="mode-label">{copy[item].name}</span></button>)}
     </div></div></nav>}
@@ -210,16 +326,17 @@ export default function App() {
           {mode === 'gallery' && <div className="gallery-scope__actions"><button type="button" className="scope-action" onClick={openGallery}><FolderOpen aria-hidden="true" /><span>갤러리 관리</span><ChevronRight aria-hidden="true" /></button><button type="button" className="scope-action scope-action--quiet" onClick={() => setOverlay('disconnect')}>갤러리 해제</button></div>}
         </div>{mode === 'gallery' && <GalleryPreview key={gallery?.files[0] ? localPhotoId(gallery.files[0]) : 'disconnected'} gallery={gallery} onAdd={addGallery} />}</div>
         <SearchComposer mode={mode} draft={draft} textareaRef={textarea} error={error} onDraft={changeDraft} onSubmit={submit} onError={message => setErrors(previous => ({ ...previous, [mode]: message }))} />
-        {error && <p id="search-error" role="alert" className="form-error">{error}</p>}<div className="search-notes">{mode === 'gallery' ? <p className="scope-note"><ShieldCheck aria-hidden="true" /><span>원본은 기기에 그대로 있어요. {copy.aiNotice}</span></p> : <p>{copy.aiNotice} {copy.publicLimit}</p>}<p className="preview-disclosure">프론트엔드 체험 · AI 검색 미연결</p></div></>}
+        {error && <p id="search-error" role="alert" className="form-error">{error}</p>}<div className="search-notes">{mode === 'gallery' ? <p className="scope-note"><ShieldCheck aria-hidden="true" /><span>원본은 기기에 그대로 있어요. {copy.aiNotice}</span></p> : <p>{copy.aiNotice} {copy.publicLimit}</p>}<p className="preview-disclosure">{mode === 'lost' ? '검색 시 입력 문장과 참고 사진 특징이 외부 AI로 전송돼 조건을 해석해요. 첫 페이지 후보의 공개 설명·장소도 관련도 정리에 쓰이며, 사진 원본과 전화번호는 보내지 않아요. 결과는 참고용이고 서버는 요청을 저장하지 않아요.' : '사진 찾기를 누르면 연결된 사진을 AI가 분석해 종합 관련성·이미지 유사도·맥락 관련성 순서로 보여줘요.'}</p></div></>}
       </div><p className="announcement" role="status" aria-live="polite">{announcement}</p></section></main>
-      : <WorkspaceRouter gallery={gallery} drafts={drafts} records={records} onDeleteRecord={id => setRecords(previous => removeSearchRecord(previous, id))} onEditRecord={record => { setDrafts(previous => ({ ...previous, [record.mode]: snapshotSearchDraft(record.mode, record.draft) })); navigate(modePaths[record.mode]) }} session={session} items={items} onOpenGallery={openGallery} onAddGallery={addGallery} onDisconnect={disconnectGallery}
+      : <WorkspaceRouter gallery={gallery} drafts={drafts} records={records} autoRankRecordId={autoRankRecordId} galleryRankSeed={galleryRankSeed} onConsumeAiRankConsent={recordId => setAutoRankRecordId(current => current === recordId ? null : current)} onDeleteRecord={id => setRecords(previous => removeSearchRecord(previous, id))} onEditRecord={record => { setDrafts(previous => ({ ...previous, [record.mode]: snapshotSearchDraft(record.mode, record.draft) })); navigate(modePaths[record.mode]) }} session={session} items={items} onOpenGallery={openGallery} onAddGallery={addGallery} onDisconnect={disconnectGallery}
         onAssistantChange={(id, patch) => setRecords(previous => updateSearchAssistant(previous, id, patch))} onRefineRecord={(parent, assistant) => parent.mode === 'lost' ? refineLostSearch(parent, assistant) : refineGallerySearch(parent, assistant)}
         onCommitGallerySearch={commitGallerySearch} onCommitLostSearch={commitLostSearch}
-        onDemoLogin={() => setSession(true)} onLogout={() => { setSession(false); setItems(initialValuables) }} onSave={item => setItems(previous => previous.some(value => value.id === item.id) ? previous.map(value => value.id === item.id ? item : value) : [...previous, item])}
+        onLogout={() => { void signOut() }} onSave={item => setItems(previous => previous.some(value => value.id === item.id) ? previous.map(value => value.id === item.id ? item : value) : [...previous, item])}
         onDelete={id => setItems(previous => previous.filter(value => value.id !== id))} onView={id => setItems(previous => previous.map(value => value.id === id ? { ...value, viewedAt: Date.now() } : value))} onTransfer={transferPhoto} />}
+    {contentError && <p className="content-sync-error" role="alert">{contentError}</p>}
     <footer className="site-footer"><p>그거어디? <span>내 사진 · 내 물건 찾기</span></p><div><Link to="/privacy">사진 처리 안내</Link></div></footer>
     <Modal open={overlay !== null} focusKey={overlay ?? ''} title={overlay === 'disconnect' ? '갤러리 연결을 해제할까요?' : '메뉴'} onClose={() => setOverlay(null)}>
-      {overlay === 'menu' && <nav className="mobile-nav" aria-label="모바일 주 메뉴"><NavLink to="/gallery" onClick={() => setOverlay(null)}>{copy.gallery.name}</NavLink><NavLink to="/lost-found" onClick={() => setOverlay(null)}>{copy.lost.name}</NavLink>{utilityNavigation}</nav>}
+      {overlay === 'menu' && <nav className="mobile-nav" aria-label="모바일 주 메뉴"><NavLink to="/gallery" onClick={() => setOverlay(null)}>{copy.gallery.name}</NavLink><NavLink to="/lost-found" onClick={() => setOverlay(null)}>{copy.lost.name}</NavLink><NavLink className={({ isActive }) => isActive || fromDirectSearch ? 'active' : ''} to={lastDirectSearchPath} onClick={() => setOverlay(null)}>직접 찾기</NavLink>{utilityNavigation}</nav>}
       {overlay === 'disconnect' && <><p>연결 정보와 갤러리 검색 기록을 지워요. 기기의 원본은 삭제하지 않아요.</p><div className="button-row"><button type="button" className="button button--secondary" onClick={() => setOverlay(null)}>취소</button><button type="button" className="button button--primary" onClick={disconnectGallery}>갤러리 해제</button></div></>}
     </Modal>
   </div>

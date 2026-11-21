@@ -70,7 +70,7 @@ export default function HistoryPage({ records, onDeleteRecord }: { records: Sear
   ] as const
   return <main id="main-content" className="content-workspace history-workspace">
     <PageHeading title="찾은 기록" description="검색 내용과 결과를 다시 볼 수 있어요." />
-    <p className="history-retention">이 탭에서만 유지되며, 새로고침하면 사라져요.</p>
+    <p className="history-retention">로그인한 계정에 저장되며, 다시 로그인해도 이어서 볼 수 있어요.</p>
     <p className="history-status" role="status" aria-live="polite">{message}</p>
     <div className="history-sections">{sections.map(section => {
       const items = records.filter(record => record.mode === section.mode)

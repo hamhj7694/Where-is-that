@@ -100,5 +100,5 @@ export function localPhotoId(file: File) {
 }
 
 export function safeReturn(value: string | null, fallback: string) {
-  return value && /^\/(gallery|lost-found|history|valuables|settings|account)(\/|\?|$)/.test(value) ? value : fallback
+  return value && /^\/(gallery|lost-found|history|valuables|settings|account|direct-search)(\/|\?|$)/.test(value) ? value : fallback
 }

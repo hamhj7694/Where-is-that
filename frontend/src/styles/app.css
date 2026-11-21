@@ -22,10 +22,13 @@ h1, h2, h3, p, figure { margin: 0; }
 .brand { min-height: 48px; display: inline-flex; align-items: center; flex-shrink: 0; font-size: 26px; font-weight: 600; letter-spacing: -.8px; }
 .brand__question { display: inline-block; position: relative; z-index: 0; margin-left: 2px; }
 .brand__question::before { content: ''; position: absolute; z-index: -1; width: 25px; height: 25px; border-radius: 50%; background: var(--accent); top: 4px; left: -3px; }
-.brand-description { display: inline-flex; align-items: center; min-height: 32px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 4px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; text-decoration: none; cursor: pointer; }
-.brand-description:hover { color: var(--ink); background: var(--raised); border-color: var(--line); }
-.brand-description:active { background: var(--accent-soft); }
-.brand-description:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; color: var(--ink); }
+/* 헤더의 두 바로가기는 찾은 기록 등 desktop-nav 링크와 같은 텍스트 내비게이션 스타일을 쓴다. */
+.brand-description, .header-direct-link { display: inline-flex; align-items: center; justify-content: center; position: relative; min-width: 44px; min-height: 48px; padding: 0; border: 0; background: none; color: var(--text-secondary); font-size: 14px; white-space: nowrap; text-decoration: none; }
+.brand-description:hover, .header-direct-link:hover, .desktop-nav a:hover, .desktop-nav button:hover { color: var(--ink); }
+.brand-description:active, .header-direct-link:active { color: var(--ink); }
+.brand-description:focus-visible, .header-direct-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; color: var(--ink); }
+.brand-description.active, .header-direct-link.active { color: var(--ink); font-weight: 500; }
+.brand-description.active::after, .header-direct-link.active::after { content: ''; position: absolute; bottom: 1px; left: 0; right: 0; height: 3px; background: var(--ink); }
 .desktop-nav { display: flex; align-items: center; justify-content: flex-end; gap: 28px; flex: 1; }
 .desktop-nav a, .desktop-nav button { border: 0; background: none; font-size: 14px; white-space: nowrap; color: var(--text-secondary); min-height: 48px; display: inline-flex; align-items: center; position: relative; padding: 0; }
 .desktop-nav .active { color: var(--ink); font-weight: 500; }
@@ -77,6 +80,8 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1; padding: 4px; borde
 .button--primary:hover { background: #3b3e38; }
 .button--secondary { background: var(--surface); border-color: var(--control-line); }
 .button--secondary:hover { background: var(--raised); }
+.button--ink { background: var(--ink); border-color: var(--ink); color: #fff; }
+.button--ink:hover { background: #3b3e38; }
 .search-button { min-width: 132px; margin-left: auto; flex-shrink: 0; }
 .attachment { display: flex; gap: 12px; align-items: center; margin: 12px 0 8px; border-top: 1px solid var(--line); padding-top: 16px; }
 .attachment > img, .attachment__placeholder { width: 64px; height: 64px; flex-shrink: 0; object-fit: contain; background: var(--raised); border-radius: 8px; }

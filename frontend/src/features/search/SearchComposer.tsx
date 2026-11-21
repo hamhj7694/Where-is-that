@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { Crop, ImagePlus, Search, X, LoaderCircle } from 'lucide-react'
 import Modal from '../../components/Modal'
 import PhotoGuide from './PhotoGuide'
 import { copy } from './copy'
-import { assertImageReadable, canSubmitWithEnter, formatFileSize, type SearchDraft, type SearchMode } from './model'
+import { assertImageReadable, canSubmitWithEnter, clipboardImageFiles, formatFileSize, type SearchDraft, type SearchMode } from './model'
 import { usePhotoPreview } from './usePhotoPreview'
 import CropDialog from '../workspace/CropDialog'
 import { localPhotoId, photoFromFile, type AppPhoto } from '../workspace/data'
@@ -15,7 +15,7 @@ type CropSession = { photo: AppPhoto; token: number; mode: SearchMode }
 
 interface Props {
   mode: SearchMode; draft: SearchDraft; error: string; textareaRef: RefObject<HTMLTextAreaElement | null>
-  onDraft: (patch: Partial<SearchDraft>) => void; onSubmit: (event: FormEvent) => void
+  onDraft: (patch: Partial<SearchDraft>) => void; onSubmit: (draft?: SearchDraft, autoRankConsent?: boolean) => void
   onError: (message: string) => void
   initialAttachmentOpen?: boolean
   submitLabel?: string
@@ -108,6 +108,20 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
     } finally { if (sequence.current === id) { readingRef.current = false; setReading(false) } }
   }
 
+  async function pasteImage(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = clipboardImageFiles(event.clipboardData)
+    if (!files.length) return
+    event.preventDefault()
+    const file = files[0]
+    try {
+      await assertImageReadable(file)
+      sequence.current++
+      onDraft({ photo: file, aiPlan: undefined }); onError(''); setAttachmentError('')
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : '사진을 읽지 못했어요.')
+    }
+  }
+
   function beginCrop() {
     if (!pendingOriginal || readingRef.current) return
     const token = ++sequence.current
@@ -129,7 +143,7 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
   function confirmAttachment() {
     if (!pendingPhoto || readingRef.current || cropSession || !attachmentOpen.current || previousMode.current !== mode) return
     rememberReferenceCrop(pendingPhoto, pendingOriginal ?? pendingPhoto)
-    onDraft({ photo: pendingPhoto }); onError(''); closeAttachment()
+    onDraft({ photo: pendingPhoto, aiPlan: undefined }); onError(''); closeAttachment()
   }
 
   function handleKey(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -148,7 +162,8 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
 
   return <><form ref={form} className={`composer ${error ? 'composer--error' : ''}`} onSubmit={event => {
     if (readingRef.current || (attachmentOpen.current && cropSession)) { event.preventDefault(); return }
-    onSubmit(event)
+    event.preventDefault()
+    onSubmit()
   }} aria-label={`${copy[mode].name} 입력`}
     onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
     onDrop={event => { event.preventDefault(); void choosePhoto(event.dataTransfer.files[0]) }}>
@@ -156,19 +171,20 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
       <label htmlFor="search-query">{copy[mode].inputLabel}</label>
       <textarea ref={textareaRef} id="search-query" value={draft.query} placeholder={copy[mode].placeholder}
         rows={3} spellCheck={false} autoComplete="off" aria-invalid={!!error} aria-describedby={error ? 'search-error' : undefined}
-        onChange={event => onDraft({ query: event.target.value })} onKeyDown={handleKey}
+        onChange={event => onDraft({ query: event.target.value, aiPlan: undefined })} onKeyDown={handleKey}
+        onPaste={event => void pasteImage(event)}
         onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} />
       {draft.photo && <div className="attachment">
         <button type="button" className="attachment__preview-button" aria-label="참고 사진 추가 창 열기" title="참고 사진 편집" aria-haspopup="dialog" onClick={openAttachment} disabled={reading}>{attachedPreview}</button>
         <div className="attachment__text"><span>참고 사진</span><strong title={draft.photo.name}>{draft.photo.name}</strong><small>{formatFileSize(draft.photo.size)}</small></div>
-        <button type="button" className="icon-button" aria-label="참고 사진 빼기" onClick={() => { sequence.current++; readingRef.current = false; setReading(false); setPendingPhoto(null); setPendingOriginal(null); setCropSession(null); onDraft({ photo: null }) }}><X /></button>
+        <button type="button" className="icon-button" aria-label="참고 사진 빼기" onClick={() => { sequence.current++; readingRef.current = false; setReading(false); setPendingPhoto(null); setPendingOriginal(null); setCropSession(null); onDraft({ photo: null, aiPlan: undefined }) }}><X /></button>
       </div>}
     </div>
     <div className="composer__toolbar">
       <button type="button" className="attachment-button" onClick={openAttachment} aria-haspopup="dialog" disabled={reading}>
         {reading ? <LoaderCircle aria-hidden="true" /> : <ImagePlus aria-hidden="true" />}<span>{reading ? '사진 확인 중' : draft.photo ? '사진 바꾸기' : '참고 사진 추가'}</span>
       </button>
-      <span className="keyboard-hint" aria-hidden="true">줄바꿈 <kbd>Shift</kbd> <kbd>↵</kbd></span>
+      <span className="keyboard-hint" aria-hidden="true">줄바꿈 <kbd>Shift</kbd> <kbd>↵</kbd> · 이미지 붙여넣기</span>
       {secondaryAction}
       <button type="submit" className="button button--primary search-button" disabled={reading}><Search aria-hidden="true" /><span>{submitLabel ?? copy[mode].action}</span></button>
     </div>

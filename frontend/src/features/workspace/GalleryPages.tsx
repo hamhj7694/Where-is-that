@@ -5,7 +5,7 @@ import { usePhotoPreview } from '../search/SearchComposer'
 import GalleryAddDialog from '../search/GalleryAddDialog'
 import type { GalleryImportHandler } from '../search/useGalleryImport'
 import type { GallerySource, SearchDraft } from '../search/model'
-import { DemoNotice, EmptyState, PageHeading, PhotoImage, PhotoViewer, QuerySummary, RetryButton, SearchEditAction, TransferDialog } from './components'
+import { DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, PhotoViewer, QuerySummary, RetryButton, SearchEditAction, TransferDialog } from './components'
 import CropDialog from './CropDialog'
 import FileLocationDetails from './FileLocationDetails'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
@@ -36,7 +36,7 @@ export function GalleryResults({ gallery, draft, onOpenGallery, onAddGallery, on
   const problems: Record<string, [string, string]> = {
     permission: ['갤러리에 접근할 수 없어요', '다시 연결하거나 사진을 직접 선택해 주세요.'],
     unsupported: ['사진을 직접 선택해 주세요', '이 환경에서는 폴더 연결을 사용할 수 없어요.'],
-    'missing-source': ['갤러리를 다시 연결해 주세요', '새로고침하면 연결한 사진 정보가 사라져요.'],
+    'missing-source': ['갤러리를 다시 연결해 주세요', '연결이 해제되었거나 원본을 찾지 못했어요.'],
     'index-error': ['검색 준비를 완료하지 못했어요', '원본과 접근 권한을 확인해 주세요.'],
     error: ['사진을 불러오지 못했어요', '갤러리를 다시 연결해 주세요.'],
   }
@@ -54,9 +54,10 @@ export function GalleryResults({ gallery, draft, onOpenGallery, onAddGallery, on
         </div>
         {state === 'empty' || sorted.length === 0 ? <EmptyState title="맞는 사진을 찾지 못했어요" description="검색어나 연결한 갤러리를 확인해 주세요."><SearchEditAction to="/gallery" onEdit={onEdit} primary /></EmptyState>
           : <><div className="section-heading"><h2>{browse ? '연결한 이미지' : '이미지'} <span>{sorted.length}장</span></h2></div>
+            {sorted.length > 12 && <Pagination page={page} pages={Math.ceil(sorted.length / 12)} onChange={next => update('page', String(next))} inputId="gallery-page-jump-top" position="top" />}
             <div className="photo-grid">{sorted.slice((page - 1) * 12, page * 12).map(photo => <Link className="photo-card" key={photo.id} to={'/gallery/photo/' + photo.id + '?' + (params.get('record') ? 'record=' + encodeURIComponent(params.get('record')!) + '&' : '') + 'back=' + encodeURIComponent('/gallery/results?' + params.toString())}>
               <div className="photo-card__image"><PhotoImage photo={photo} /></div><div className="photo-card__caption"><strong>{photo.name}</strong><span>{photo.kind === 'screenshot' ? '스크린샷' : '사진'}{!photo.file && ' · 샘플'}</span></div></Link>)}</div>
-            {sorted.length > 12 && <div className="pagination"><button className="button button--secondary" disabled={page <= 1} onClick={() => update('page', String(page - 1))}>이전</button><span>{page} / {Math.ceil(sorted.length / 12)}</span><button className="button button--secondary" disabled={page * 12 >= sorted.length} onClick={() => update('page', String(page + 1))}>다음</button></div>}
+            {sorted.length > 12 && <Pagination page={page} pages={Math.ceil(sorted.length / 12)} onChange={next => update('page', String(next))} inputId="gallery-page-jump-bottom" />}
           </>}
       </>}
   </main>

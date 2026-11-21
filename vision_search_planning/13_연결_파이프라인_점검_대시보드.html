@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>그거어디? · 연결 파이프라인 &amp; 결함 점검 대시보드</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --line: #2d3340;
+    --ink: #e8ebf2; --muted: #9aa3b2; --accent: #7c9cff;
+    --ok: #3ecf8e; --warn: #ffc857; --bad: #ff6b6b; --info: #59c2ff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  code,.mono { font-family:var(--mono); font-size:12px; color:#d7e0ff; }
+  .wrap { max-width:1280px; margin:0 auto; padding:24px 28px 80px; }
+  header.hero { background:linear-gradient(135deg,#1b2130 0%,#12151c 100%);
+    border:1px solid var(--line); border-radius:16px; padding:28px 32px; margin-bottom:24px; }
+  header.hero h1 { margin:0 0 6px; font-size:26px; letter-spacing:-.4px; }
+  header.hero .sub { color:var(--muted); margin:0 0 18px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .stat b { display:block; font-size:22px; line-height:1.2; }
+  .stat span { color:var(--muted); font-size:12px; }
+  nav.toc { position:sticky; top:0; z-index:20; background:rgba(15,17,21,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    display:flex; flex-wrap:wrap; gap:4px; padding:10px 0; margin-bottom:24px; }
+  nav.toc a { padding:6px 12px; border-radius:8px; color:var(--muted); font-size:13px; }
+  nav.toc a:hover { background:var(--panel2); color:var(--ink); text-decoration:none; }
+  section { margin-bottom:36px; scroll-margin-top:64px; }
+  section > h2 { font-size:19px; margin:0 0 4px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+  section > .desc { color:var(--muted); margin:0 0 16px; font-size:13px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  .card h3 { margin:0 0 10px; font-size:15px; }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.4px; background:var(--panel2); }
+  tr:last-child td { border-bottom:0; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .b-ok { background:rgba(62,207,142,.15); color:var(--ok); }
+  .b-warn { background:rgba(255,200,87,.15); color:var(--warn); }
+  .b-bad { background:rgba(255,107,107,.15); color:var(--bad); }
+  .b-info { background:rgba(89,194,255,.15); color:var(--info); }
+  .b-mute { background:rgba(154,163,178,.15); color:var(--muted); }
+  .flow { display:flex; align-items:stretch; flex-wrap:wrap; gap:8px; margin:10px 0 4px; }
+  .node { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-width:132px; }
+  .node b { display:block; font-size:13px; margin-bottom:3px; }
+  .node small { color:var(--muted); font-size:11px; line-height:1.4; display:block; }
+  .arrow { display:flex; align-items:center; color:var(--accent); font-size:20px; padding:0 2px; }
+  .filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .filters button { background:var(--panel2); color:var(--muted); border:1px solid var(--line);
+    border-radius:8px; padding:5px 12px; cursor:pointer; font-size:12px; }
+  .filters button.active { background:var(--accent); color:#0b1020; border-color:var(--accent); font-weight:700; }
+  .sev-P0 { color:var(--bad); font-weight:700; } .sev-P1 { color:var(--warn); font-weight:700; } .sev-P2 { color:var(--info); font-weight:700; }
+  .chk { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line); }
+  .chk:last-child { border-bottom:0; }
+  .chk input { margin-top:4px; accent-color:var(--accent); }
+  .chk label { flex:1; cursor:pointer; }
+  .chk small { display:block; color:var(--muted); }
+  .note { background:rgba(124,156,255,.08); border-left:3px solid var(--accent); padding:10px 14px; border-radius:0 8px 8px 0; margin:10px 0; font-size:13px; }
+  .danger { background:rgba(255,107,107,.08); border-left-color:var(--bad); }
+  .okbox { background:rgba(62,207,142,.08); border-left-color:var(--ok); }
+  details { margin:8px 0; } summary { cursor:pointer; color:var(--accent); font-size:13px; }
+  footer { color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:16px; }
+  @media print { nav.toc { display:none; } body { background:#fff; color:#111; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <h1>그거어디? · 연결 파이프라인 &amp; 결함 점검</h1>
+  <p class="sub">프론트엔드 · 백엔드 · 공공 API · AI 파이프라인 전수 점검 — 기준일 2026-11-20 (코파일럿 작업 종료 후 현재 코드)</p>
+  <div class="stats" id="stats"></div>
+  <div class="note okbox"><strong>이번에 수정 완료:</strong> AI 동의 팝업 제거 → 버튼 즉시 검색, AI 제공자 502 원인(<code>temperature=0.1</code> 미지원) 제거, 백엔드 미실행으로 끊긴 경찰 API 복구, F2 자연어·AND/OR/NOT·사진 특징 맞춤 검색 연결. 아래 표는 <b>수정 후 현재 상태</b> 기준이며, 남은 결함은 파일:줄 번호와 함께 정리했습니다.</div>
+</header>
+
+<nav class="toc">
+  <a href="#summary">1. 요약</a>
+  <a href="#models">2. AI 모델 맵</a>
+  <a href="#pipeline">3. 파이프라인 구조</a>
+  <a href="#feature">4. 기능 연결 상태</a>
+  <a href="#defects">5. 결함 목록</a>
+  <a href="#docs">6. 문서·코드 불일치</a>
+  <a href="#checklist">7. 작업 체크리스트</a>
+  <a href="#todo">8. 사용자 할 일</a>
+</nav>
+
+<section id="summary">
+  <h2>1. 요약</h2>
+  <p class="desc">현재 상태를 한눈에 보는 핵심 지표입니다.</p>
+  <div class="grid2" id="summary-cards"></div>
+</section>
+
+<section id="models">
+  <h2>2. AI 모델 맵</h2>
+  <p class="desc">세 역할 모두 <code>openai-compatible</code> · <code>gpt-6-luna</code>. 키 값은 절대 표시하지 않습니다(서버 <code>.env</code> 전용).</p>
+  <div class="card">
+    <table id="model-table">
+      <thead><tr><th>역할</th><th>Provider / 모델</th><th>환경변수(이름만)</th><th>호출 엔드포인트</th><th>연결 기능</th><th>상태</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="note"><strong>동의 게이트 변경(DML-116):</strong> 기존 팝업은 모두 제거했습니다. 프론트는 <code>externalProcessingConfirmed: true</code>를 계속 보내고, 서버는 <code>storesRequests: false</code>로 요청을 영속 저장하지 않습니다. 안내는 <code>/lost-found</code> 하단 한 문단으로 이동했습니다.</div>
+</section>
+
+<section id="pipeline">
+  <h2>3. 파이프라인 구조</h2>
+  <p class="desc">화면별 데이터 흐름과 현재 연결 상태입니다.</p>
+  <div id="pipelines"></div>
+</section>
+
+<section id="feature">
+  <h2>4. 기능 연결 상태</h2>
+  <p class="desc">화면과 기능이 실제로 연결되어 있는지 상태를 표시합니다.</p>
+  <div class="card">
+    <table id="feature-table">
+      <thead><tr><th>화면/기능</th><th>상태</th><th>연결 대상</th><th>근거</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="defects">
+  <h2>5. 결함 목록</h2>
+  <p class="desc">심각도별 필터 가능. P0=기능 고장, P1=UX/일관성, P2=개선 권고.</p>
+  <div class="filters" id="sev-filters">
+    <button data-sev="ALL" class="active">전체</button>
+    <button data-sev="P0">P0</button><button data-sev="P1">P1</button><button data-sev="P2">P2</button>
+  </div>
+  <div class="card">
+    <table id="defect-table">
+      <thead><tr><th>심각도</th><th>결함</th><th>위치(파일:줄)</th><th>영향</th><th>수정 제안</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="docs">
+  <h2>6. 문서·코드 불일치</h2>
+  <p class="desc">작업로그(DML) 확정 사양과 현재 코드/요청이 충돌하는 지점입니다.</p>
+  <div class="card">
+    <table id="doc-table">
+      <thead><tr><th>항목</th><th>문서/확정 내용</th><th>현재 요청/코드</th><th>정리 방향</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="checklist">
+  <h2>7. 작업 체크리스트</h2>
+  <p class="desc">체크박스는 브라우저에만 기록되며 새로고침하면 초기화됩니다.</p>
+  <div class="card" id="checklist-card"></div>
+</section>
+
+<section id="todo">
+  <h2>8. 사용자 할 일</h2>
+  <div class="card"><div id="user-todo"></div></div>
+</section>
+
+<footer>
+  생성 기준: <code>frontend/src</code>, <code>backend/app</code>, <code>backend/prompts</code>, <code>vision_search_planning/10~12</code>.
+  키·토큰·개인정보는 포함하지 않습니다. 점검은 코드 변경 완료 후 기준입니다.
+</footer>
+</div>
+
+<script>
+const DATA = {
+  stats: [
+    { n:"4", label:"점검 영역" },
+    { n:"3", label:"AI 역할(LLM/VLM/Vision)" },
+    { n:"481", label:"테스트 통과(프론트422+백59)" },
+    { n:"DML-121", label:"최신 작업로그" },
+  ],
+  summary: [
+    { title:"동의 팝업 제거 · 즉시 검색", body:"[비슷한 물건 찾기] 제출 시 동의 모달 없이 AI 해석 → 경찰청 검색 → 후보 순위화가 바로 이어집니다. 실패 시 원문 검색으로 폴백해 목록이 막히지 않습니다.", tone:"ok" },
+    { title:"AI 502 원인 수정", body:"gpt-6-luna가 temperature=0.1을 미지원해 400→502로 떨어졌습니다. temperature 전송을 제거했고 /api/ai/search/prepare 실호출 200을 확인했습니다.", tone:"ok" },
+    { title:"경찰 API 복구", body:"백엔드 프로세스가 꺼져 8000번 ECONNREFUSED였습니다. 재기동 후 /api/lostfound/list 80건 · total 2,439,032 · errors 0 확인.", tone:"ok" },
+    { title:"갤러리 3축 사진 정렬", body:"[AI로 조건 정리]를 없애고 [사진 찾기]가 연결 사진 최대 12장을 분석합니다. 종합 관련성·이미지 유사도·맥락 관련성 순으로 세 채널이 각각 정렬됩니다.", tone:"ok" },
+    { title:"참고 사진 분석 반영", body:"참고 사진을 붙여넣으면 AI가 대상·색상·모양·요소를 먼저 분석하고, 그 설명과 작성한 검색어를 함께 3축 채점에 반영합니다.", tone:"ok" },
+    { title:"클립보드 이미지 붙여넣기", body:"갤러리·분실물 검색창에서 이미지를 바로 붙여넣어 참고 사진으로 추가할 수 있습니다. 이미지 파일만 선별합니다.", tone:"ok" },
+    { title:"F2 자연어·AND/OR/NOT 맞춤 검색", body:"AI가 자연어와 참고 사진에서 탐색어/AND/OR/NOT/사진 특징을 분리합니다. 경찰 API는 핵심 명사로 넓게 조회하고, 서버가 공개 JSON 전체 텍스트에 조건을 적용해 후보를 걸러내고 정렬합니다. 조건 미일치 후보도 유지합니다.", tone:"ok" },
+    { title:"직접 찾기 결함 해소", body:"필터를 스캔한 전체 공개 풀에 적용하고 total·페이지를 필터 기준으로 재계산합니다. 제출 즉시 AI가 자연어 AND/OR/NOT를 분석하되 순위는 공개 API 순서를 유지합니다. 실측 432건·11페이지·화면 40건 일치.", tone:"ok" },
+    { title:"모델은 교체 가능", body:"F2는 기능 이름이지 특정 비전 모델이 아닙니다. LLM/VLM/Vision 세 역할은 openai-compatible 프로토콜의 gpt-6-luna를 쓰지만 서버 .env에서 모델·주소·키를 역할별로 바꿀 수 있습니다. YOLOE 같은 탐지 모델은 별도 어댑터가 필요합니다.", tone:"ok" },
+  ],
+  models: [
+    { role:"LLM", model:"openai-compatible · gpt-6-luna", env:"GEUGEO_AI_LLM_PROVIDER / _MODEL / _BASE_URL / _API_KEY (fallback OPENAI_API_KEY)",
+      endpoints:"POST /api/ai/search/prepare · POST /api/ai/search/rank-context", feature:"검색어 해석·3채널 조건 초안, F2/직접 찾기 AND/OR/NOT·사진 특징 criteria 분리, 공개 후보 텍스트 순위화·장소 근거", connected:"정상(실호출 200 확인), openai-compatible 모델이면 교체 가능" },
+    { role:"VLM", model:"openai-compatible · gpt-6-luna", env:"GEUGEO_AI_VLM_PROVIDER / _MODEL / _BASE_URL / _API_KEY",
+      endpoints:"prepare_search 내부 _describe_images · rank_candidates 내부 참고 사진 분석", feature:"참고 사진 설명 추출(대상·색상·형태·재질·요소), 3축 채점 근거 제공", connected:"사진 있으면 호출" },
+    { role:"Vision", model:"openai-compatible · gpt-6-luna", env:"GEUGEO_AI_VISION_PROVIDER / _MODEL / _BASE_URL / _API_KEY",
+      endpoints:"POST /api/ai/vision/compare", feature:"갤러리 후보 3축 점수(종합·이미지 유사도·맥락 관련성) + 채널별 정렬", connected:"정상(갤러리 사진 찾기에서 사용)" },
+  ],
+  pipelines: [
+    { title:"F1 · 내 사진 찾기 (갤러리)", nodes:[["입력","textarea + 붙여넣기 참고 사진"],["AI","참고 사진 분석 + vision 3축 비교"],["로컬 검색","연결 갤러리 파일 최대 12장"],["결과","종합/이미지/맥락 채널별 정렬"]],
+      status:"연결됨 — [AI로 조건 정리] 제거, [사진 찾기] 즉시 분석. 참고 사진 분석 설명과 검색어를 함께 반영. 실패 시 원래 순서 유지." },
+    { title:"F2 · 잃어버린 물건 찾기", nodes:[["입력","textarea + 사진 + 방향"],["AI","prepare → criteria(AND/OR/NOT) → rank-context"],["공공 API","apiKeywords OR 조회 + detail 2소스 병렬"],["결과","JSON 전체 매칭 → 3채널 + 순위화"]],
+      status:"연결됨 — 동의 팝업 제거, 제출 즉시 해석·넓은 조회·JSON 조건 매칭·순위화. 자연어 장소는 시도가 아니면 하드 필터에 쓰지 않음. 사진 원본/전화번호 미전송." },
+    { title:"직접 찾기 (/direct-search)", nodes:[["입력","한 줄 search + 필터"],["AI","prepare(direct) → criteria"],["공공 API","browse: 2소스 × 20페이지 스캔"],["필터","전체 풀 + 중복 제거"],["결과","필터 기준 total/page, 공개 순서"]],
+      status:"연결됨 — URL 필터와 AI 조건을 스캔한 전체 풀에 적용하고 건수·페이지를 재계산. AI 점수 재정렬 없음, 실패 시 원문 폴백." },
+    { title:"상세 · 지도", nodes:[["카드 클릭","/lost-found/item/..."],["상세 API","선택 1건만 호출"],["지도","map-config JS 키 → Kakao SDK"],["길찾기","geocode + route"]],
+      status:"연결됨 — REST/서비스키는 서버 전용, JS 키만 /map-config로 전달." },
+  ],
+  features: [
+    ["F2 즉시 AI 검색","ok","POST /api/ai/search/prepare","LostSearchComposer.tsx:51-66 동의 모달 제거, 제출 즉시 호출"],
+    ["F2 AND/OR/NOT 조건 분리","ok","AiSearchCriteria.criteria","interpret_search.txt + ai_pipeline.py:prepare_search 정규화"],
+    ["F2 공개 JSON 전체 매칭","ok","POST /api/lostfound/search hints","police_api.py:score_criteria — apiKeywords OR 조회 후 AND/OR/NOT·사진 특징 적용"],
+    ["F2 조건 카드 표시","ok","criteriaToHints()/criteriaLabels","LostSearchResults.tsx·AiSearchControls.tsx 다섯 그룹 칩 표시"],
+    ["F2 공개 후보 순위화","ok","POST /api/ai/search/rank-context","LostSearchResults.tsx rankCurrentContext 즉시 호출"],
+    ["F1 조건 정리 버튼","info","제거됨","SearchComposer/GallerySearchAssistant에서 F1 UI 제거(F2 도우미 유지)"],
+    ["F1 사진 3축 비교","ok","POST /api/ai/vision/compare","compareCandidates() → sortGalleryByRank() 채널별 정렬"],
+    ["참고 사진 분석 반영","ok","referenceDescriptions","VLM 분석 + 검색어를 함께 3축 채점, UI에 분석 카드 표시"],
+    ["클립보드 이미지 붙여넣기","ok","clipboardImageFiles()","/gallery·/lost-found textarea onPaste 연결"],
+    ["AI 상태 조회","info","GET /api/ai/status","백엔드 구현됨, 프론트 호출 0건"],
+    ["직접 찾기 AI 분석","ok","POST /api/ai/search/prepare (mode=direct)","DirectSearchPage.tsx 제출 즉시 호출, criteria를 hints로 전달"],
+    ["직접 찾기 전체 필터","ok","POST /api/lostfound/browse","police_api.py browse_all — 2소스 × 20페이지 전체 풀에 URL 필터 적용"],
+    ["직접 찾기 건수/페이지","ok","필터 기준 total 재계산","중복 제거 기준 통일, pages=ceil(total/rows), 화면 건수 일치"],
+    ["직접 찾기 순위 정책","ok","공개 API 순서 유지","AI 점수 재정렬 없음, aiMatch.hits는 근거 표시용"],
+    ["경찰청 검색/상세","ok","/api/lostfound/search, /list, /{source}/...","재기동 후 실호출 80건 확인"],
+    ["분류·지역·기간 전용 API","warn","미연결","police_api.py SEARCH_PATHS에 AccToClAreaPd 없음"],
+    ["갤러리 영속","ok","IndexedDB geugeo-eodi/gallery/current","gallery-store.ts 상대경로 복원 포함"],
+    ["공용 Pagination","ok","4개 목록 화면","components.tsx 번호 입력+이동+이전/다음"],
+  ],
+  defects: [
+    { sev:"P2", title:"직접 찾기 스캔 상한(수정 후 잔여)", where:"backend/app/police_api.py browse_all max_pages", impact:"기본 20페이지(약 1,600건)까지만 스캔해 '앞쪽 기준'으로 표시", fix:"코드표 확보 후 전용 필터 API 또는 증분 스캔으로 전체 범위 보장" },
+    { sev:"P1", title:"AI temperature 미지원(수정 완료)", where:"backend/app/ai_pipeline.py:76", impact:"모든 AI 호출 400→502로 실패", fix:"temperature 제거 완료, 실호출 200 확인 — 대시보드 기록용"},
+    { sev:"P1", title:"F2 방향(view) 필터가 항상 0건", where:"lost-result-model.ts:61 ↔ lostfound-api.ts:217-247", impact:"API 후보에 photoView가 없어 'unspecified'로 고정", fix:"F2에서 방향 필터 제거 또는 의미 재정의(확정 사양 확인 필요)" },
+    { sev:"P1", title:"분류·지역·기간 전용 API 미연결", where:"backend/app/police_api.py SEARCH_PATHS", impact:"텍스트 스캔 필터는 동작하지만 코드표 기반 정확한 필터·전체 total은 아직 불가", fix:"getLosfundInfoAccToClAreaPd + 코드 매핑 표 확보" },
+    { sev:"P1", title:"geo 실패 결과가 상세 캐시에 1일 고정", where:"backend/app/main.py:494-495 ↔ 443-445", impact:"좌표 영구 공백, 재시도 없음", fix:"좌표 없는 detail은 캐시 제외" },
+    { sev:"P1", title:"소스별 rows 적용 + totalCount 합산", where:"backend/app/police_api.py:232,247", impact:"최대 2배 반환, 페이지네이션 의미 불일치", fix:"소스별 rows/total 규칙 재정의" },
+    { sev:"P1", title:"Origin 헤더 없으면 검사 통과", where:"backend/app/main.py:101-102", impact:"헤더 없는 교차 사이트 요청 차단 불가", fix:"헤더 없음도 거부" },
+    { sev:"P2", title:"cache_prune 미호출", where:"backend/app/db.py:137-141", impact:"만료 행 누적", fix:"주기적 정리 스케줄 추가" },
+    { sev:"P2", title:"카카오 state 코드 교환 전 삭제", where:"backend/app/main.py:609-612", impact:"토큰 교환 실패 시 재시도 불가", fix:"교환 성공 후 삭제" },
+    { sev:"P2", title:"view 파라미터 의미 충돌", where:"GalleryPages.tsx(view=all) ↔ lost-result-model.ts(view=방향)", impact:"URL 공유 시 의미 달라짐", fix:"galleryView 별도 키 분리" },
+    { sev:"P2", title:"정렬 상태가 URL에 없음", where:"GalleryPages.tsx, ValuablesPages.tsx", impact:"새로고침 시 정렬 초기화", fix:"sort 쿼리 파라미터 추가" },
+    { sev:"P1", title:"AI 4엔드포인트에 response_model 없음", where:"backend/app/ai_api.py:13,18,26,34", impact:"OpenAPI 응답 스키마 없음, model_dump에 의존", fix:"AiSearchPlan/AiRankResponse/AiContextRankResponse 지정" },
+    { sev:"P2", title:"/api/ai/status 프론트 미사용", where:"backend/app/ai_api.py:13, frontend 전체 참조 0건", impact:"AI 준비 상태를 UI가 표시하지 않음", fix:"설정/푸터에 상태 배지 연결" },
+    { sev:"P2", title:"AI 이미지 413 가드 없음", where:"backend/app/main.py:98-114, ai_schemas.py:15,43-44", impact:"최대 18장·수백 MB 요청 가능", fix:"AI 라우트에도 Content-Length/청크 제한 적용" },
+    { sev:"P2", title:"CORS 허용 헤더가 Content-Type뿐", where:"backend/app/main.py:64", impact:"추가 헤더 사용 시 실패", fix:"필요 헤더 명시" },
+    { sev:"P2", title:"map-config 키 노출 문서 불일치", where:"backend/app/main.py:499-503 ↔ backend/README.md:62", impact:"문서가 미노출로 기술", fix:"READMe를 JS 키 전달로 정정" },
+  ],
+  docs: [
+    ["AI 동의 방식","DML-113/115: 매 실행 별도 동의 화면","사용자 요청: 팝업 없이 즉시 검색, 하단 요약만","DML-116으로 대체 기록 완료"],
+    ["temperature","문서에 전송 값 명시 없음","실제 gpt-6-luna는 0.1 미지원 → 502","DML-116에 제거 기록"],
+    ["API 오퍼레이션","DML-067: 검색+상세만 호출","전체 필터·건수 재계산 요구","DML-121: POST /api/lostfound/browse 추가"],
+    ["필터 적용 범위","DML-105: 현재 페이지 기준","요구: API 전체에서 검색 + 건수 재계산","DML-121: 스캔한 전체 풀에 서버 필터 적용"],
+    ["상단 배치","DML-108: 세로 순서","DML-111: 좌측 요약·우측 pagination","DML-111 최종"],
+    ["검색 조건 버튼 색","DML-104: 호버 검정","DML-112: 평소 검정, 호버·클릭 흰색","DML-112 최종"],
+    ["문서 최신 목록","11·12번 문서 상단은 DML-112에서 정지","실제 로그는 DML-121까지","11·12 문서에 DML-117~121 반영 완료"],
+    ["F2 검색 키워드","기존: 채널 질의 한 문자열만 PRDT_NM에 전달","AI criteria의 apiKeywords로 넓게 조회 + JSON 전체 매칭","DML-120에 기록, 프론트·백엔드 연결 완료"],
+    ["AND/OR/NOT","직접 찾기 요구만 남음으로 기술","F2는 ai-match-model + score_criteria, 직접 찾기는 browse criteria_pass","DML-120/121 모두 구현 완료"],
+    ["비전 모델","F2를 모델명으로 오해","F2는 /lost-found 기능, 모델은 역할별 env로 교체","YOLOE는 별도 감지 어댑터 필요"],
+    ["F1 사진 비교","9.1: 이미지 점수화·정렬 미연결","[사진 찾기]가 3축 비교·정렬","DML-117로 대체 기록"],
+    ["참고 사진 분석","사진 원본만 비교","대상·요소 설명을 먼저 분석해 검색어와 함께 반영","DML-118/119에 기록"],
+    ["클립보드 붙여넣기","버튼 첨부만 안내","검색창 이미지 붙여넣기 추가","DML-117에 기록"],
+  ],
+  checklist: [
+    ["완료","동의 팝업 제거 + /lost-found 하단 요약","DML-116, LostSearchComposer/AiSearchControls/LostSearchResults"],
+    ["완료","AI temperature 제거 + 실호출 200 확인","backend/app/ai_pipeline.py:76"],
+    ["완료","백엔드 재기동 + 경찰 API 80건 확인","/api/lostfound/list errors=0"],
+    ["완료","AI 실패 폴백 stale plan 수정","LostSearchComposer.tsx onSubmit 명시 draft 전달"],
+    ["완료","F2 종합 채널 필터 누락 수정","LostSearchResults.tsx:231"],
+    ["완료","갤러리 AI 조건 정리 버튼 제거","SearchComposer.tsx / GallerySearchAssistant.tsx"],
+    ["완료","갤러리 사진 찾기 3축 정렬 연결","GallerySearchResults.tsx / gallery-search-model.ts"],
+    ["완료","참고 사진 분석 설명 3축 반영","ai_pipeline.py / ai_schemas.py / compare_candidates.txt"],
+    ["완료","참고 사진 분석 UI 표시","GallerySearchResults.tsx / ai-search-api.ts"],
+    ["완료","검색창 이미지 붙여넣기","/gallery·/lost-found clipboardImageFiles 연결"],
+    ["완료","F2 AI criteria 스키마·프롬프트","ai_schemas.py AiSearchCriteria + interpret_search.txt"],
+    ["완료","F2 criteria 정규화·보완","ai_pipeline.py prepare_search — 탐색어/AND 폴백"],
+    ["완료","F2 다중 apiKeywords 조회 + JSON 매칭","police_api.py _normalize_criteria/score_criteria/search_all hints"],
+    ["완료","F2 hints 전달·캐시 키·응답 필드","main.py·schemas.py — apiKeywords/matched/aiMatch"],
+    ["완료","F2 프론트 criteria 매칭·조건 카드","ai-match-model.ts + LostSearchResults.tsx + AiSearchControls.tsx"],
+    ["완료","자연어 장소 하드 필터 오남용 방지","LostSearchResults.tsx REGIONS 검사"],
+    ["완료","직접 찾기 필터 API 전체 전환","POST /api/lostfound/browse — 2소스 × 20페이지 스캔"],
+    ["완료","직접 찾기 total/page 재계산·중복 기준 통일","필터 통과 건수 기준 pages, 화면 건수 일치"],
+    ["완료","직접 찾기 자연어 → AND/OR/NOT 연결","prepare(direct) criteria → hints → criteria_pass"],
+    ["완료","직접 찾기 순위 정책 유지","AI 점수 재정렬 없이 공개 API 순서 사용"],
+    ["P1","분류/지역/색상 코드 매핑 표 확보","공공데이터포털 코드표 기반(스캔 상한 해소)"],
+    ["P1","geo 실패 detail 캐시 제외","backend/app/main.py:494-495"],
+    ["P1","Origin 헤더 누락 거부","backend/app/main.py:101-102"],
+    ["문서","DML-115~121을 11·12 문서에 반영","최신 항목·대체 관계 갱신 완료"],
+    ["검증","typecheck/test/build + pytest 재실행, F2·직접 찾기 실측","프론트 422·백엔드 59 통과, 필터 건수/페이지·AND/OR/NOT 확인"],
+  ],
+  todo: [
+    "개발 서버는 <code>npm run dev</code>로 실행하세요. 이 스크립트가 백엔드(8000)를 자동으로 띄웁니다. <code>npm run dev:web</code>은 프론트만 띄워 목록이 비어 보입니다.",
+    "AI 키는 서버 .env에만 두고 gpt-6-luna 모델이 해당 엔드포인트에서 실제 지원되는지 제공자 콘솔에서 확인하세요. 다른 모델로 바꾸려면 GEUGEO_AI_<ROLE>_PROVIDER/MODEL/BASE_URL/API_KEY를 설정합니다(역할: LLM, VLM, VISION).",
+    "YOLOE 같은 객체 탐지 모델을 쓰려면 별도 감지 서비스와 라벨→조건 변환 어댑터가 필요합니다. 현재 chat/completions 계약에는 바로 연결되지 않습니다.",
+    "분류·지역·색상 코드표를 확보해 주면 스캔 상한(약 1,600건) 없이 전용 필터 API로 정확한 전체 필터·건수를 연결할 수 있습니다.",
+    "동의 팝업 제거에 따라 외부 AI 전송 사실을 하단 안내로만 고지합니다. 조직 정책상 명시적 동의가 필요하면 알려주세요.",
+    "갤러리에서 참고 사진을 붙여넣으면 AI가 읽은 대상·요소가 결과 상단에 표시됩니다. 분석은 참고용이며 동일 물건이나 소유권을 증명하지 않습니다.",
+    "F2 `/lost-found`는 자연어와 참고 사진에서 AND/OR/NOT·사진 특징을 뽑아 공개 JSON 전체에 적용합니다. 조건과 안 맞는 후보도 넓은 결과로 남으므로, 상단 조건 카드로 근거를 확인하세요.",
+    "직접 찾기는 이제 자연어 AND/OR/NOT와 전체 스캔 필터가 연결됐습니다. 다만 앞쪽 약 1,600건 기준이므로 '앞쪽 기준' 표기를 확인하고, 더 정확한 전체 건수가 필요하면 코드표를 제공해 주세요.",
+  ],
+};
+
+function badge(t){
+  const map={ok:["b-ok","연결됨"],warn:["b-warn","주의"],bad:["b-bad","결함"],info:["b-info","확인 필요"]};
+  const [cls,text]=map[t]||["b-mute",t]; return `<span class="badge ${cls}">${text}</span>`;
+}
+function render(){
+  document.getElementById("stats").innerHTML=DATA.stats.map(s=>`<div class="stat"><b>${s.n}</b><span>${s.label}</span></div>`).join("");
+  document.getElementById("summary-cards").innerHTML=DATA.summary.map(s=>`<div class="card"><h3>${s.title}</h3><div class="note ${s.tone==='bad'?'danger':s.tone==='ok'?'okbox':''}">${s.body}</div></div>`).join("");
+  document.querySelector("#model-table tbody").innerHTML=DATA.models.map(m=>`<tr><td><b>${m.role}</b></td><td class="mono">${m.model}</td><td class="mono">${m.env}</td><td class="mono">${m.endpoints}</td><td>${m.feature}</td><td>${m.connected}</td></tr>`).join("");
+  document.getElementById("pipelines").innerHTML=DATA.pipelines.map(p=>`<div class="card"><h3>${p.title}</h3><div class="flow">${p.nodes.map((n,i)=>`<div class="node"><b>${n[0]}</b><small>${n[1]}</small></div>${i<p.nodes.length-1?'<div class="arrow">→</div>':''}`).join("")}</div><div class="note ${p.status.startsWith('결함')?'danger':''}">${p.status}</div></div>`).join("");
+  document.querySelector("#feature-table tbody").innerHTML=DATA.features.map(f=>`<tr><td>${f[0]}</td><td>${badge(f[1])}</td><td class="mono">${f[2]}</td><td class="mono">${f[3]}</td></tr>`).join("");
+  drawDefects("ALL");
+  document.querySelector("#doc-table tbody").innerHTML=DATA.docs.map(d=>`<tr><td><b>${d[0]}</b></td><td>${d[1]}</td><td>${d[2]}</td><td>${d[3]}</td></tr>`).join("");
+  document.getElementById("checklist-card").innerHTML=DATA.checklist.map((c,i)=>`<div class="chk"><input type="checkbox" id="c${i}"><label for="c${i}"><span class="badge ${c[0]==='P0'?'b-bad':c[0]==='P1'?'b-warn':c[0]==='완료'?'b-ok':'b-info'}">${c[0]}</span> ${c[1]}<small>${c[2]}</small></label></div>`).join("");
+  document.getElementById("user-todo").innerHTML=DATA.todo.map(t=>`<div class="chk"><span class="badge b-info">USER</span><label>${t}</label></div>`).join("");
+}
+function drawDefects(sev){
+  const rows=DATA.defects.filter(d=>sev==="ALL"||d.sev===sev);
+  document.querySelector("#defect-table tbody").innerHTML=rows.map(d=>`<tr><td class="sev-${d.sev}">${d.sev}</td><td><b>${d.title}</b></td><td class="mono">${d.where}</td><td>${d.impact}</td><td>${d.fix}</td></tr>`).join("");
+  document.querySelectorAll("#sev-filters button").forEach(b=>b.classList.toggle("active",b.dataset.sev===sev));
+}
+document.getElementById("sev-filters").addEventListener("click",e=>{if(e.target.tagName==="BUTTON")drawDefects(e.target.dataset.sev)});
+render();
+</script>
+</body>
+</html>

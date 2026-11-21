@@ -6,6 +6,27 @@ import type { ReferencePhotoView } from './model'
 const image = new File(['image'], 'photo.jpg', { type: 'image/jpeg' })
 
 describe('찾은 기록의 세션 스냅샷', () => {
+  it('분실물 도우미에서 확정한 AI 계획을 새 검색 기록에 보존한다', () => {
+    const plan = {
+      originalQuery: '검정 지갑',
+      imageDescriptions: [],
+      channels: {
+        combined: { query: '검정 가죽 지갑', keywords: ['검정', '가죽', '지갑'] },
+        image: { query: '검정 가죽', keywords: ['검정', '가죽'] },
+        context: { query: '지갑', keywords: ['지갑'] },
+      },
+      filters: { category: '지갑', region: '서울', view: '', fromDate: '', toDate: '' },
+      clarificationQuestions: [],
+    }
+    const parent = createSearchRecord('lost', { query: '검정 지갑', photo: null }, null)
+    const assistant = { ...addGalleryCondition(createGalleryAssistantState(), '가죽'), aiPlan: plan }
+
+    const refined = refineLostRecord(parent, assistant)
+
+    expect(refined?.draft.aiPlan).toEqual(plan)
+    expect(refined?.draft.query).toBe('검정 지갑\n가죽')
+  })
+
   it('도우미의 여러 조건 추가·수정·삭제는 제출 질의를 유지하고 명시적 재검색에서만 묶어 반영한다', () => {
     const original = createSearchRecord('gallery', { query: '검정 지갑', photo: image }, { name: '갤러리', files: [image] })
     let records = [original]

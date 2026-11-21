@@ -4,12 +4,23 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
 import { Buffer } from 'node:buffer'
-import { createLocalGalleryServer } from './bridge.mjs'
+import { createLocalGalleryServer, createNativePickerScript } from './bridge.mjs'
 
 const { fetch, AbortController, AbortSignal } = globalThis
 
 const ORIGIN = 'http://127.0.0.1:5173'
 let directory, root, outside, server, base, token, paths, picker
+
+describe('Windows 사진 선택 창', () => {
+  it.each(['folder', 'images'])('%s 선택 창을 호출한 앞쪽 창의 소유 모달로 연다', kind => {
+    const script = createNativePickerScript(kind)
+    expect(script).toContain('[GeugeoPickerNativeMethods]::GetForegroundWindow()')
+    expect(script).toContain('$owner.AssignHandle($ownerHandle)')
+    expect(script).toContain('$dialog.ShowDialog($owner)')
+    expect(script).toContain('$owner.ReleaseHandle()')
+    expect(script).not.toContain('$owner.TopMost')
+  })
+})
 
 async function start(options = {}) {
   picker = options.pickPaths ?? vi.fn(async () => paths)

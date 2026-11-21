@@ -31,4 +31,9 @@ describe('login return destination', () => {
     expect(safeReturn('/valuables/new?state=vector-error', '/valuables')).toBe('/valuables/new?state=vector-error')
     expect(safeReturn('/account', '/valuables')).toBe('/account')
   })
+  it('keeps direct search return path and query', () => {
+    expect(safeReturn('/direct-search', '/lost-found/results')).toBe('/direct-search')
+    expect(safeReturn('/direct-search?page=2', '/lost-found/results')).toBe('/direct-search?page=2')
+    expect(safeReturn('/direct-search-other', '/lost-found/results')).toBe('/lost-found/results')
+  })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, ImageOff, Info, MapPin, RotateCcw, ShieldCheck } from 'lucide-react'
 import Modal from '../../components/Modal'
@@ -6,6 +6,7 @@ import { usePhotoPreview } from '../search/SearchComposer'
 import { MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from '../search/model'
 import { canShowMap, transferPayloads, type Candidate, type CandidateLocation } from '../search/catalog-model'
 import { localPhotoId, OFFICIAL_SEARCH_URL, photoFromFile, type AppPhoto } from './data'
+import { categoryIcon } from './category-icon'
 
 export function PageHeading({ title, description, action, back }: { title: string; description?: string; action?: ReactNode; back?: { to: string; label: string } }) {
   useEffect(() => { document.title = title + ' — 그거어디?' }, [title])
@@ -20,6 +21,40 @@ export function DemoNotice({ children = '샘플 화면 · 실제 검색 결과�
 export function EmptyState({ title, description, children, error = false }: { title: string; description?: string; children?: ReactNode; error?: boolean }) {
   return <div className={error ? 'empty-state inline-error' : 'empty-state'} role={error ? 'alert' : undefined}>
     {error ? <Info aria-hidden="true" /> : <ImageOff aria-hidden="true" />}<h2>{title}</h2>{description && <p>{description}</p>}{children && <div className="button-row">{children}</div>}
+  </div>
+}
+
+/** 모든 목록 화면이 공유하는 페이지네이션. 번호 직접 입력 + 이전/다음을 제공한다. */
+export function Pagination({ page, pages, onChange, inputId, position = 'bottom', allowBeyond = false }: {
+  page: number
+  pages: number
+  onChange: (page: number) => void
+  inputId: string
+  position?: 'top' | 'bottom'
+  allowBeyond?: boolean
+}) {
+  const [input, setInput] = useState(String(page))
+  useEffect(() => { setInput(String(page)) }, [page])
+  const total = Math.max(1, pages)
+  const maxPage = allowBeyond ? Math.max(total, page + 1) : total
+
+  function go(next: number) { onChange(Math.min(maxPage, Math.max(1, next))) }
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    const value = input.trim()
+    if (!value || !Number.isFinite(Number(value))) { setInput(String(page)); return }
+    go(Math.trunc(Number(value)))
+  }
+
+  return <div className={'pagination pagination--' + position}>
+    <button type="button" className="pagination__nav" disabled={page <= 1} onClick={() => go(page - 1)}>이전</button>
+    <form className="pagination__jump" onSubmit={submit}>
+      <label className="visually-hidden" htmlFor={inputId}>이동할 페이지 번호</label>
+      <input id={inputId} type="number" inputMode="numeric" min={1} max={maxPage} value={input} onChange={event => setInput(event.target.value)} />
+      <span className="pagination__total">/ {total}</span>
+      <button type="submit" className="pagination__nav pagination__nav--jump">이동</button>
+    </form>
+    <button type="button" className="pagination__nav" disabled={page >= total && !allowBeyond} onClick={() => go(page + 1)}>다음</button>
   </div>
 }
 
@@ -42,18 +77,24 @@ export function PhotoViewer({ photo, open, onClose, footer, className = '' }: { 
   return <Modal open={open} title={photo.name} focusKey={'viewer-' + photo.id} className={'photo-viewer ' + className} onClose={onClose} footer={footer}><div className="viewer-photo"><PhotoImage photo={photo} /></div></Modal>
 }
 
-export function NoPhoto({ message = '등록된 사진 없음' }: { message?: string }) {
-  return <div className="no-photo"><ImageOff aria-hidden="true" /><span>{message}</span></div>
+export function NoPhoto({ message = '등록된 사진 없음', category }: { message?: string; category?: string | null }) {
+  const hasCategory = !!category?.trim()
+  const Icon = hasCategory ? categoryIcon(category) : ImageOff
+  return <div className={hasCategory ? 'no-photo no-photo--category' : 'no-photo'}>
+    <Icon aria-hidden="true" />
+    <span>{message}</span>
+    {hasCategory && <small className="no-photo__category">{category}</small>}
+  </div>
 }
 
 export function FoundCard({ item, to, context = false }: { item: Candidate; to: string; context?: boolean }) {
   const [failed, setFailed] = useState(false)
   const photo = item.photoStatus === 'verified_photo' && item.image && !failed
   return <Link to={to} className={context ? 'context-card' : 'found-card'}>
-    <div className={context ? 'context-card__image' : 'found-card__image'}>{photo ? <img src={item.image!} alt={item.title + ' 샘플 사진'} loading="lazy" onError={() => setFailed(true)} /> : <NoPhoto message={failed ? '사진 표시 오류' : undefined} />}</div>
+    <div className={context ? 'context-card__image' : 'found-card__image'}>{photo ? <img src={item.image!} alt={item.title + ' 사진'} loading="lazy" onError={() => setFailed(true)} /> : <NoPhoto message={failed ? '사진 표시 오류' : undefined} category={item.category} />}</div>
     <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && <p>{item.color} · {item.category}</p>}
       {context && <><div className="match-reasons">{item.matchReasons.map(reason => <span key={reason}>{reason}</span>)}</div><p>{item.foundPlace}</p></>}
-      <small>{item.foundAt} · 샘플</small></div>
+      <small>{item.foundAt}</small></div>
     {context && <ArrowRight className="context-card__actions" aria-label="상세 보기" />}
   </Link>
 }
@@ -90,10 +131,14 @@ export function LocationCard({ item, location = item.location }: { item: Candida
   const showMap = canShowMap(location)
   return <section className="institution-card" aria-labelledby="institution-heading"><div className="section-heading"><h2 id="institution-heading">보관기관 및 위치</h2><MapPin aria-hidden="true" /></div>
     <h3>{item.custodyName ?? '보관기관 정보 없음'}</h3>{location.address && <p>{location.address}</p>}
-    {showMap ? <div className="mini-map" role="img" aria-label="샘플 지도 구성. 실제 기관 위치가 아닙니다."><svg viewBox="0 0 600 160" aria-hidden="true"><rect width="600" height="160" fill="#eff0eb" /><path d="M0 45H600M0 115H600M100 0V160M310 0V160M500 0V160" stroke="#fff" strokeWidth="18" /><circle cx="310" cy="80" r="12" fill="#222322" /><circle cx="310" cy="80" r="4" fill="#e5db72" /></svg><span>샘플 지도 · 실제 위치가 아니에요</span></div>
-      : <div className="location-fallback"><MapPin aria-hidden="true" /><p>{locationMessages[location.status]}</p></div>}
-    <p className="field__help">같은 물건인지, 현재 보관 중인지 확인해 주세요.</p>
-    <a className="button button--secondary" href={item.officialUrl ?? OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">{item.officialUrl ? '공식 정보 확인' : '공식 검색 안내'}<ArrowRight aria-hidden="true" /></a>
+    {item.mapUrl ? <div className="location-fallback"><MapPin aria-hidden="true" /><p>아래 링크에서 실제 보관기관 위치를 확인해 주세요.</p></div>
+      : showMap ? <div className="mini-map" role="img" aria-label="샘플 지도 구성. 실제 기관 위치가 아닙니다."><svg viewBox="0 0 600 160" aria-hidden="true"><rect width="600" height="160" fill="#eff0eb" /><path d="M0 45H600M0 115H600M100 0V160M310 0V160M500 0V160" stroke="#fff" strokeWidth="18" /><circle cx="310" cy="80" r="12" fill="#222322" /><circle cx="310" cy="80" r="4" fill="#e5db72" /></svg><span>샘플 지도 · 실제 위치가 아니에요</span></div>
+        : <div className="location-fallback"><MapPin aria-hidden="true" /><p>{locationMessages[location.status]}</p></div>}
+    <p className="field__help">실제 보관 여부는 연락처로 문의 부탁드립니다.</p>
+    <div className="button-row">
+      {item.mapUrl && <a className="button button--secondary" href={item.mapUrl} target="_blank" rel="noreferrer">카카오맵에서 보기<ArrowRight aria-hidden="true" /></a>}
+      <a className="button button--secondary" href={item.officialUrl ?? OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">{item.officialUrl ? '공식 정보 확인' : '공식 검색 안내'}<ArrowRight aria-hidden="true" /></a>
+    </div>
   </section>
 }
 

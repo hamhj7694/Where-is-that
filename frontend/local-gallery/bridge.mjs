@@ -32,42 +32,56 @@ function within(root, file) {
   return !relative || relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)
 }
 
-function nativePickPaths(kind, { signal }) {
-  aborted(signal)
+export function createNativePickerScript(kind) {
   const setup = `$ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -AssemblyName System.Windows.Forms
 [System.Windows.Forms.Application]::EnableVisualStyles()
-$owner = New-Object System.Windows.Forms.Form
-$owner.ShowInTaskbar = $false
-$owner.TopMost = $true
-$owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
-$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-$owner.Width = 1
-$owner.Height = 1
-$owner.Opacity = 0
-try {
-  $owner.Show()
-  $owner.BringToFront()
-  $owner.Activate()
-  [System.Windows.Forms.Application]::DoEvents()
+Add-Type -TypeDefinition '
+using System;
+using System.Runtime.InteropServices;
+public static class GeugeoPickerNativeMethods {
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetForegroundWindow();
+}
+'
+$ownerHandle = [GeugeoPickerNativeMethods]::GetForegroundWindow()
+$owner = $null
+if ($ownerHandle -ne [IntPtr]::Zero) {
+  $owner = New-Object System.Windows.Forms.NativeWindow
+  $owner.AssignHandle($ownerHandle)
+}
 `
   const dialog = kind === 'folder' ? `$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
 $dialog.Description = '검색할 사진이 있는 폴더를 선택해 주세요'
 $dialog.ShowNewFolderButton = $false
-try { if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { ConvertTo-Json -Compress -InputObject @($dialog.SelectedPath) } else { 'null' } } finally { $dialog.Dispose() }
+try {
+  $result = if ($owner) { $dialog.ShowDialog($owner) } else { $dialog.ShowDialog() }
+  if ($result -eq [System.Windows.Forms.DialogResult]::OK) { ConvertTo-Json -Compress -InputObject @($dialog.SelectedPath) } else { 'null' }
+} finally {
+  $dialog.Dispose()
+  if ($owner) { $owner.ReleaseHandle() }
+}
 ` : `$dialog = New-Object System.Windows.Forms.OpenFileDialog
 $dialog.Title = '연결할 사진을 선택해 주세요'
 $dialog.Multiselect = $true
 $dialog.CheckFileExists = $true
 $dialog.CheckPathExists = $true
 $dialog.Filter = '이미지 파일|*.jpg;*.jpeg;*.png;*.webp;*.gif;*.avif;*.bmp;*.heic;*.heif;*.tif;*.tiff'
-try { if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { ConvertTo-Json -Compress -InputObject @($dialog.FileNames) } else { 'null' } } finally { $dialog.Dispose() }
+try {
+  $result = if ($owner) { $dialog.ShowDialog($owner) } else { $dialog.ShowDialog() }
+  if ($result -eq [System.Windows.Forms.DialogResult]::OK) { ConvertTo-Json -Compress -InputObject @($dialog.FileNames) } else { 'null' }
+} finally {
+  $dialog.Dispose()
+  if ($owner) { $owner.ReleaseHandle() }
+}
 `
-  // The hidden console's startup show state can hide the first GUI window.
-  // Consume it with a transparent owner, then show an owned, topmost picker.
-  const cleanup = `} finally { $owner.Close(); $owner.Dispose() }`
-  const encoded = Buffer.from(setup + dialog + cleanup, 'utf16le').toString('base64')
+  return setup + dialog
+}
+
+function nativePickPaths(kind, { signal }) {
+  aborted(signal)
+  const encoded = Buffer.from(createNativePickerScript(kind), 'utf16le').toString('base64')
   return new Promise((resolve, reject) => {
     const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     let output = '', length = 0, done = false

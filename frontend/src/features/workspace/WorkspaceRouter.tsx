@@ -7,25 +7,29 @@ import HistoryPage from './HistoryPage'
 import { GalleryPhoto, GalleryResults } from './GalleryPages'
 import GallerySearchResults, { type GallerySearchActions } from './GallerySearchResults'
 import { FoundDetail, LostResults } from './LostFoundPages'
+import DirectSearchPage from './DirectSearchPage'
 import type { LostSearchActions } from './LostSearchResults'
 import { ValuableDetail, ValuableEditor, ValuablesList, type ValuableProps } from './ValuablesPages'
-import { AccountPage, InfoPage, LoginPage, PreviewIndex, SettingsPage } from './AccountPages'
+import { AccountPage, FindAccountPage, InfoPage, LoginPage, PreviewIndex, SettingsPage, SignupPage } from './AccountPages'
+import KakaoCallbackPage from '../auth/KakaoCallbackPage'
 import { EmptyState, PageHeading } from './components'
 
 interface Props extends ValuableProps {
   gallery: GallerySource | null
   drafts: { gallery: SearchDraft; lost: SearchDraft }
   records: SearchRecord[]
+  autoRankRecordId: string | null
+  galleryRankSeed: number
+  onConsumeAiRankConsent: (recordId: string) => void
   onDeleteRecord: (id: string) => void
   onEditRecord: (record: SearchRecord) => void
   onAssistantChange: (id: string, patch: Partial<GalleryAssistantState>) => void
   onRefineRecord: (parent: SearchRecord, assistant: GalleryAssistantState) => void
   onCommitGallerySearch: (id: string | null, draft: SearchDraft) => void
-  onCommitLostSearch: (id: string | null, draft: SearchDraft) => void
+  onCommitLostSearch: (id: string | null, draft: SearchDraft, autoRankConsent?: boolean) => void
   onOpenGallery: () => void
   onAddGallery: GalleryImportHandler
   onDisconnect: () => void
-  onDemoLogin: () => void
   onLogout: () => void
 }
 
@@ -45,16 +49,20 @@ export default function WorkspaceRouter(props: Props) {
     onAssistantChange: record?.mode === 'gallery' ? patch => props.onAssistantChange(record.id, patch) : undefined,
     onRefine: record?.mode === 'gallery' ? assistant => props.onRefineRecord(record, assistant) : undefined,
     onCommitSearch: draft => props.onCommitGallerySearch(record?.mode === 'gallery' ? record.id : null, draft),
+    rankSeed: props.galleryRankSeed,
   }
   const browse = new URLSearchParams(search).get('view') === 'all' && !record
   const lost = { draft: record?.draft ?? props.drafts.lost, onEdit, fromHistory: !!record }
   const lostActions: LostSearchActions = {
+    autoRankContext: !!record && props.autoRankRecordId === record.id,
+    onConsumeAutoRankConsent: () => { if (record) props.onConsumeAiRankConsent(record.id) },
     assistant: record?.mode === 'lost' ? resolveLostAssistant(props.records, record).assistant : undefined,
     onAssistantChange: record?.mode === 'lost' ? patch => props.onAssistantChange(record.id, patch) : undefined,
     onRefine: record?.mode === 'lost' ? assistant => props.onRefineRecord(record, assistant) : undefined,
-    onCommitSearch: draft => props.onCommitLostSearch(record?.mode === 'lost' ? record.id : null, draft),
+    onCommitSearch: (draft, autoRankConsent) => props.onCommitLostSearch(record?.mode === 'lost' ? record.id : null, draft, autoRankConsent),
   }
   return <Routes>
+    <Route path="/direct-search" element={<DirectSearchPage />} />
     <Route path="/history" element={<HistoryPage records={props.records} onDeleteRecord={props.onDeleteRecord} />} />
     <Route path="/gallery/results" element={browse ? <GalleryResults {...gallery} onAddGallery={props.onAddGallery} /> : <GallerySearchResults key={record?.id ?? 'gallery-draft'} {...gallery} {...galleryActions} />} />
     <Route path="/gallery/results/combined" element={<GallerySearchResults key={record?.id ?? 'gallery-draft'} {...gallery} {...galleryActions} channel="combined" />} />
@@ -72,6 +80,9 @@ export default function WorkspaceRouter(props: Props) {
     <Route path="/valuables/:id" element={<ValuableDetail key={pathname} {...props} />} />
     <Route path="/valuables/:id/edit" element={<ValuableEditor {...props} />} />
     <Route path="/auth/login" element={<LoginPage {...props} />} />
+    <Route path="/auth/signup" element={<SignupPage />} />
+    <Route path="/auth/find" element={<FindAccountPage mode={new URLSearchParams(search).get('mode') === 'password' ? 'password' : 'email'} />} />
+    <Route path="/auth/kakao/callback" element={<KakaoCallbackPage />} />
     <Route path="/account" element={<AccountPage {...props} />} />
     <Route path="/settings" element={<SettingsPage {...props} />} />
     <Route path="/privacy" element={<InfoPage page="privacy" />} />

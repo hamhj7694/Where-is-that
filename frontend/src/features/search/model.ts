@@ -1,3 +1,5 @@
+import type { AiSearchPlan } from './ai-search-api'
+
 export type SearchMode = 'gallery' | 'lost'
 export type ReferencePhotoView = 'unspecified' | 'front' | 'back' | 'side' | 'top' | 'bottom' | 'diagonal'
 export const REFERENCE_PHOTO_VIEWS: readonly { value: ReferencePhotoView; label: string }[] = [
@@ -14,6 +16,7 @@ export interface SearchDraft {
   photo: File | null
   photos?: File[]
   photoViews?: ReferencePhotoView[]
+  aiPlan?: AiSearchPlan
 }
 export const MAX_LOST_REFERENCE_PHOTOS = 6
 export interface GallerySource { name: string; files: File[] }
@@ -60,13 +63,25 @@ export function getReferencePhotoViews(draft: SearchDraft): ReferencePhotoView[]
 /** Keep file identities, while isolating the selected list from later edits. */
 export function snapshotSearchDraft(mode: SearchMode, draft: SearchDraft): SearchDraft {
   const query = draft.query.trim()
-  if (mode === 'gallery') return { query, photo: draft.photo }
+  const aiPlan = draft.aiPlan ? { aiPlan: draft.aiPlan } : {}
+  if (mode === 'gallery') return { query, photo: draft.photo, ...aiPlan }
   const photos = [...getReferencePhotos(draft)]
-  return { query, photo: photos[0] ?? null, photos, photoViews: getReferencePhotoViews(draft) }
+  return { query, photo: photos[0] ?? null, photos, photoViews: getReferencePhotoViews(draft), ...aiPlan }
 }
 
 export function isImageFile(file: File) {
   return file.type.startsWith('image/') || (!file.type && /\.(jpe?g|png|webp|gif|avif|bmp|heic|heif)$/i.test(file.name))
+}
+
+/** 클립보드에 복사한 스크린샷/이미지를 참고 사진 File로 바꾼다. */
+export function clipboardImageFiles(data: DataTransfer | null): File[] {
+  if (!data) return []
+  const fromFiles = Array.from(data.files).filter(isImageFile)
+  if (fromFiles.length) return fromFiles
+  return Array.from(data.items)
+    .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+    .map(item => item.getAsFile())
+    .filter((file): file is File => !!file && isImageFile(file))
 }
 
 export function collectGallery(files: readonly File[]): GallerySource | null {

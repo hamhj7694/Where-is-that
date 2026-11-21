@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BACKEND_DIR / ".env")
+
+
+def _data_dir() -> Path:
+    configured = os.environ.get("GEUGEO_DATA_DIR", "").strip()
+    return Path(configured) if configured else BACKEND_DIR / "data"
+
+
+DATA_DIR = _data_dir()
+DB_PATH = DATA_DIR / "app.db"
+
+
+def _allowed_origins() -> list[str]:
+    raw = os.environ.get(
+        "GEUGEO_ALLOWED_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173",
+    )
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+ALLOWED_ORIGINS = _allowed_origins()
+SESSION_COOKIE_NAME = "geugeo_eodi_session"
+SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
+COOKIE_SECURE = os.environ.get("GEUGEO_COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes"}
+MAX_CONTENT_BYTES = 64 * 1024 * 1024
+
+# REST·서비스키는 서버 전용. JS 키만 사용자 승인(DML-074)으로 클라이언트에 전달한다.
+KAKAO_JAVASCRIPT_KEY = os.environ.get("KAKAO_JAVASCRIPT_KEY", "").strip()
+KAKAO_REST_API_KEY = os.environ.get("KAKAO_REST_API_KEY", "").strip()
+KAKAO_CLIENT_SECRET = os.environ.get("KAKAO_CLIENT_SECRET", "").strip()
+KAKAO_REDIRECT_URI = (
+    os.environ.get("KAKAO_REDIRECT_URI", "").strip()
+    or "http://127.0.0.1:5173/auth/kakao/callback"
+)
+KAKAO_STATE_COOKIE = "geugeo_kakao_state"
+KAKAO_STATE_MAX_AGE_SECONDS = 10 * 60
+
+# 카카오와 동일하게 경찰청 서비스키도 서버 .env에만 둔다.
+POLICE_SERVICE_KEY = os.environ.get("POLICE_SERVICE_KEY", "").strip()
+POLICE_API_TIMEOUT = _float_env("POLICE_API_TIMEOUT", 8.0)
+LOSTFOUND_SEARCH_TTL = _int_env("LOSTFOUND_SEARCH_TTL", 300)
+LOSTFOUND_DETAIL_TTL = _int_env("LOSTFOUND_DETAIL_TTL", 86400)
+GEO_CACHE_TTL = _int_env("GEO_CACHE_TTL", 2592000)
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+AI_LLM_PROVIDER = os.environ.get("GEUGEO_AI_LLM_PROVIDER", "openai-compatible").strip().lower()
+AI_LLM_API_KEY = os.environ.get("GEUGEO_AI_LLM_API_KEY", "").strip() or OPENAI_API_KEY
+AI_LLM_BASE_URL = os.environ.get("GEUGEO_AI_LLM_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+AI_LLM_MODEL = os.environ.get("GEUGEO_AI_LLM_MODEL", "gpt-6-luna").strip()
+AI_VLM_PROVIDER = os.environ.get("GEUGEO_AI_VLM_PROVIDER", "openai-compatible").strip().lower()
+AI_VLM_API_KEY = os.environ.get("GEUGEO_AI_VLM_API_KEY", "").strip() or OPENAI_API_KEY
+AI_VLM_BASE_URL = os.environ.get("GEUGEO_AI_VLM_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+AI_VLM_MODEL = os.environ.get("GEUGEO_AI_VLM_MODEL", "gpt-6-luna").strip()
+AI_VISION_PROVIDER = os.environ.get("GEUGEO_AI_VISION_PROVIDER", "openai-compatible").strip().lower()
+AI_VISION_API_KEY = os.environ.get("GEUGEO_AI_VISION_API_KEY", "").strip() or OPENAI_API_KEY
+AI_VISION_BASE_URL = os.environ.get("GEUGEO_AI_VISION_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+AI_VISION_MODEL = os.environ.get("GEUGEO_AI_VISION_MODEL", "gpt-6-luna").strip()
+AI_TIMEOUT = _float_env("GEUGEO_AI_TIMEOUT", 45.0)
+AI_PROMPT_DIR = BACKEND_DIR / "prompts"

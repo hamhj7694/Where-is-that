@@ -45,7 +45,7 @@ export default function GalleryConnection({ gallery, error, onConnect, onCancel,
     {(importer.error || localPicker.error || error) && <p role="alert" className="form-error">{importer.error || localPicker.error || error}</p>}
     <p role="status">{localPicker.checking ? '연결 방식을 확인하고 있어요.' : localPicker.busy ? localPicker.notice : importer.busy ? '중복 이미지를 확인하고 있어요.' : importer.notice || localPicker.notice}</p>
     {!gallery && (importer.busy || localPicker.busy) && <button type="button" className="button button--secondary" onClick={cancel}>연결 중단</button>}
-    <p className="gallery-connection__note">사진은 이 기기에서만 처리해요. 새로고침하면 연결이 해제돼요.</p>
+    <p className="gallery-connection__note">사진은 이 기기에서만 처리해요. 연결은 새로고침해도 유지돼요.</p>
     {gallery && <div className="button-row gallery-connection__actions"><button type="button" className="button button--secondary" onClick={() => { cancel(); onCancel() }}>← 돌아가기</button><button type="button" className="button button--secondary" onClick={() => { cancel(); onDisconnect() }}>갤러리 해제</button></div>}
   </section>
 }

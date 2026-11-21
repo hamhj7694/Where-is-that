@@ -57,6 +57,7 @@ export function refineGalleryRecord(parent: SearchRecord, assistant: GalleryAssi
   const draft = snapshotSearchDraft('gallery', {
     query: combineGalleryQuery(baseQuery, conditions),
     photo: parent.draft.photo,
+    aiPlan: assistant.aiPlan ?? undefined,
   })
   return {
     ...parent,
@@ -71,7 +72,7 @@ export function refineLostRecord(parent: SearchRecord, assistant: GalleryAssista
   const conditions = assistant.conditions.filter(condition => condition.trim().length > 0)
   if (parent.mode !== 'lost' || (!conditions.length && !assistant.appliedConditions?.length)) return null
   const baseQuery = parent.assistantBaseQuery ?? parent.draft.query
-  const draft = { ...parent.draft, query: combineGalleryQuery(baseQuery, conditions) }
+  const draft = { ...parent.draft, query: combineGalleryQuery(baseQuery, conditions), aiPlan: assistant.aiPlan ?? undefined }
   if (validateSearch('lost', draft, null)) return null
   return {
     ...parent,
@@ -96,7 +97,7 @@ export function overwriteGallerySearch(records: SearchRecord[], id: string, draf
   if (!query && !draft.photo) return records
   return records.map(record => record.id === id && record.mode === 'gallery' ? {
     ...record,
-    draft: { query, photo: draft.photo },
+    draft: snapshotSearchDraft('gallery', draft),
     assistant: createGalleryAssistantState(),
     assistantBaseQuery: query,
   } : record)

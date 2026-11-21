@@ -4,6 +4,7 @@ import { usePhotoPreview } from '../search/usePhotoPreview'
 import { getReferencePhotos, getReferencePhotoViews, REFERENCE_PHOTO_VIEWS, type ReferencePhotoView, type SearchDraft, type SearchMode } from '../search/model'
 import { localPhotoId, photoFromFile } from './data'
 import { PhotoViewer } from './components'
+import { AiSearchPlanView } from '../search/AiSearchControls'
 
 interface Props {
   draft: SearchDraft
@@ -48,6 +49,7 @@ export default function GalleryQuerySummary({ draft, mode = 'gallery', editButto
       <button type="button" className="button button--secondary gallery-query-summary__edit" ref={editButtonRef} onClick={() => onEdit()}>검색 수정</button>
     </div>
     {mode === 'lost' && photos.length > 0 && <div className="lost-query-summary__photos">{photos.map((file, index) => <ReferencePhoto key={localPhotoId(file) + '-' + index} file={file} index={index} view={views[index]} onEdit={() => onEdit(true)} />)}</div>}
-  </div>{mode === 'gallery' && draft.photo && <PhotoViewer photo={photoFromFile(draft.photo, localPhotoId(draft.photo))} open={viewerOpen} onClose={() => setViewerOpen(false)} className="gallery-reference-viewer"
+  </div>{draft.aiPlan && <AiSearchPlanView plan={draft.aiPlan} originalQuery={draft.aiPlan.originalQuery || draft.query} />}
+  {mode === 'gallery' && draft.photo && <PhotoViewer photo={photoFromFile(draft.photo, localPhotoId(draft.photo))} open={viewerOpen} onClose={() => setViewerOpen(false)} className="gallery-reference-viewer"
     footer={<button type="button" className="button button--primary" onClick={() => { setViewerOpen(false); onEdit(true) }}>사진 변경·수정</button>} />}</>
 }

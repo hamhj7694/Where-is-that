@@ -8,7 +8,7 @@ type SourceState = Exclude<LostResultState, 'partial'>
 export interface LostResultCounts { image: number; context: number }
 
 export const LOST_RESULT_FILTER_NAMES = {
-  category: '물품 분류', color: '색상', region: '습득지역',
+  category: '물품 분류', color: '색상', region: '분실 예상 지역',
   from: '시작일', to: '종료일', view: '사물 방향',
 } as const
 export type LostResultFilterKey = keyof typeof LOST_RESULT_FILTER_NAMES
@@ -40,8 +40,10 @@ export function readLostResultFilters(params: URLSearchParams): LostResultFilter
 }
 
 export function validateLostResultDates(values: Pick<LostResultFilterValues, 'from' | 'to'>): string | null {
-  if ((values.from && !isValidLostResultDate(values.from)) || (values.to && !isValidLostResultDate(values.to))) return '날짜를 올바르게 선택해 주세요.'
-  return values.from && values.to && values.from > values.to ? '종료일을 시작일 이후로 선택해 주세요.' : null
+  const from = values.from.replaceAll('/', '-')
+  const to = values.to.replaceAll('/', '-')
+  if ((values.from && !isValidLostResultDate(from)) || (values.to && !isValidLostResultDate(to))) return '날짜를 올바르게 선택해 주세요.'
+  return from && to && from > to ? '종료일을 시작일 이후로 선택해 주세요.' : null
 }
 
 export function lostResultFilterLabel(key: LostResultFilterKey, value: string): string {
@@ -53,11 +55,14 @@ export function filterCandidateRecords<T extends Candidate>(items: readonly T[],
   const filters = readLostResultFilters(params)
   if (validateLostResultDates(filters)) return []
   return items.filter(item => {
+    // API 분류는 '지갑 > 여성용 지갑' 형태라 대분류만 고르면 하위 분류까지 포함한다.
+    const categoryMatches = !filters.category || item.category === filters.category
+      || (!filters.category.includes(' > ') && item.category.startsWith(filters.category + ' >'))
     const view = item.photoView && isPhotoView(item.photoView) ? item.photoView : 'unspecified'
     const hasDate = !!item.foundAt && isValidLostResultDate(item.foundAt)
-    return (!filters.category || item.category === filters.category)
+    return (categoryMatches)
       && (!filters.color || item.color === filters.color)
-      && (!filters.region || !!item.foundPlace?.startsWith(filters.region))
+      && (!filters.region || item.region === filters.region || !!item.foundPlace?.startsWith(filters.region))
       && (!filters.from || hasDate && item.foundAt! >= filters.from)
       && (!filters.to || hasDate && item.foundAt! <= filters.to)
       && (!filters.view || view === filters.view)

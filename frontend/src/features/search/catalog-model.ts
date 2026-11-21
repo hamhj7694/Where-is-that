@@ -11,6 +11,17 @@ export interface CandidateLocation {
   longitude?: number
 }
 
+/** 카카오 Local API가 준 보관기관 장소 정보. 영업시간 필드는 제공되지 않는다. */
+export interface PlaceInfo {
+  name: string
+  phone: string
+  address: string
+  roadAddress: string
+  category: string
+  placeUrl: string | null
+  openingHours: string | null
+}
+
 export interface Candidate {
   id: string
   title: string
@@ -21,11 +32,27 @@ export interface Candidate {
   color: string
   description: string
   foundAt: string | null
+  /** 실제 공개 API 상세의 습득 시각(fdHor). 공개값을 그대로 표시한다. */
+  foundTime?: string | null
   foundPlace: string | null
   custodyName: string | null
+  /** 실제 공개 API 상세의 보관상태(csteSteNm). */
+  custodyStatus?: string | null
   officialUrl: string | null
   matchReasons: string[]
   location: CandidateLocation
+  /** 실제 공개 API 상세에서 받은 보관기관 연락처. */
+  tel?: string | null
+  /** 서버 지오코딩으로 만든 카카오맵 링크. */
+  mapUrl?: string | null
+  /** 실제 공개 API 식별자(샘플 후보에는 없음). */
+  source?: string
+  atcId?: string
+  fdSn?: string
+  /** 검색 API에 지역 필드가 없어 보관기관 위치에서 유추한 시도(실 API 후보에만 있음). */
+  region?: string | null
+  /** 상세에서 받은 카카오 장소 정보(이름·전화·주소·분류). */
+  place?: PlaceInfo | null
 }
 
 export interface ResultSummary { image: Candidate[]; context: Candidate[] }

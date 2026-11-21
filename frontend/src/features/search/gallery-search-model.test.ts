@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   addGalleryCondition, combineGalleryQuery, createGalleryAssistantState,
   editGalleryCondition, galleryConditionsChanged,
-  GALLERY_CHANNELS, GALLERY_PREVIEW_LIMIT, galleryPreviewItems,
-  removeGalleryCondition, uniqueGalleryItems,
+  AI_GALLERY_RANK_LIMIT, GALLERY_CHANNELS, GALLERY_PREVIEW_LIMIT, galleryPreviewItems,
+  removeGalleryCondition, sortGalleryByRank, toGalleryRankMap, uniqueGalleryItems,
 } from './gallery-search-model'
 
 describe('갤러리 세 검색 채널의 미리보기', () => {
@@ -163,5 +163,42 @@ describe('검색 도우미의 명시적 조건 편집', () => {
     expect(edited.conditions).toEqual(['노란 가방'])
     expect(removed.appliedConditions).toEqual([])
     expect(base).toBe('여행 사진\n제주 바다')
+  })
+})
+
+describe('AI 사진 분석 3축 정렬', () => {
+  const ranking = toGalleryRankMap([
+    { id: 'a', score: 90, imageSimilarity: 20, contextRelevance: 70, reasons: [] },
+    { id: 'b', score: 50, imageSimilarity: 95, contextRelevance: 40, reasons: [] },
+    { id: 'c', score: 70, imageSimilarity: 60, contextRelevance: 85, reasons: [] },
+  ])
+  const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'unscored' }]
+
+  it('AI 비교는 한 번에 최대 12후보다', () => {
+    expect(AI_GALLERY_RANK_LIMIT).toBe(12)
+  })
+
+  it('종합 채널은 종합 관련성 순서다', () => {
+    expect(sortGalleryByRank(items, ranking, 'combined').map(item => item.id)).toEqual(['a', 'c', 'b', 'unscored'])
+  })
+
+  it('이미지 채널은 이미지 유사도 순서다', () => {
+    expect(sortGalleryByRank(items, ranking, 'image').map(item => item.id)).toEqual(['b', 'c', 'a', 'unscored'])
+  })
+
+  it('맥락 채널은 맥락 관련성 순서다', () => {
+    expect(sortGalleryByRank(items, ranking, 'context').map(item => item.id)).toEqual(['c', 'a', 'b', 'unscored'])
+  })
+
+  it('분석 결과가 없으면 원래 연결 순서를 유지한다', () => {
+    expect(sortGalleryByRank(items, null, 'combined')).toEqual(items)
+  })
+
+  it('점수 맵은 3축만 담고 원본 reasons는 버린다', () => {
+    expect(ranking).toEqual({
+      a: { score: 90, imageSimilarity: 20, contextRelevance: 70 },
+      b: { score: 50, imageSimilarity: 95, contextRelevance: 40 },
+      c: { score: 70, imageSimilarity: 60, contextRelevance: 85 },
+    })
   })
 })

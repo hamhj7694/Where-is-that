@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { appendGallery, canSubmitWithEnter, collectGallery, createSearchPreview, getReferencePhotos, getReferencePhotoViews, MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, snapshotSearchDraft, validateSearch, type ReferencePhotoView, type SearchDraft } from './model'
+import { appendGallery, canSubmitWithEnter, clipboardImageFiles, collectGallery, createSearchPreview, getReferencePhotos, getReferencePhotoViews, MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, snapshotSearchDraft, validateSearch, type ReferencePhotoView, type SearchDraft } from './model'
 
 const photo = new File(['fixture'], 'wallet.jpg', { type: 'image/jpeg' })
 const screenshot = new File(['fixture'], 'schedule.png', { type: 'image/png' })
 const gallery = { name: '내 갤러리', files: [photo, screenshot] }
+
+describe('클립보드 이미지 붙여넣기', () => {
+  function transfer(files: File[], items: { kind: string; type: string; getAsFile: () => File | null }[]) {
+    return { files, items } as unknown as DataTransfer
+  }
+
+  it('클립보드의 이미지 파일만 참고 사진으로 추린다', () => {
+    const text = new File(['memo'], 'note.txt', { type: 'text/plain' })
+    expect(clipboardImageFiles(transfer([photo, text], []))).toEqual([photo])
+  })
+
+  it('files가 비어 있으면 items에서 이미지를 꺼낸다', () => {
+    const pasted = clipboardImageFiles(transfer([], [
+      { kind: 'file', type: 'image/png', getAsFile: () => screenshot },
+      { kind: 'string', type: 'text/plain', getAsFile: () => null },
+    ]))
+    expect(pasted).toEqual([screenshot])
+  })
+
+  it('붙여넣은 데이터가 없으면 빈 배열이다', () => {
+    expect(clipboardImageFiles(null)).toEqual([])
+  })
+})
 
 describe('검색 입력의 제품 계약', () => {
   it('공백만 있는 입력은 검색하지 않는다', () => {
@@ -26,6 +49,22 @@ describe('검색 입력의 제품 계약', () => {
     expect(validateSearch('gallery', draft, gallery)).toBeNull()
     expect(createSearchPreview('gallery', draft, gallery).gallery).toEqual({ name: '내 갤러리', count: 2 })
     expect(gallery.files).toEqual([photo, screenshot])
+  })
+  it('AI가 정리한 3채널 검색 초안을 스냅샷에 보존한다', () => {
+    const aiPlan = {
+      originalQuery: '검은 지갑',
+      imageDescriptions: [],
+      channels: {
+        combined: { query: '검은 가죽 지갑', keywords: ['검은색', '지갑'] },
+        image: { query: '검은 가죽', keywords: ['검은색', '가죽'] },
+        context: { query: '검은 지갑', keywords: ['검은색', '지갑'] },
+      },
+      filters: { category: '지갑', region: '', view: '', fromDate: '', toDate: '' },
+      clarificationQuestions: [],
+    }
+
+    expect(snapshotSearchDraft('lost', { query: '검은 지갑', photo: null, aiPlan }).aiPlan).toEqual(aiPlan)
+    expect(snapshotSearchDraft('gallery', { query: '검은 지갑', photo, aiPlan }).aiPlan).toEqual(aiPlan)
   })
   it('폴더에 섞인 문서는 이미지 모집단에 넣지 않는다', () => {
     const document = new File(['text'], 'notes.txt', { type: 'text/plain' })
