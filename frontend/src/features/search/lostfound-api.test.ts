@@ -106,11 +106,11 @@ describe('직접 찾기 서버 필터 조회', () => {
       '검은 가죽 지갑', 2, 40,
       { apiKeywords: ['지갑'], include: ['가죽'], any: [], exclude: ['파손'], imageFeatures: [] },
       { color: '블랙(검정)', region: '서울' },
-      20,
+      200,
     )
     const [, request] = fetch.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(String(request.body))).toEqual({
-      keyword: '검은 가죽 지갑', page: 2, rows: 40, maxPages: 20,
+      keyword: '검은 가죽 지갑', page: 2, rows: 40, maxPages: 200,
       hints: { apiKeywords: ['지갑'], include: ['가죽'], any: [], exclude: ['파손'], imageFeatures: [] },
       filters: { color: '블랙(검정)', region: '서울' },
     })

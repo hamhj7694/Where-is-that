@@ -33,9 +33,9 @@ def row(identifier: str, date: str, **overrides) -> dict:
 
 def test_browse_filters_whole_pool_and_recalculates_total(monkeypatch):
     pages = {
-        1: [row("police:a", "2026-01-03", matchScore=99.0)],
-        2: [row("police:b", "2026-01-02")],
-        3: [row("police:c", "2026-01-01")],
+        1: [row("police:a", "2026-01-03", color="사용자정의색", matchScore=99.0)],
+        2: [row("police:b", "2026-01-02", color="사용자정의색")],
+        3: [row("police:c", "2026-01-01", color="사용자정의색")],
     }
     seen_pages: list[int] = []
 
@@ -44,12 +44,14 @@ def test_browse_filters_whole_pool_and_recalculates_total(monkeypatch):
         return {"items": pages.get(page, []), "totalCount": 3000}
 
     monkeypatch.setattr(police_api, "search", fake_search)
-    result = police_api.browse_all("", 2, 1, filters={"color": "블랙(검정)"}, max_pages=3)
+    # 코드표에 없는 색상값은 전용 API 대신 이름 검색 + 텍스트 필터 폴백을 탄다.
+    result = police_api.browse_all("", 2, 1, filters={"color": "사용자정의색"}, max_pages=3)
 
     assert sorted(set(seen_pages)) == [1, 2, 3]  # 현재 페이지가 아니라 전체 풀을 스캔(두 소스)
     assert result["total"] == 3  # API total(3000)이 아니라 필터 통과 건수
     assert [item["id"] for item in result["items"]] == ["police:b"]  # page 2
-    assert result["filtersApplied"] == {"color": "블랙(검정)"}
+    assert result["filtersApplied"] == {"color": "사용자정의색"}
+    assert result["filterApi"] is False
     assert result["scanned"] == 6  # 두 공개 소스 모두 스캔
 
 
@@ -119,3 +121,31 @@ def test_browse_unmatched_ai_condition_filters_out_item(monkeypatch):
     assert result["criteriaApplied"] is True
     assert result["total"] == 0
     assert result["items"] == []
+
+
+def test_browse_uses_official_codes_and_reads_all_filtered_pages(monkeypatch):
+    seen: list[tuple[str, dict, int]] = []
+
+    def fake_search_filtered(source: str, params: dict, page: int = 1, rows: int = 20) -> dict:
+        seen.append((source, dict(params), page))
+        return {
+            "items": [row(f"{source}:{page}", "2026-04-01", region="")] if page <= 3 else [],
+            "totalCount": 3,
+        }
+
+    monkeypatch.setattr(police_api, "search_filtered", fake_search_filtered)
+    result = police_api.browse_all(
+        "지갑", 1, 10,
+        filters={"category": "지갑 > 남성용 지갑", "region": "서울", "from": "2026-01-01"},
+        max_pages=3,
+    )
+
+    assert result["filterApi"] is True
+    assert seen
+    assert seen[0][1]["PRDT_CL_CD_01"] == "PRH000"
+    assert seen[0][1]["PRDT_CL_CD_02"] == "PRH200"
+    assert seen[0][1]["N_FD_LCT_CD"] == "LCA000"
+    assert seen[0][1]["START_YMD"] == "20260101"
+    assert {page for _source, _params, page in seen} <= {1, 2, 3}
+    assert result["total"] >= 1
+

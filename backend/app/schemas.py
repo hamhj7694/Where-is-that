@@ -237,7 +237,7 @@ class LostFoundBrowseRequest(BaseModel):
     keyword: str = Field(default="", max_length=100)
     page: int = Field(default=1, ge=1, le=1000)
     rows: int = Field(default=40, ge=1, le=40)
-    maxPages: int = Field(default=20, ge=1, le=50)
+    maxPages: int = Field(default=200, ge=1, le=1000)
     hints: dict[str, Any] | None = None
     filters: dict[str, str] = Field(default_factory=dict)
 
@@ -327,6 +327,8 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     page: int = 1
     rows: int = 40
     scanned: int = 0
+    pagesScanned: int = 0
+    filterApi: bool = False
     scanLimitReached: bool = False
     criteriaApplied: bool = False
     filtersApplied: dict[str, str] = Field(default_factory=dict)

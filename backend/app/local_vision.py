@@ -56,6 +56,17 @@ _SKIP_LABELS = {
 _CLIP_SCORE_BASE = 0.10
 _CLIP_SCORE_SPAN = 0.35
 
+# YOLOE는 텍스트 프롬프트로 열린 어휘 탐지를 한다. 타깃 라벨만 주면 사진 속 다른
+# 물건을 보지 못하므로, 흔한 습득물·배경 사물 목록을 함께 넣어 객체 수와 종류를
+# 먼저 센 뒤 여러 객체가 있을 때만 타깃을 크롭한다.
+_CENSUS_CLASSES = (
+    "person", "bag", "handbag", "backpack", "briefcase", "wallet", "credit card",
+    "key", "umbrella", "cell phone", "telephone", "book", "notebook", "bottle",
+    "cup", "shoe", "hat", "watch", "eyeglasses", "sunglasses", "camera",
+    "earphone", "headphones", "laptop", "tablet", "ring", "necklace", "bracelet",
+    "stuffed toy", "flower", "fruit", "desk", "chair", "box", "paper", "cloth",
+)
+
 
 def clip_available() -> bool:
     return bool(
@@ -173,25 +184,43 @@ def _encode(image) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-def _clutter_ratio(image) -> float:
-    """배경이 얼마나 복잡한지 0~1로 추정한다(작은 색상 격자만 쓴다)."""
-    small = image.convert("RGB").resize((16, 16))
-    flatten = getattr(small, "get_flattened_data", None) or small.getdata
-    pixels = list(flatten())
-    border = [
-        pixels[y * 16 + x]
-        for y in range(16) for x in range(16)
-        if x < 2 or x > 13 or y < 2 or y > 13
-    ]
-    base = tuple(sum(pixel[channel] for pixel in border) // len(border) for channel in range(3))
-    inner = [pixels[y * 16 + x] for y in range(3, 13) for x in range(3, 13)]
-    differences = [sum(abs(pixel[channel] - base[channel]) for channel in range(3)) / 3 for pixel in inner]
-    return sum(difference > 28 for difference in differences) / len(differences)
+def object_census(image, labels: tuple[str, ...]) -> tuple[int, int, list[tuple[str, float, tuple[float, float, float, float]]]]:
+    """사진 속 객체 수와 서로 다른 객체 종류 수, 탐지 결과를 한 번의 추론으로 센다."""
+    if not yoloe_available():
+        return 0, 0, []
+    image = image.copy()
+    image.thumbnail((1024, 1024))
+    model = _yoloe_model()
+    classes = list(dict.fromkeys([*_CENSUS_CLASSES, *labels]))
+    with _MODEL_LOCK:
+        model.set_classes(classes)
+        results = model.predict(
+            image,
+            conf=config.CROP_CENSUS_CONFIDENCE,
+            max_det=config.YOLOE_MAX_DETECTIONS,
+            verbose=False,
+        )
+    detections: list[tuple[str, float, tuple[float, float, float, float]]] = []
+    types: set[str] = set()
+    for result in results:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None:
+            continue
+        names = getattr(result, "names", {}) or {}
+        for index in range(len(boxes)):
+            name = str(names.get(int(boxes.cls[index]), "")).strip().lower()
+            if not name:
+                continue
+            x1, y1, x2, y2 = (float(value) for value in boxes.xyxy[index])
+            detections.append((name, float(boxes.conf[index]), (x1, y1, x2, y2)))
+            types.add(name)
+    return len(detections), len(types), detections
 
 
-def needs_crop(image) -> bool:
-    """단순 배경이면 탐지 호출 자체를 피하고, 복잡한 배경에서만 크롭을 고려한다."""
-    return _clutter_ratio(image) >= config.CROP_CLUTTER_THRESHOLD
+def needs_crop(image, labels: tuple[str, ...]) -> bool:
+    """여러 객체가 찍혔을 때만 크롭한다. 단일 객체 사진은 원본을 그대로 쓴다."""
+    count, types, _ = object_census(image, labels)
+    return count >= config.CROP_MIN_OBJECTS or types >= config.CROP_MIN_OBJECT_TYPES
 
 
 @lru_cache(maxsize=128)
@@ -201,34 +230,20 @@ def crop_target(data_url: str, labels: tuple[str, ...]) -> tuple[str, bool]:
         return data_url, False
     try:
         image = _decode(data_url)
-        if not needs_crop(image):
-            return data_url, False
         image.thumbnail((1024, 1024))
-        model = _yoloe_model()
-        with _MODEL_LOCK:
-            model.set_classes(list(labels))
-            results = model.predict(
-                image,
-                conf=config.YOLOE_CONFIDENCE,
-                max_det=config.YOLOE_MAX_DETECTIONS,
-                verbose=False,
-            )
+        count, types, detections = object_census(image, labels)
+        # 객체가 하나뿐이면 원본이 곧 관심 물건이다. 억지로 자르지 않는다.
+        if count < config.CROP_MIN_OBJECTS and types < config.CROP_MIN_OBJECT_TYPES:
+            return data_url, False
         best: tuple[float, float, tuple[float, float, float, float]] | None = None
-        for result in results:
-            boxes = getattr(result, "boxes", None)
-            if boxes is None:
+        for name, confidence, box in detections:
+            if not any(label.split()[-1] in name or name in label for label in labels):
                 continue
-            names = getattr(result, "names", {}) or {}
-            for index in range(len(boxes)):
-                name = str(names.get(int(boxes.cls[index]), "")).lower()
-                if not any(label.split()[-1] in name or name in label for label in labels):
-                    continue
-                confidence = float(boxes.conf[index])
-                x1, y1, x2, y2 = (float(value) for value in boxes.xyxy[index])
-                area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-                score = confidence * math.sqrt(max(area, 1.0))
-                if best is None or score > best[0]:
-                    best = (score, confidence, (x1, y1, x2, y2))
+            x1, y1, x2, y2 = box
+            area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+            score = confidence * math.sqrt(max(area, 1.0))
+            if best is None or score > best[0]:
+                best = (score, confidence, box)
         if best is None:
             return data_url, False
         x1, y1, x2, y2 = best[2]

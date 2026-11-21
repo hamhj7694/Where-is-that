@@ -137,9 +137,9 @@ class FakeClient:
                     ]
                 }
             )
-        if "getLosfundInfoAccTpNmCstdyPlace" in url:
+        if "getLosfundInfoAccTpNmCstdyPlace" in url or "getLosfundInfoAccToClAreaPd" in url:
             xml = POLICE_SEARCH_XML
-        elif "getPtLosfundInfoAccTpNmCstdyPlace" in url:
+        elif "getPtLosfundInfoAccTpNmCstdyPlace" in url or "getPtLosfundInfoAccToClAreaPd" in url:
             xml = PORTAL_SEARCH_XML
         elif "getLosfundDetailInfo" in url:
             xml = POLICE_DETAIL_XML

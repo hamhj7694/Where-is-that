@@ -25,6 +25,30 @@ def _busy_data_url(size=(200, 200)):
     return _encode(image)
 
 
+def _fake_model(detections):
+    """(name, confidence, xyxy) 목록을 반환하는 YOLOE 대역."""
+    class FakeBoxes:
+        cls = [index for index, _ in enumerate(detections)]
+        conf = [item[1] for item in detections]
+        xyxy = [item[2] for item in detections]
+
+        def __len__(self):
+            return len(detections)
+
+    class FakeResult:
+        boxes = FakeBoxes()
+        names = {index: item[0] for index, item in enumerate(detections)}
+
+    class FakeModel:
+        def set_classes(self, labels):
+            self.labels = labels
+
+        def predict(self, image, **_kwargs):
+            return [FakeResult()]
+
+    return FakeModel()
+
+
 @pytest.fixture(autouse=True)
 def clear_caches():
     for function in (
@@ -69,26 +93,12 @@ def test_crop_target_without_labels_returns_original():
 
 
 def test_crop_target_keeps_only_detected_bounding_box(monkeypatch):
-    class FakeBoxes:
-        cls = [0]
-        conf = [0.9]
-        xyxy = [[10, 10, 100, 100]]
-
-        def __len__(self):
-            return 1
-
-    class FakeResult:
-        boxes = FakeBoxes()
-        names = {0: "wallet"}
-
-    class FakeModel:
-        def set_classes(self, labels):
-            self.labels = labels
-
-        def predict(self, image, **_kwargs):
-            return [FakeResult()]
-
-    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: FakeModel())
+    # 지갑 + 열쇠 2개가 함께 찍힌 사진이면 지갑 박스만 남긴다.
+    detections = [
+        ("wallet", 0.9, [10, 10, 100, 100]),
+        ("key", 0.8, [130, 130, 160, 160]),
+    ]
+    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: _fake_model(detections))
     cropped, changed = local_vision.crop_target(_busy_data_url(), ("wallet",))
 
     assert changed is True
@@ -108,14 +118,30 @@ def test_crop_target_falls_back_when_detector_fails(monkeypatch):
     assert local_vision.crop_target(original, ("wallet",)) == (original, False)
 
 
-def test_plain_background_skips_detector_entirely(monkeypatch):
-    def fail_if_called():
-        raise AssertionError("단순 배경이면 YOLOE를 호출하지 않아야 한다")
-
-    monkeypatch.setattr(local_vision, "_yoloe_model", fail_if_called)
-    original = _data_url()
+def test_single_object_photo_is_not_cropped(monkeypatch):
+    # 객체가 하나뿐이면 호출은 했더라도 원본을 그대로 쓴다.
+    detections = [("wallet", 0.9, [10, 10, 100, 100])]
+    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: _fake_model(detections))
+    original = _busy_data_url()
 
     assert local_vision.crop_target(original, ("wallet",)) == (original, False)
+
+
+def test_two_object_types_trigger_crop(monkeypatch):
+    detections = [
+        ("wallet", 0.9, [10, 10, 100, 100]),
+        ("key", 0.8, [120, 120, 150, 150]),
+    ]
+    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: _fake_model(detections))
+
+    assert local_vision.needs_crop(Image.new("RGB", (200, 200)), ("wallet",)) is True
+
+
+def test_single_object_type_does_not_trigger_crop(monkeypatch):
+    detections = [("wallet", 0.9, [10, 10, 100, 100])]
+    monkeypatch.setattr(local_vision, "_yoloe_model", lambda: _fake_model(detections))
+
+    assert local_vision.needs_crop(Image.new("RGB", (200, 200)), ("wallet",)) is False
 
 
 def test_scope_candidates_only_keeps_category_matches():

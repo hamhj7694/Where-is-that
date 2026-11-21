@@ -204,7 +204,7 @@ export function browseLostFound(
   rows = 40,
   hints?: LostSearchHints,
   filters?: LostBrowseFilters,
-  maxPages = 20,
+  maxPages = 200,
 ): Promise<BrowsePayload> {
   return request<BrowsePayload>('/lostfound/browse', {
     method: 'POST',

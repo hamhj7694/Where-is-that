@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import html
 import logging
+import math
 import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
-from . import config
+from . import config, lostfound_codes
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,11 @@ BASE_URL = "https://apis.data.go.kr/1320000"
 SEARCH_PATHS = {
     "police": "/LosfundInfoInqireService/getLosfundInfoAccTpNmCstdyPlace",
     "portal": "/LosPtfundInfoInqireService/getPtLosfundInfoAccTpNmCstdyPlace",
+}
+# 분류·지역·색상·기간을 서버에서 좁혀 주는 전용 필터 API.
+FILTER_PATHS = {
+    "police": "/LosfundInfoInqireService/getLosfundInfoAccToClAreaPd",
+    "portal": "/LosPtfundInfoInqireService/getPtLosfundInfoAccToClAreaPd",
 }
 DETAIL_PATHS = {
     "police": "/LosfundInfoInqireService/getLosfundDetailInfo",
@@ -284,6 +290,38 @@ def search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
     return {"items": items, "totalCount": total or len(items)}
 
 
+def _api_date(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    return digits[:8] if len(digits) == 8 else ""
+
+
+def search_filtered(source: str, params: dict[str, str], page: int, rows: int) -> dict:
+    """분류·지역·색상·기간 코드로 서버에서 좁힌 결과를 한 페이지 가져온다."""
+    if source not in FILTER_PATHS:
+        raise PoliceError("lostfound_invalid_source", "유실물 검색 대상을 확인해 주세요.")
+    root = _request(
+        FILTER_PATHS[source],
+        {**params, "pageNo": page, "numOfRows": rows},
+    )
+    items = [_normalize(source, node) for node in root.iter("item")]
+    total = 0
+    for node in root.iter("totalCount"):
+        try:
+            total = int((node.text or "").strip())
+        except ValueError:
+            total = len(items)
+        break
+    return {"items": items, "totalCount": total or len(items)}
+
+
+def _keyword_item_match(item: dict, keyword: str) -> bool:
+    """전용 필터 API에는 PRDT_NM이 없으므로 물품명·내용·분류로 로컬 매칭한다."""
+    if not keyword:
+        return True
+    text = " ".join(str(item.get(field) or "") for field in ("name", "subject", "category")).lower()
+    return _term_matches(keyword.lower(), text)
+
+
 def criteria_pass(item: dict, criteria: dict[str, list[str]]) -> bool:
     """AI 조건을 점수가 아닌 하드 필터로 적용한다(직접 찾기는 순위를 재정렬하지 않는다)."""
     if not criteria:
@@ -300,7 +338,7 @@ def criteria_pass(item: dict, criteria: dict[str, list[str]]) -> bool:
     return True
 
 
-def metadata_pass(item: dict, filters: dict | None) -> bool:
+def metadata_pass(item: dict, filters: dict | None, *, skip_region: bool = False) -> bool:
     """URL 필터를 공개 항목 전체 필드에 적용한다(현재 페이지가 아니라 스캔한 전체 풀)."""
     values = filters if isinstance(filters, dict) else {}
     category = str(values.get("category") or "").strip()
@@ -313,7 +351,8 @@ def metadata_pass(item: dict, filters: dict | None) -> bool:
     if color and str(item.get("color") or "") != color:
         return False
     region = str(values.get("region") or "").strip()
-    if region:
+    # 전용 필터 API가 지역 코드로 이미 좁혔으면 응답에 시도명이 없으므로 텍스트 검사를 생략한다.
+    if region and not skip_region:
         places = " ".join(str(item.get(field) or "") for field in ("foundPlace", "address", "storagePlace", "orgName"))
         if region not in places:
             return False
@@ -339,45 +378,126 @@ def _browse_dedupe_key(item: dict) -> str:
     return "|".join(clean(value) for value in fields)
 
 
+def _browse_filtered(
+    param_sets: list[dict[str, str]],
+    cleaned: str,
+    page: int,
+    rows: int,
+    max_pages: int | None,
+) -> tuple[dict[str, list[dict]], list[dict], int, bool]:
+    """전용 필터 API로 서버에서 좁힌 뒤, 필요할 때만 다음 페이지를 읽는다."""
+    results: dict[str, list[dict]] = {}
+    errors: list[dict] = []
+    total_reported = 0
+    pages_scanned = 0
+    limit_reached = False
+    needed = page * rows
+    cap = config.LOSTFOUND_MAX_PAGES if max_pages is None else max_pages
+
+    for params in param_sets:
+        first: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
+            futures = {source: executor.submit(search_filtered, source, params, 1, rows) for source in SOURCES}
+            for source, future in futures.items():
+                try:
+                    first[source] = future.result()
+                except PoliceError as error:
+                    if not any(entry["source"] == source for entry in errors):
+                        errors.append({"source": source, "code": error.code, "message": error.message})
+        if not first:
+            continue
+        for payload in first.values():
+            total_reported = max(total_reported, payload["totalCount"])
+        for source, payload in first.items():
+            results.setdefault(source, []).extend(payload["items"])
+        pages_scanned += len(first)
+
+        largest = max((payload["totalCount"] for payload in first.values()), default=0)
+        available = math.ceil(largest / rows) if largest else 0
+        if cap and available > cap:
+            available = cap
+            limit_reached = True
+
+        number = 2
+        while number <= available:
+            batch = list(range(number, min(number + 4, available + 1)))
+            with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
+                futures = {
+                    (source, page_number): executor.submit(search_filtered, source, params, page_number, rows)
+                    for page_number in batch for source in SOURCES
+                }
+                for (source, _page_number), future in futures.items():
+                    try:
+                        payload = future.result()
+                    except PoliceError as error:
+                        if not any(entry["source"] == source for entry in errors):
+                            errors.append({"source": source, "code": error.code, "message": error.message})
+                        continue
+                    results.setdefault(source, []).extend(payload["items"])
+                    pages_scanned += 1
+            number += 4
+            if not cleaned or sum(len(rows_for_source) for rows_for_source in results.values()) >= needed:
+                break
+    return results, errors, total_reported, pages_scanned, limit_reached
+
+
 def browse_all(
     keyword: str,
     page: int = 1,
     rows: int = 20,
     filters: dict | None = None,
     hints: dict | None = None,
-    max_pages: int = 20,
+    max_pages: int | None = None,
 ) -> dict:
-    """직접 찾기용: 여러 페이지를 스캔해 필터를 적용하고, 필터 기준 total/page를 돌려준다."""
+    """직접 찾기용: 필터가 있으면 전용 API로, 없으면 이름 검색으로 여러 페이지를 스캔한다."""
     cleaned = _keyword(keyword)
     criteria = _normalize_criteria(hints)
-    api_keywords = (criteria.get("apiKeywords") or ([cleaned] if cleaned else [""]))[:3]
-    pages_per_term = max(1, min(50, max_pages) // len(api_keywords))
-
-    results: dict[str, list[dict]] = {}
-    errors: list[dict] = []
+    param_sets = lostfound_codes.filter_param_sets(filters, _api_date)
+    api_keywords: list[str] = []
     reported_totals: dict[str, int] = {}
-    with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
-        futures = {
-            (term, source, number): executor.submit(search, source, term, number, rows)
-            for term in api_keywords
-            for number in range(1, pages_per_term + 1)
-            for source in SOURCES
-        }
-        for (term, source, _number), future in futures.items():
-            try:
-                payload = future.result()
-            except PoliceError as error:
-                if not any(error_item["source"] == source for error_item in errors):
-                    errors.append({"source": source, "code": error.code, "message": error.message})
-                continue
-            results.setdefault(source, []).extend(payload["items"])
-            reported_totals[term] = max(reported_totals.get(term, 0), payload["totalCount"])
+    pages_scanned = 0
+    limit_reached = False
+    use_codes = bool(param_sets)
+
+    if use_codes:
+        results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(param_sets, cleaned, page, rows, max_pages)
+        reported_totals["filtered"] = total_reported
+    else:
+        api_keywords = (criteria.get("apiKeywords") or ([cleaned] if cleaned else [""]))[:3]
+        cap = config.LOSTFOUND_MAX_PAGES if max_pages is None else max_pages
+        pages_per_term = max(1, cap // len(api_keywords)) if cap else 1
+        results: dict[str, list[dict]] = {}
+        errors: list[dict] = []
+        with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
+            futures = {
+                (term, source, number): executor.submit(search, source, term, number, rows)
+                for term in api_keywords
+                for number in range(1, pages_per_term + 1)
+                for source in SOURCES
+            }
+            for (term, source, _number), future in futures.items():
+                try:
+                    payload = future.result()
+                except PoliceError as error:
+                    if not any(error_item["source"] == source for error_item in errors):
+                        errors.append({"source": source, "code": error.code, "message": error.message})
+                    continue
+                results.setdefault(source, []).extend(payload["items"])
+                reported_totals[term] = max(reported_totals.get(term, 0), payload["totalCount"])
+        pages_scanned = pages_per_term * len(api_keywords)
+        limit_reached = cap > 0 and any(value > pages_per_term * rows for value in reported_totals.values())
 
     merged: dict[str, dict] = {}
     deduped: dict[str, dict] = {}
     for source in SOURCES:
         for row in results.get(source, []):
-            if row["id"] in merged or not metadata_pass(row, filters) or not criteria_pass(row, criteria):
+            if row["id"] in merged:
+                continue
+            if not metadata_pass(row, filters, skip_region=use_codes):
+                continue
+            if use_codes and not _keyword_item_match(row, cleaned):
+                continue
+            if not criteria_pass(row, criteria):
                 continue
             merged[row["id"]] = row
             key = _browse_dedupe_key(row)
@@ -391,7 +511,6 @@ def browse_all(
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
     total = len(items)
     start = max(0, (page - 1) * rows)
-    scan_limit = any(value > pages_per_term * rows for value in reported_totals.values())
     return {
         "query": cleaned,
         "apiKeywords": api_keywords,
@@ -402,7 +521,9 @@ def browse_all(
         "page": page,
         "rows": rows,
         "scanned": sum(len(rows_for_source) for rows_for_source in results.values()),
-        "scanLimitReached": scan_limit,
+        "pagesScanned": pages_scanned,
+        "scanLimitReached": limit_reached,
+        "filterApi": use_codes,
         "criteriaApplied": bool(criteria),
         "filtersApplied": {key: str(value) for key, value in (filters or {}).items() if str(value or "").strip()},
     }

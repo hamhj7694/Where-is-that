@@ -64,6 +64,9 @@ POLICE_API_TIMEOUT = _float_env("POLICE_API_TIMEOUT", 8.0)
 # 공개 API에 무리를 주지 않으면서 스캔 시간을 줄인다.
 POLICE_API_MAX_CONNECTIONS = max(2, _int_env("GEUGEO_POLICE_API_MAX_CONNECTIONS", 16))
 BROWSE_MAX_WORKERS = max(2, min(32, _int_env("GEUGEO_BROWSE_MAX_WORKERS", 12)))
+# 전용 필터 API는 서버에서 분류·지역·색상·기간을 좁혀 주므로 이름 검색보다 넓게 스캔한다.
+# 0이면 필터 결과의 마지막 페이지까지 모두 읽는다.
+LOSTFOUND_MAX_PAGES = max(0, _int_env("GEUGEO_LOSTFOUND_MAX_PAGES", 200))
 LOSTFOUND_SEARCH_TTL = _int_env("LOSTFOUND_SEARCH_TTL", 300)
 LOSTFOUND_DETAIL_TTL = _int_env("LOSTFOUND_DETAIL_TTL", 86400)
 GEO_CACHE_TTL = _int_env("GEO_CACHE_TTL", 2592000)
@@ -114,8 +117,12 @@ YOLOE_ENABLED = os.environ.get("GEUGEO_YOLOE_ENABLED", "true").strip().lower() i
 YOLOE_MODEL = os.environ.get("GEUGEO_YOLOE_MODEL", "").strip() or str(DATA_DIR / "models" / "yoloe-11s-seg.pt")
 YOLOE_CONFIDENCE = _float_env("GEUGEO_YOLOE_CONFIDENCE", 0.12)
 YOLOE_MAX_DETECTIONS = max(1, _int_env("GEUGEO_YOLOE_MAX_DETECTIONS", 10))
-# 단순 배경이면 크롭 이득이 없으므로 YOLOE 호출 자체를 건너뛴다.
-CROP_CLUTTER_THRESHOLD = _float_env("GEUGEO_CROP_CLUTTER_THRESHOLD", 0.15)
+# 사진에 객체가 여러 개(또는 여러 종류)일 때만 타깃을 크롭한다.
+# 단일 객체 사진은 원본이 이미 관심 물건이므로 자르지 않는다.
+CROP_MIN_OBJECTS = max(1, _int_env("GEUGEO_CROP_MIN_OBJECTS", 2))
+CROP_MIN_OBJECT_TYPES = max(1, _int_env("GEUGEO_CROP_MIN_OBJECT_TYPES", 2))
+# 객체 수·종류를 셀 때는 일반 탐지보다 높은 신뢰도를 써 오탐으로 크롭하지 않게 한다.
+CROP_CENSUS_CONFIDENCE = _float_env("GEUGEO_CROP_CENSUS_CONFIDENCE", 0.25)
 # 물건이 이미 화면 대부분을 차지하면 크롭 대신 원본을 쓴다.
 CROP_MAX_BOX_RATIO = _float_env("GEUGEO_CROP_MAX_BOX_RATIO", 0.60)
 VISUAL_MATCH_MAX_COMPARE = max(1, _int_env("GEUGEO_VISUAL_MATCH_MAX_COMPARE", 8))
