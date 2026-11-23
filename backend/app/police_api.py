@@ -211,6 +211,15 @@ CRITERIA_TEXT_FIELDS = (
     "storagePlace", "orgName", "address", "status", "keepType",
 )
 CRITERIA_LIMITS = {"apiKeywords": 3, "include": 8, "any": 8, "exclude": 8, "imageFeatures": 8}
+# 직접 찾기는 점수로 순위를 바꾸지 않고, 어떤 신호가 맞았는지 등급으로만 줄 세운다.
+MATCH_TIERS = {
+    0: "AI+검색어+필터 일치",
+    1: "AI 조건 일치",
+    2: "검색어 일치",
+    3: "조건 필터 일치",
+    4: "부분 일치",
+    5: "공개 원문",
+}
 
 
 def _clean_terms(value: object, limit: int) -> list[str]:
@@ -490,28 +499,53 @@ def browse_all(
         pages_scanned = pages_per_term * len(api_keywords)
         limit_reached = cap > 0 and any(value > pages_per_term * rows for value in reported_totals.values())
 
+    # 어떤 신호가 맞았는지 등급으로 표시하고 전부 보여준다. NOT만 명시적으로 제외한다.
+    # 등급이 높을수록 앞에 오고, 같은 등급 안에서는 공개 API의 최신순/ID순을 유지한다.
+    hard_criteria = {key: value for key, value in criteria.items() if key == "exclude"}
+    has_ai = bool(criteria)
+    has_keyword = bool(cleaned)
+    has_filters = any(str(value or "").strip() for value in (filters or {}).values())
+    active_signals = has_ai + has_keyword + has_filters
     merged: dict[str, dict] = {}
     deduped: dict[str, dict] = {}
     for source in SOURCES:
         for row in results.get(source, []):
             if row["id"] in merged:
                 continue
-            if not metadata_pass(row, filters, skip_region=use_codes and region_applied):
-                continue
-            if use_codes and not _keyword_item_match(row, cleaned):
-                continue
-            if not criteria_pass(row, criteria):
+            if not criteria_pass(row, hard_criteria):
                 continue
             merged[row["id"]] = row
             key = _browse_dedupe_key(row)
             if key in deduped:
                 continue
             match = score_criteria(row, criteria)
+            ai_ok = criteria_pass(row, criteria) if has_ai else False
+            keyword_ok = _term_matches(cleaned.lower(), _item_text(row)) if has_keyword else False
+            filter_ok = metadata_pass(row, filters, skip_region=use_codes and region_applied) if has_filters else False
+            matched_signals = int(ai_ok) + int(keyword_ok) + int(filter_ok)
+            if active_signals >= 2 and matched_signals == active_signals:
+                tier = 0
+            elif ai_ok:
+                tier = 1
+            elif keyword_ok:
+                tier = 2
+            elif filter_ok:
+                tier = 3
+            elif match["hits"]:
+                tier = 4
+            else:
+                tier = 5
+            row["matchTier"] = tier
+            if tier == 0:
+                matched = [name for name, ok in (("AI", ai_ok), ("검색어", keyword_ok), ("조건 필터", filter_ok)) if ok]
+                row["matchLabel"] = "+".join(matched) + " 일치"
+            else:
+                row["matchLabel"] = MATCH_TIERS[tier]
             row["matchScore"] = _score(row, cleaned)
             row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
             deduped[key] = row
-    # AI 점수로 정렬하지 않는다. 공개 API의 최신순/ID순만 유지한다.
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
+    items.sort(key=lambda row: row["matchTier"])
     total = len(items)
     start = max(0, (page - 1) * rows)
     return {

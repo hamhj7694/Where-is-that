@@ -27,6 +27,9 @@ export interface FoundItem {
   place?: PlaceInfo | null
   /** 공개 JSON에 AI 맞춤 조건을 적용한 결과. 서버 응답에만 있다. */
   aiMatch?: { hits: string[]; allInclude: boolean }
+  /** 어떤 신호가 맞았는지 등급. 낮을수록 우선순위가 높다. */
+  matchTier?: number
+  matchLabel?: string
 }
 
 export interface RouteResult {
@@ -208,12 +211,52 @@ export function browseLostFound(
 ): Promise<BrowsePayload> {
   return request<BrowsePayload>('/lostfound/browse', {
     method: 'POST',
+    // 공개 API가 느려도 무한 로딩으로 남지 않도록 상한을 둔다.
+    signal: AbortSignal.timeout(70_000),
     body: JSON.stringify({
       keyword, page, rows, maxPages,
       ...(hints ? { hints } : {}),
       ...(filters ? { filters } : {}),
     }),
   })
+}
+
+export interface BrowseJobStart {
+  jobId: string
+  status: string
+}
+
+export interface BrowseJobStatus {
+  jobId: string
+  status: 'pending' | 'running' | 'done' | 'error'
+  result?: BrowsePayload
+  error?: string | null
+}
+
+function browseBody(
+  keyword: string, page: number, rows: number,
+  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200,
+): string {
+  return JSON.stringify({
+    keyword, page, rows, maxPages,
+    ...(hints ? { hints } : {}),
+    ...(filters ? { filters } : {}),
+  })
+}
+
+/** 백그라운드 검색 시작. 탭을 닫아도 서버에서 계속 진행된다. */
+export function startBrowseJob(
+  keyword: string, page = 1, rows = 40,
+  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200,
+): Promise<BrowseJobStart> {
+  return request<BrowseJobStart>('/lostfound/browse/jobs', {
+    method: 'POST',
+    body: browseBody(keyword, page, rows, hints, filters, maxPages),
+  })
+}
+
+export function getBrowseJob(jobId: string): Promise<BrowseJobStatus> {
+  return request<BrowseJobStatus>('/lostfound/browse/jobs/' + encodeURIComponent(jobId))
 }
 
 export function fetchLostFoundDetail(source: LostFoundSource, atcId: string, fdSn: string): Promise<FoundItem> {
@@ -287,6 +330,8 @@ export function toCandidate(item: FoundItem, detailed = false): Candidate {
     custodyStatus: item.status || null,
     officialUrl: null,
     matchReasons: [],
+    matchTier: item.matchTier,
+    matchLabel: item.matchLabel,
     location: {
       status: hasCoords ? 'verified' : item.address ? 'address_only' : 'missing',
       address: item.address || null,

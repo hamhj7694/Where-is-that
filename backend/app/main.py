@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 import threading
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from typing import Literal
@@ -19,6 +22,8 @@ from pydantic import BaseModel, Field
 from . import ai_api, config, db, geo, kakao, police_api, recovery, security
 from .schemas import (
     ACCOUNT_DELETE_CONFIRMATION,
+    BrowseJobStart,
+    BrowseJobStatus,
     ContentPayload,
     DeleteAccountRequest,
     FindEmailRequest,
@@ -44,6 +49,7 @@ from .schemas import (
 )
 
 SAFE_RETURN = re.compile(r"^/(gallery|lost-found|history|valuables|settings|account)(/|\?|$)")
+logger = logging.getLogger(__name__)
 
 # 파이프라인 확인용 로컬 문서/요청함. 서버 코드와 같은 저장소에 두고 HTML에서 직접 불러온다.
 PIPELINE_DIR = Path(__file__).resolve().parents[2] / "파이프라인"
@@ -537,7 +543,7 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
             payload.rows,
             filters=payload.filters,
             hints=payload.hints,
-            max_pages=payload.maxPages,
+            max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
         )
     except police_api.PoliceError as error:
         raise api_error(400 if "invalid" in error.code else 502, error.code, error.message)
@@ -550,6 +556,93 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
         with closing(db.connect()) as connection:
             db.cache_set(connection, "lostfound", cache_key, result)
     return result
+
+
+# 직접 찾기 백그라운드 작업. 탭을 닫거나 다른 페이지로 가도 서버에서 계속 이어간다.
+BROWSE_JOB_TTL_SECONDS = 30 * 60
+_browse_jobs: dict[str, dict] = {}
+_browse_jobs_lock = threading.Lock()
+_browse_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="direct-browse")
+
+
+def _prune_browse_jobs() -> None:
+    now = time.time()
+    for job_id in [key for key, value in _browse_jobs.items() if now - value["createdAt"] > BROWSE_JOB_TTL_SECONDS]:
+        _browse_jobs.pop(job_id, None)
+
+
+def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
+    try:
+        result = police_api.browse_all(
+            payload.keyword,
+            payload.page,
+            payload.rows,
+            filters=payload.filters,
+            hints=payload.hints,
+            max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
+        )
+        if not result["sources"]:
+            first = result["errors"][0] if result["errors"] else None
+            raise police_api.PoliceError(
+                first["code"] if first else "lostfound_upstream",
+                first["message"] if first else "경찰청 유실물 정보를 가져오지 못했어요.",
+            )
+        if not result["errors"]:
+            with closing(db.connect()) as connection:
+                db.cache_set(connection, "lostfound", _lostfound_browse_key(payload), result)
+        with _browse_jobs_lock:
+            _browse_jobs[job_id].update(status="done", result=result, finishedAt=time.time())
+    except police_api.PoliceError as error:
+        with _browse_jobs_lock:
+            _browse_jobs[job_id].update(status="error", error=error.message, finishedAt=time.time())
+    except Exception:
+        logger.exception("direct browse job failed: job_id=%s", job_id)
+        with _browse_jobs_lock:
+            _browse_jobs[job_id].update(
+                status="error", error="검색 중 문제가 생겼어요. 잠시 뒤 다시 시도해 주세요.", finishedAt=time.time()
+            )
+
+
+@app.post("/api/lostfound/browse/jobs", response_model=BrowseJobStart)
+def start_lostfound_browse_job(payload: LostFoundBrowseRequest) -> dict:
+    """오래 걸리는 직접 찾기를 서버 작업으로 넘긴다. 즉시 jobId를 돌려준다."""
+    if not police_api.configured():
+        raise api_error(
+            503,
+            "lostfound_not_configured",
+            "경찰청 유실물 조회 설정이 필요해요. 서버 .env를 확인해 주세요.",
+        )
+    job_id = uuid.uuid4().hex
+    cache_key = _lostfound_browse_key(payload)
+    with closing(db.connect()) as connection:
+        cached = db.cache_get(connection, "lostfound", cache_key, config.LOSTFOUND_SEARCH_TTL)
+    with _browse_jobs_lock:
+        _prune_browse_jobs()
+        _browse_jobs[job_id] = {
+            "jobId": job_id,
+            "status": "done" if cached is not None else "pending",
+            "result": cached,
+            "error": None,
+            "createdAt": time.time(),
+            "finishedAt": time.time() if cached is not None else None,
+        }
+    if cached is None:
+        _browse_executor.submit(_run_browse_job, job_id, payload)
+    return {"jobId": job_id, "status": "done" if cached is not None else "pending"}
+
+
+@app.get("/api/lostfound/browse/jobs/{job_id}", response_model=BrowseJobStatus)
+def get_lostfound_browse_job(job_id: str) -> dict:
+    with _browse_jobs_lock:
+        job = _browse_jobs.get(job_id)
+    if job is None:
+        raise api_error(404, "browse_job_not_found", "검색 작업을 찾지 못했어요. 다시 검색해 주세요.")
+    return {
+        "jobId": job_id,
+        "status": job["status"],
+        "result": job["result"],
+        "error": job["error"],
+    }
 
 
 @app.post("/api/lostfound/search", response_model=LostFoundSearchResponse)

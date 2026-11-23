@@ -40,6 +40,9 @@ export interface Candidate {
   custodyStatus?: string | null
   officialUrl: string | null
   matchReasons: string[]
+  /** 직접 찾기: 어떤 신호가 맞았는지 등급과 표시 문구. */
+  matchTier?: number
+  matchLabel?: string
   location: CandidateLocation
   /** 실제 공개 API 상세에서 받은 보관기관 연락처. */
   tel?: string | null

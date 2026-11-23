@@ -289,6 +289,8 @@ class FoundItem(BaseModel):
     address: str = ""
     mapQuery: str = ""
     matchScore: float = 0
+    matchTier: int = 5
+    matchLabel: str = ""
     detailLoaded: bool = False
     display: dict[str, str] = Field(default_factory=dict)
     aiMatch: AiMatchInfo | None = None
@@ -332,6 +334,22 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     scanLimitReached: bool = False
     criteriaApplied: bool = False
     filtersApplied: dict[str, str] = Field(default_factory=dict)
+
+
+class BrowseJobStart(BaseModel):
+    """직접 찾기 백그라운드 작업 시작 응답."""
+
+    jobId: str
+    status: str = "pending"
+
+
+class BrowseJobStatus(BaseModel):
+    """백그라운드 작업 진행 상태. 끝나면 result에 완성된 목록이 들어간다."""
+
+    jobId: str
+    status: str
+    result: LostFoundBrowseResponse | None = None
+    error: str | None = None
 
 
 class MapConfigResponse(BaseModel):

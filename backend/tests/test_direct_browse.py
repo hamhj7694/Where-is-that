@@ -110,17 +110,61 @@ def test_browse_applies_ai_criteria_across_pages_and_dedupes(monkeypatch):
     assert result["items"][0]["aiMatch"]["hits"] == ["가죽"]
 
 
-def test_browse_unmatched_ai_condition_filters_out_item(monkeypatch):
+def test_browse_shows_unmatched_item_as_public_tier(monkeypatch):
     def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
         return {"items": [row("police:item", "2026-03-01")] if page == 1 else [], "totalCount": 1}
 
     monkeypatch.setattr(police_api, "search", fake_search)
     result = police_api.browse_all("", 1, 10, hints={"include": ["없는단어"]}, max_pages=1)
 
-    # 직접 찾기는 AI 조건을 하드 필터로 적용하되 순위는 바꾸지 않는다.
+    # 조건에 안 맞아도 화면을 비우지 않고 공개 원문 등급으로 표시한다.
     assert result["criteriaApplied"] is True
-    assert result["total"] == 0
-    assert result["items"] == []
+    assert result["total"] == 1
+    assert result["items"][0]["matchTier"] == 5
+    assert result["items"][0]["matchLabel"] == "공개 원문"
+
+
+def test_browse_keeps_exclude_even_when_showing_all_tiers(monkeypatch):
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {
+            "items": [
+                row("police:drop", "2026-03-02", notes="가죽 지갑 파손"),
+                row("police:keep", "2026-03-01", notes="가죽 지갑"),
+            ] if page == 1 else [],
+            "totalCount": 2,
+        }
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all("", 1, 10, hints={"include": ["없는단어"], "exclude": ["파손"]}, max_pages=1)
+
+    assert [item["id"] for item in result["items"]] == ["police:keep"]
+
+
+def test_browse_orders_by_match_tier_and_keeps_public_order_in_tier(monkeypatch):
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {
+            "items": [
+                row("police:public", "2026-03-05", notes="아무 글이나"),
+                row("police:partial", "2026-03-04", notes="코발트 지갑"),
+                row("police:keyword", "2026-03-03", notes="검은 가죽 지갑"),
+                row("police:ai", "2026-03-02", notes="한정판 코발트 물건"),
+                row("police:all", "2026-03-01", notes="한정판 검은 가죽 지갑 코발트"),
+            ] if page == 1 else [],
+            "totalCount": 5,
+        }
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all(
+        "검은 가죽 지갑", 1, 10,
+        hints={"include": ["한정판"], "any": ["코발트"]},
+        max_pages=1,
+    )
+
+    # 전부 표시하되 등급 순서: 모두 일치 → AI 조건 → 검색어 → 부분 일치 → 공개 원문
+    assert [item["id"] for item in result["items"]] == [
+        "police:all", "police:ai", "police:keyword", "police:partial", "police:public",
+    ]
+    assert [item["matchTier"] for item in result["items"]] == [0, 1, 2, 4, 5]
 
 
 def test_browse_uses_official_codes_and_reads_all_filtered_pages(monkeypatch):
@@ -162,7 +206,8 @@ def test_browse_keeps_text_region_check_when_region_has_no_official_code(monkeyp
         max_pages=1,
     )
 
-    # 분류는 코드로 좁혀졌지만 지역은 코드가 없으므로 텍스트 검사를 유지해야 한다.
+    # 분류는 코드로 좁혀졌지만 지역은 코드가 없으므로 텍스트 검사 결과가 등급에 반영된다.
     assert result["filterApi"] is True
-    assert result["total"] == 0
+    assert result["total"] == 1
+    assert result["items"][0]["matchTier"] == 2  # 지역 불일치 → 조건 필터 등급이 아님
 

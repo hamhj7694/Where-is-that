@@ -199,7 +199,11 @@ def test_browse_reports_filtered_total_and_scan_metadata(client):
     })
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 1
+    # 색상이 안 맞는 건도 공개 원문 등급으로 함께 표시한다.
+    assert body["total"] == 2
+    tiers = {item["atcId"]: item["matchTier"] for item in body["items"]}
+    assert tiers["F2018113000002322"] == 3  # 블랙 → 조건 필터 일치
+    assert tiers["V0007722L11170002"] == 5  # 은색 → 공개 원문
     assert body["page"] == 1
     assert body["rows"] == 40
     assert body["scanned"] >= 1

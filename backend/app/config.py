@@ -66,11 +66,15 @@ KAKAO_STATE_MAX_AGE_SECONDS = 10 * 60
 
 # 카카오와 동일하게 경찰청 서비스키도 서버 .env에만 둔다.
 POLICE_SERVICE_KEY = os.environ.get("POLICE_SERVICE_KEY", "").strip()
-POLICE_API_TIMEOUT = _float_env("POLICE_API_TIMEOUT", 8.0)
+# 공개 API가 느려질 때 8초로는 대부분 502가 됐다. 실제 응답을 기다릴 만큼 늘린다.
+POLICE_API_TIMEOUT = _float_env("POLICE_API_TIMEOUT", 45.0)
 # 직접 찾기 전체 스캔은 페이지별 요청이 많다. 연결 재사용 + 제한된 동시성으로
 # 공개 API에 무리를 주지 않으면서 스캔 시간을 줄인다.
 POLICE_API_MAX_CONNECTIONS = max(2, _int_env("GEUGEO_POLICE_API_MAX_CONNECTIONS", 16))
 BROWSE_MAX_WORKERS = max(2, min(32, _int_env("GEUGEO_BROWSE_MAX_WORKERS", 12)))
+# 공개 API가 느려지면 200페이지 스캔이 몇 분씩 걸려 화면이 로딩에서 나오지 않는다.
+# 직접 찾기는 한 번에 이만큼만 읽고 나머지는 다음 요청에서 이어서 가져온다.
+LOSTFOUND_BROWSE_PAGE_CAP = max(1, _int_env("GEUGEO_LOSTFOUND_BROWSE_PAGE_CAP", 8))
 # 전용 필터 API는 서버에서 분류·지역·색상·기간을 좁혀 주므로 이름 검색보다 넓게 스캔한다.
 # 0이면 필터 결과의 마지막 페이지까지 모두 읽는다.
 LOSTFOUND_MAX_PAGES = max(0, _int_env("GEUGEO_LOSTFOUND_MAX_PAGES", 200))
