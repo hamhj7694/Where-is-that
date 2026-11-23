@@ -1,7 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { browseLostFound, dedupeLostFound, formatDescription, formatFoundDateTime, searchLostFound, startBrowseJob, toCandidate, type FoundItem } from './lostfound-api'
+import { browseLostFound, dedupeLostFound, formatDescription, formatFoundDateTime, regionFromText, searchLostFound, startBrowseJob, toCandidate, type FoundItem } from './lostfound-api'
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('검색 문장에서 지역 유추', () => {
+  it('역·동네만 적어도 넓은 시도를 찾는다', () => {
+    expect(regionFromText('강남역에서 잃어버린 회색 노트북')).toBe('서울')
+    expect(regionFromText('신림역 인근에서 잃어버린 지갑')).toBe('서울')
+    expect(regionFromText('해운대역 근처 가방')).toBe('부산')
+    expect(regionFromText('제주공항에서 잃었어요')).toBe('제주')
+  })
+
+  it('장소 단서가 없으면 지역을 비워 둔다', () => {
+    expect(regionFromText('검은색 지갑')).toBe('')
+  })
+})
 
 function foundItem(overrides: Partial<FoundItem> = {}): FoundItem {
   return {

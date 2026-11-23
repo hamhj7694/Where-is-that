@@ -35,6 +35,7 @@ const criteria: AiSearchCriteria = {
   include: ['가죽', '지갑'],
   any: ['검정', '은색'],
   exclude: ['파손'],
+  prefer: [],
   imageFeatures: ['박음질', '지폐'],
 }
 
@@ -56,7 +57,7 @@ describe('AI 맞춤 검색 조건', () => {
   })
 
   it('조건이 없으면 빈 조건으로 원문 검색을 유지한다', () => {
-    expect(criteriaFromPlan(null, '지갑')).toEqual({ apiKeywords: [], include: [], any: [], exclude: [], imageFeatures: [] })
+    expect(criteriaFromPlan(null, '지갑')).toEqual({ apiKeywords: [], include: [], any: [], exclude: [], prefer: [], imageFeatures: [] })
     expect(hasSearchCriteria(criteriaFromPlan(null, '지갑'))).toBe(false)
     expect(resolveApiKeyword(criteriaFromPlan(null, '지갑'), '지갑')).toBe('지갑')
   })
@@ -67,7 +68,7 @@ describe('AI 맞춤 검색 조건', () => {
       criteria: {
         apiKeywords: Array.from({ length: 8 }, (_, index) => '키워드' + index),
         include: ['가죽', '가죽', 'x'.repeat(100)],
-        any: [], exclude: [], imageFeatures: [],
+        any: [], exclude: [], prefer: [], imageFeatures: [],
       },
     }
     const result = criteriaFromPlan(plan, '지갑')
@@ -80,7 +81,7 @@ describe('AI 맞춤 검색 조건', () => {
       ...basePlan,
       originalQuery: '류진',
       criteria: {
-        apiKeywords: ['류진'], include: ['류진'], any: [], exclude: [],
+        apiKeywords: ['류진'], include: ['류진'], any: [], exclude: [], prefer: [],
         imageFeatures: ['류진', '검정색'],
       },
     }
@@ -94,7 +95,7 @@ describe('AI 맞춤 검색 조건', () => {
     const plan = {
       ...basePlan,
       criteria: {
-        apiKeywords: ['치이카와'], include: [], any: [], exclude: [],
+        apiKeywords: ['치이카와'], include: [], any: [], exclude: [], prefer: [],
         imageFeatures: ['치이카와', '신한카드'],
       },
     }
@@ -176,7 +177,7 @@ describe('AI 맞춤 검색 조건', () => {
     const imageOnly = matchPublicItem(item, { ...criteria, include: [], any: [], exclude: [], imageFeatures: ['지폐'] })
     expect(imageOnly.hits).toEqual(['지폐'])
     expect(imageOnly.score).toBeGreaterThan(0)
-    expect(matchPublicItem(item, { apiKeywords: [], include: [], any: [], exclude: [], imageFeatures: [] })).toEqual({
+    expect(matchPublicItem(item, { apiKeywords: [], include: [], any: [], exclude: [], prefer: [], imageFeatures: [] })).toEqual({
       excludedBy: null, allInclude: false, hits: [], score: 0,
     })
   })
@@ -189,8 +190,38 @@ describe('AI 맞춤 검색 조건', () => {
 
   it('공개 원문의 가려진 이름은 0글자 마스크여도 짧은 실명과 일치한다', () => {
     const named = { ...item, name: '여성지갑(류*진)', subject: '', notes: '' }
-    const match = matchPublicItem(named, { apiKeywords: [], include: ['류진'], any: [], imageFeatures: [], exclude: [] })
+    const match = matchPublicItem(named, { apiKeywords: [], include: ['류진'], any: [], prefer: [], imageFeatures: [], exclude: [] })
     expect(match.allInclude).toBe(true)
     expect(match.hits).toEqual(['류진'])
+  })
+
+  it('장소 단서는 꼭 포함에서 우선 반영으로 옮겨 등록자가 안 적어도 결과에 남는다', () => {
+    const plan = {
+      ...basePlan,
+      originalQuery: '어제 지하철에서 검은색 지갑을 잃어버렸어요',
+      criteria: {
+        apiKeywords: ['지하철', '지갑'],
+        include: ['지갑', '지하철'],
+        any: ['검은색', '검정', '검은'],
+        exclude: [],
+        prefer: [],
+        imageFeatures: [],
+      },
+    }
+    const result = criteriaFromPlan(plan, plan.originalQuery)
+    expect(result.include).toEqual(['지갑'])
+    expect(result.any).toEqual(['검은색', '검정', '검은'])
+    expect(result.prefer).toContain('지하철')
+
+    const withPlace = matchPublicItem({ ...item, notes: '지하철에서 습득' }, result)
+    const withoutPlace = matchPublicItem({ ...item, notes: '' }, result)
+    expect(withPlace.allInclude).toBe(true)
+    expect(withoutPlace.allInclude).toBe(true)
+    expect(withPlace.score).toBeGreaterThan(withoutPlace.score)
+  })
+
+  it('역 이름을 말하면 장소 단서로 우선 반영에 추가한다', () => {
+    const result = criteriaFromPlan(basePlan, '강남역에서 잃어버린 회색 노트북')
+    expect(result.prefer).toContain('강남역')
   })
 })

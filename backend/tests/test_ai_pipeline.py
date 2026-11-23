@@ -148,8 +148,42 @@ def test_ai_prepare_returns_boolean_and_image_criteria(client, monkeypatch):
         "include": ["가죽", "지갑"],
         "any": ["검정", "블랙"],
         "exclude": ["파손"],
+        "prefer": [],
         "imageFeatures": ["박음질", "지폐"],
     }
+
+
+def test_ai_prepare_softens_place_terms_and_keeps_clarification(client, monkeypatch):
+    monkeypatch.setattr(config, "AI_VLM_API_KEY", "")
+    monkeypatch.setattr(ai_pipeline, "_completion", lambda _role, _messages: json.dumps({
+        "refinedQuery": "어제 지하철에서 잃어버린 검은색 지갑",
+        "channels": {
+            "combined": {"query": "검은 지갑", "keywords": ["지갑"]},
+            "image": {"query": "", "keywords": []},
+            "context": {"query": "", "keywords": []},
+        },
+        "filters": {"category": "", "region": "", "view": "", "fromDate": "", "toDate": ""},
+        "criteria": {
+            "apiKeywords": ["지하철", "지갑"],
+            "include": ["지갑", "지하철"],
+            "any": ["검은색", "검정"],
+            "exclude": [],
+            "imageFeatures": [],
+        },
+        "clarificationQuestions": ["잃어버린 장소가 대략적으로 어디인가요? (예: 신림역 인근)"],
+    }, ensure_ascii=False))
+
+    response = client.post("/api/ai/search/prepare", json={
+        "mode": "direct",
+        "query": "어제 지하철에서 검은색 지갑을 잃어버렸어요",
+        "externalProcessingConfirmed": True,
+    })
+
+    assert response.status_code == 200
+    plan = response.json()
+    assert plan["criteria"]["include"] == ["지갑"]
+    assert "지하철" in plan["criteria"]["prefer"]
+    assert plan["clarificationQuestions"] == ["잃어버린 장소가 대략적으로 어디인가요? (예: 신림역 인근)"]
 
 
 def test_ai_prepare_falls_back_to_channel_plan_without_criteria(client, monkeypatch):

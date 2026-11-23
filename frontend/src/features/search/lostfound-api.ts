@@ -78,10 +78,21 @@ const REGION_KEYWORDS: readonly (readonly [string, readonly string[]])[] = [
 
 export function inferRegion(item: Pick<FoundItem, 'storagePlace' | 'orgName' | 'address'>): string | null {
   const text = [item.storagePlace, item.orgName, item.address].filter(Boolean).join(' ')
+  return regionFromText(text) || null
+}
+
+/**
+ * 검색 문장에서 넓은 지역(17개 시도)을 유추한다.
+ * '강남역에서 잃어버렸어요'처럼 역·동네만 적힌 경우에도 서울로 좁혀
+ * 다른 지역의 공개 습득물이 상위에 오르지 않게 한다.
+ */
+export function regionFromText(text: string): string {
+  const value = text.trim()
+  if (!value) return ''
   for (const [region, keywords] of REGION_KEYWORDS) {
-    if (keywords.some(keyword => text.includes(keyword))) return region
+    if (keywords.some(keyword => value.includes(keyword))) return region
   }
-  return null
+  return ''
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const

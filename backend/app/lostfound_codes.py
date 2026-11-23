@@ -53,6 +53,18 @@ CATEGORY_CODES: dict[str, tuple[str, str]] = {
     "휴대폰 > 스카이휴대폰": ("PRJ000", "PRJ300"),
 }
 
+def is_category_term(term: str) -> bool:
+    """'지갑'·'노트북'처럼 공식 분류명 그대로인 품목어인지 본다.
+
+    '교촌 쇼핑백'처럼 분류명에 수식어가 붙은 표현은 해당하지 않는다.
+    이런 말을 하드 필터로 쓰면 수식어가 적히지 않은 공개 원문을 놓친다.
+    """
+    value = term.strip().lower()
+    if not value:
+        return False
+    return any(value in part for category in CATEGORY_CODES for part in category.split(" > ") if part)
+
+
 # 색상 표시명 -> 공식 색상 코드 목록(같은 이름이 여러 코드로 나뉜다).
 COLOR_CODES: dict[str, tuple[str, ...]] = {
     "그레이(암회)": ('CL1025',),

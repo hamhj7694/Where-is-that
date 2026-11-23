@@ -122,9 +122,11 @@ class AiSearchCriteria(BaseModel):
     include: list[str] = Field(default_factory=list, max_length=8)
     any: list[str] = Field(default_factory=list, max_length=8)
     exclude: list[str] = Field(default_factory=list, max_length=8)
+    # 있으면 순위를 올리지만 없어도 결과에서 빠지지 않는 단서(장소·추정 정보).
+    prefer: list[str] = Field(default_factory=list, max_length=8)
     imageFeatures: list[str] = Field(default_factory=list, max_length=8)
 
-    @field_validator("apiKeywords", "include", "any", "exclude", "imageFeatures")
+    @field_validator("apiKeywords", "include", "any", "exclude", "prefer", "imageFeatures")
     @classmethod
     def validate_terms(cls, value: list[str]) -> list[str]:
         cleaned: list[str] = []

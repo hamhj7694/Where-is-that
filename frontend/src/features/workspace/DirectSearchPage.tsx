@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { readLostResultFilters, resolveAiDateFilters } from '../search/lost-result-model'
+import { readLostResultFilters, resolveAiDateFilters, resolveAiRegionFilter } from '../search/lost-result-model'
 import {
-  compactFoundItems, dedupeLostFound, getBrowseJob, startBrowseJob, toCandidate,
-  type BrowsePayload, type FoundItem, type LostBrowseFilters,
+  compactFoundItems, dedupeLostFound, getBrowseJob, regionFromText, startBrowseJob, toCandidate,
+  REGIONS, type BrowsePayload, type FoundItem, type LostBrowseFilters, type LostSearchHints,
 } from '../search/lostfound-api'
 import { prepareAiSearch } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaLabels, criteriaToHints, EMPTY_SEARCH_CRITERIA, hasSearchCriteria, type AiSearchCriteria } from '../search/ai-match-model'
@@ -31,6 +31,28 @@ interface StoredJob {
   /** 현재 페이지 밖에서 찾은 사진 점수까지 이어받는다. */
   priorVisualScores?: Record<string, number>
   mode?: SearchMode
+  /** AI가 뽑은 조건·필터까지 포함한 조회 키. 조건이 바뀌면 이전 작업을 쓰면 안 된다. */
+  searchKey?: string
+}
+
+/** AI 해석 전에 시작한 원문 조회를 조건이 생긴 뒤에도 재사용하지 않도록 구분한다. */
+export function browseSearchKey(hints: LostSearchHints, filters: LostBrowseFilters): string {
+  return JSON.stringify({ hints, filters })
+}
+
+export function canResumeBrowseJob(
+  stored: StoredJob | null,
+  searchKey: string,
+  keyword: string,
+  mode: SearchMode,
+  reloadToken: number,
+  skipVisual: number,
+): boolean {
+  return Boolean(stored && stored.keyword === keyword
+    && (stored.mode ?? 'ai') === mode
+    && stored.reloadToken === reloadToken
+    && stored.skipVisual === skipVisual
+    && stored.searchKey === searchKey)
 }
 
 function readStoredJob(): StoredJob | null {
@@ -103,6 +125,12 @@ interface StoredSearch {
   aiDates: { from: string; to: string }
   /** 사용자가 AI 추정 기간을 지웠으면 다시 넣지 않는다. */
   aiPeriodOff?: boolean
+  /** 자연어에서 읽은 넓은 지역(시도). 다른 지역 결과가 섞이지 않게 조회에 쓴다. */
+  aiRegion?: string
+  aiRegionOff?: boolean
+  /** AI가 더 알아보라고 한 장소 질문과 이미 답한 질문. */
+  aiQuestions?: string[]
+  answeredQuestions?: string[]
   analyzedKeyword: string
   skipVisual: number
   visualProgress: { scanned: number; total: number }
@@ -154,6 +182,13 @@ export default function DirectSearchPage() {
   const [aiDates, setAiDates] = useState<{ from: string; to: string }>(restored?.aiDates ?? { from: '', to: '' })
   const [aiPeriodOff, setAiPeriodOff] = useState(restored?.aiPeriodOff ?? false)
   const hadDateKeys = useRef(params.has('from') || params.has('to'))
+  const [aiRegion, setAiRegion] = useState(restored?.aiRegion ?? '')
+  const [aiRegionOff, setAiRegionOff] = useState(restored?.aiRegionOff ?? false)
+  const hadRegionKey = useRef(params.has('region'))
+  const [aiQuestions, setAiQuestions] = useState<string[]>(restored?.aiQuestions ?? [])
+  const [answeredQuestions, setAnsweredQuestions] = useState<string[]>(restored?.answeredQuestions ?? [])
+  const answeredRef = useRef<string[]>(restored?.answeredQuestions ?? [])
+  const [questionDraft, setQuestionDraft] = useState('')
   const [criteria, setCriteria] = useState<AiSearchCriteria>(restored?.criteria ?? EMPTY_SEARCH_CRITERIA)
   const [aiBusy, setAiBusy] = useState(false)
   // 분석이 끝난 검색어만 조회한다. AI 응답 전 원문 검색이 먼저 실행돼 깜빡이는 것을 막는다.
@@ -181,7 +216,12 @@ export default function DirectSearchPage() {
       setCriteria(EMPTY_SEARCH_CRITERIA)
       setAiDates({ from: '', to: '' })
       setAiPeriodOff(false)
+      setAiRegion('')
+      setAiRegionOff(false)
+      setAiQuestions([])
+      setQuestionDraft('')
       hadDateKeys.current = false
+      hadRegionKey.current = false
       setSkipVisual(0)
       setAiBusy(false)
       setAnalyzedKeyword('')
@@ -196,6 +236,11 @@ export default function DirectSearchPage() {
       setCriteria(EMPTY_SEARCH_CRITERIA)
       setAiDates({ from: '', to: '' })
       setAiPeriodOff(false)
+      // 일반 검색에서도 장소가 적힌 문장이면 지역은 좁힌다(AI 해석·사진 분석은 하지 않는다).
+      setAiRegion(regionFromText(keyword))
+      setAiRegionOff(false)
+      setAiQuestions([])
+      setQuestionDraft('')
       setSkipVisual(0)
       setAnalyzedKeyword(keyword)
       setAiBusy(false)
@@ -210,29 +255,44 @@ export default function DirectSearchPage() {
         setCriteria(criteriaFromPlan(plan, keyword))
         // "약 한 달 전", "오래전에" 같은 말을 AI가 날짜로 바꾸면 조회 기간에 적용한다.
         setAiDates({ from: plan?.filters?.fromDate || '', to: plan?.filters?.toDate || '' })
-        // 새로 분석한 검색어에서는 이전 검색의 '기간 해제' 상태를 이어가지 않는다.
+        // AI가 역·동네만 듣고 시도를 안 적어도 문장에서 넓은 지역을 유추한다.
+        const planned = plan?.filters?.region || ''
+        setAiRegion(REGIONS.find(region => planned.includes(region)) || regionFromText(keyword))
+        // 새로 분석한 검색어에서는 이전 검색의 '기간·지역 해제' 상태를 이어가지 않는다.
         setAiPeriodOff(false)
+        setAiRegionOff(false)
+        setAiQuestions((plan?.clarificationQuestions ?? []).filter(
+          question => question.trim() && !answeredRef.current.includes(question.trim()),
+        ).slice(0, 3))
+        setQuestionDraft('')
         setAnalyzedKeyword(keyword)
       })
       .catch(() => {
         if (cancelled) return
-        // AI가 실패해도 원문 검색으로 공개 목록을 유지한다.
+        // AI가 실패해도 원문 검색과 지역 좁히기는 유지한다.
         setCriteria(EMPTY_SEARCH_CRITERIA)
         setAiDates({ from: '', to: '' })
         setAiPeriodOff(false)
+        setAiRegion(regionFromText(keyword))
+        setAiRegionOff(false)
+        setAiQuestions([])
         setAnalyzedKeyword(keyword)
       })
       .finally(() => { if (!cancelled) setAiBusy(false) })
     return () => { cancelled = true }
   }, [keyword, mode])
 
-  // 필터 UI에서 기간을 지워 URL 키가 사라졌으면 AI 추정 기간을 다시 넣지 않는다.
+  // 필터 UI에서 기간·지역을 지워 URL 키가 사라졌으면 AI 추정값을 다시 넣지 않는다.
   useEffect(() => {
     const hasDate = params.has('from') || params.has('to')
     if (hadDateKeys.current && !hasDate && (aiDates.from || aiDates.to)) setAiPeriodOff(true)
     if (hasDate) setAiPeriodOff(false)
     hadDateKeys.current = hasDate
-  }, [params, aiDates])
+    const hasRegion = params.has('region')
+    if (hadRegionKey.current && !hasRegion && aiRegion) setAiRegionOff(true)
+    if (hasRegion) setAiRegionOff(false)
+    hadRegionKey.current = hasRegion
+  }, [params, aiDates, aiRegion])
 
   const hints = useMemo(() => criteriaToHints(criteria), [criteria])
   // 페이지는 화면 표시용이다. 필터 객체가 페이지 때문에 바뀌면 다시 조회하므로 key에서 뺀다.
@@ -246,10 +306,12 @@ export default function DirectSearchPage() {
     const raw = readLostResultFilters(query)
     const dates = resolveAiDateFilters(query, aiDates, aiPeriodOff)
     return {
-      category: raw.category, color: raw.color, region: raw.region,
+      category: raw.category, color: raw.color,
+      region: resolveAiRegionFilter(query, aiRegion, aiRegionOff),
       from: dates.from, to: dates.to,
     }
-  }, [filterKey, aiDates, aiPeriodOff])
+  }, [filterKey, aiDates, aiPeriodOff, aiRegion, aiRegionOff])
+  const searchKey = useMemo(() => browseSearchKey(hints, filters), [hints, filters])
 
   // 검색은 서버 작업으로 넘긴다. 페이지를 옮기거나 탭을 닫아도 서버는 계속 진행하고,
   // 돌아오면 저장해 둔 jobId로 결과를 이어받는다.
@@ -267,7 +329,8 @@ export default function DirectSearchPage() {
       writeStoredSearch({
         keyword, input, page, params: params.toString(), mode,
         live: { ...value, raw: compactFoundItems(value.raw) },
-        criteria, aiDates, aiPeriodOff, analyzedKeyword: keyword, skipVisual, visualProgress,
+        criteria, aiDates, aiPeriodOff, aiRegion, aiRegionOff, aiQuestions, answeredQuestions,
+        analyzedKeyword: keyword, skipVisual, visualProgress,
       })
     }
     const clearIfCurrent = (jobId: string) => {
@@ -318,20 +381,20 @@ export default function DirectSearchPage() {
     const begin = async () => {
       try {
         const stored = readStoredJob()
-        const resumable = stored && stored.keyword === keyword
-          && (stored.mode ?? 'ai') === mode
-          && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
+        // AI 해석 전 원문 조회 작업을 조건이 생긴 뒤에도 이어 쓰면 지갑 대신
+        // 검은색 휴대폰·가방이 섞인다. 조회 조건이 같을 때만 작업을 재사용한다.
+        const resumable = canResumeBrowseJob(stored, searchKey, keyword, mode, reloadToken, skipVisual)
         // 더 찾아보기·작업 이어받기·새로고침처럼 같은 검색을 계속할 때만 점수를 되살린다.
         // 새 검색어에서는 이전 결과가 화면에 남아 있어도 점수를 절대 넘기지 않는다.
         const continuation = resumable || skipVisual > 0
         const priorVisualScores = priorScoresForSearch(stored, live, continuation)
         // page는 캐시 키와 무관하다. 처음 한 번만 전체를 조회한다.
-        const job = resumable
+        const job = resumable && stored
           ? { jobId: stored.jobId, status: 'pending' }
           : await startBrowseJob(keyword, 1, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
         if (cancelled) return
         writeStoredJob({
-          jobId: job.jobId, keyword, reloadToken, skipVisual, mode,
+          jobId: job.jobId, keyword, reloadToken, skipVisual, mode, searchKey,
           priorVisualScores,
         })
         await poll(job.jobId)
@@ -344,7 +407,7 @@ export default function DirectSearchPage() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [keyword, reloadToken, skipVisual, hints, filters, analyzedKeyword, mode])
+  }, [keyword, reloadToken, skipVisual, hints, filters, searchKey, analyzedKeyword, mode])
 
   // 로딩이 길어지면 경과 초를 보여준다.
   useEffect(() => {
@@ -365,7 +428,7 @@ export default function DirectSearchPage() {
   )
   const pages = Math.max(1, Math.ceil(live.total / API_ROWS))
   const appliedFilters = Object.values(filters).filter(Boolean).length
-  const criteriaGroups = ['apiKeywords', 'include', 'any', 'exclude'] as const
+  const criteriaGroups = ['apiKeywords', 'include', 'any', 'prefer', 'exclude'] as const
   const showTiers = Boolean(keyword) && !live.loading && !live.error && items.length > 0
 
   function goToPage(next: number) {
@@ -395,6 +458,27 @@ export default function DirectSearchPage() {
     if (keywordChanged) setKeyword(next)
     setMode(nextMode)
     if (!keywordChanged) setReloadToken(token => token + 1)
+  }
+
+  /** AI가 물은 장소를 답하면 답을 검색어에 붙여 다시 해석·조회한다. */
+  function answerQuestion(event: FormEvent, question: string) {
+    event.preventDefault()
+    const answer = questionDraft.trim().replace(/\s+/g, ' ')
+    if (!answer) return
+    const next = `${keyword} · ${answer}`.slice(0, 100)
+    const updated = new URLSearchParams(params)
+    updated.delete('page')
+    updated.delete('region')
+    restoreAiRef.current = null
+    restoreSearchRef.current = null
+    clearStoredJob()
+    answeredRef.current = [...answeredRef.current, question.trim()]
+    setAnsweredQuestions(answeredRef.current)
+    setAiQuestions(current => current.filter(item => item !== question))
+    setQuestionDraft('')
+    setParams(updated, { replace: true })
+    setInput(next)
+    setKeyword(next)
   }
 
   // 이미 본 사진만큼 건너뛰고 더 오래된 사진을 이어서 분석한다.
@@ -456,13 +540,24 @@ export default function DirectSearchPage() {
       {mode === 'ai' && !aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
       {mode === 'ai' && !aiBusy && <small>다른 페이지로 가도 검색은 계속돼요.</small>}
     </div>}
-    {mode === 'ai' && (hasSearchCriteria(criteria) || aiDates.from || aiDates.to) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
+    {mode === 'ai' && (hasSearchCriteria(criteria) || aiDates.from || aiDates.to || aiRegion) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
       <p className="lost-ai-criteria__title">AI가 적어둔 내용에서 알아챈 조건</p>
       <div className="lost-ai-criteria__chips">
         {criteriaGroups.filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}
+        {aiRegion && <span className="lost-ai-criteria__chip"><strong>지역</strong>{aiRegion}</span>}
         {(aiDates.from || aiDates.to) && <span className="lost-ai-criteria__chip"><strong>기간</strong>{[aiDates.from, aiDates.to].filter(Boolean).join(' ~ ')}</span>}
       </div>
       <p className="direct-search__ai-note">적어둔 말로 공개 정보를 넓게 찾아보고, 원하는 조건에 맞는 물건을 먼저 보여드렸어요. 사진이 닮은 물건도 앞쪽에 배치했어요.</p>
+    </div>}
+    {mode === 'ai' && aiQuestions.length > 0 && !aiBusy && !live.loading && <div className="direct-search__question" role="group" aria-label="검색 도우미 추가 질문">
+      {aiQuestions.map(question => <form key={question} onSubmit={event => answerQuestion(event, question)}>
+        <p>{question}</p>
+        <div className="direct-search__question-row">
+          <input value={questionDraft} onChange={event => setQuestionDraft(event.target.value)} placeholder="예: 신림역 인근" maxLength={60} aria-label="장소 답변" />
+          <button type="submit" className="button button--secondary" disabled={!questionDraft.trim()}>이대로 다시 찾기</button>
+        </div>
+        <small>대략적인 장소만 알려주셔도 괜찮아요. 그 지역 전체에서 다시 찾아봐요.</small>
+      </form>)}
     </div>}
     {showTiers && mode === 'ai' && <div className="direct-search__tiers" role="note">
       <strong>표시 순서</strong>

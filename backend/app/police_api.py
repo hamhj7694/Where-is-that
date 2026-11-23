@@ -212,7 +212,7 @@ CRITERIA_TEXT_FIELDS = (
     "name", "subject", "notes", "category", "color", "foundPlace",
     "storagePlace", "orgName", "address", "status", "keepType",
 )
-CRITERIA_LIMITS = {"apiKeywords": 3, "include": 8, "any": 8, "exclude": 8, "imageFeatures": 8}
+CRITERIA_LIMITS = {"apiKeywords": 3, "include": 8, "any": 8, "exclude": 8, "prefer": 8, "imageFeatures": 8}
 # 직접 찾기는 점수로 순위를 바꾸지 않고, 어떤 신호가 맞았는지 등급으로만 줄 세운다.
 MATCH_TIERS = {
     0: "AI+검색어+필터 일치",
@@ -292,7 +292,7 @@ def _term_matches(term: str, text: str) -> bool:
 def text_signal_score(item: dict, criteria: dict[str, list[str]], keyword: str) -> int:
     """제목에 핵심어가 들어간 정도를 점수로 만든다(사진 점수와 함께 순위에 쓴다)."""
     terms = []
-    for key in ("include", "any", "imageFeatures"):
+    for key in ("include", "any", "prefer", "imageFeatures"):
         terms.extend(criteria.get(key, []))
     terms.extend(token for token in re.split(r"\s+", keyword.lower()) if len(token) >= 2)
     terms = list(dict.fromkeys(terms))
@@ -322,14 +322,17 @@ def score_criteria(item: dict, criteria: dict[str, list[str]]) -> dict:
     text = _item_text(item)
     include = criteria.get("include", [])
     varied = criteria.get("any", []) + criteria.get("imageFeatures", [])
+    preferred = criteria.get("prefer", [])
     result["excluded"] = next((term for term in criteria.get("exclude", []) if _term_matches(term, text)), None)
     include_hits = [term for term in include if _term_matches(term, text)]
     varied_hits = [term for term in varied if _term_matches(term, text)]
+    preferred_hits = [term for term in preferred if _term_matches(term, text)]
     result["allInclude"] = bool(include) and len(include_hits) == len(include)
-    result["hits"] = include_hits + varied_hits
-    weight = len(include) * 3 + len(varied)
+    result["hits"] = include_hits + varied_hits + preferred_hits
+    weight = len(include) * 3 + len(varied) + len(preferred)
     if weight:
-        result["score"] = round((len(include_hits) * 3 + len(varied_hits)) / weight * 90 + (10 if result["allInclude"] else 0), 2)
+        achieved = len(include_hits) * 3 + len(varied_hits) + len(preferred_hits)
+        result["score"] = round(achieved / weight * 90 + (10 if result["allInclude"] else 0), 2)
     return result
 
 
@@ -610,51 +613,63 @@ def browse_all(
             api_keywords = []
         limit_reached = cap > 0 and any(value > scanned_per_term * rows for value in reported_totals.values())
 
-    # 어떤 신호가 맞았는지 등급으로 표시하고 전부 보여준다. NOT만 명시적으로 제외한다.
-    # 등급이 높을수록 앞에 오고, 같은 등급 안에서는 공개 API의 최신순/ID순을 유지한다.
+    # 어떤 신호가 맞았는지 등급으로 표시하고 전부 보여준다. NOT는 명시적으로 제외하고,
+    # '지갑'·'노트북'처럼 공식 분류명 그대로의 품목어도 카테고리 하드 필터로 적용한다.
+    # 장소어는 이미 prefer로 옮겨졌고, 수식어가 붙은 문구·색상은 순위에만 반영한다.
+    hard_include = [term for term in criteria.get("include", []) if lostfound_codes.is_category_term(term)]
     hard_criteria = {key: value for key, value in criteria.items() if key == "exclude"}
+    if hard_include:
+        hard_criteria["include"] = hard_include
     has_ai = bool(criteria)
     has_keyword = bool(cleaned)
     has_filters = any(str(value or "").strip() for value in (filters or {}).values())
     active_signals = has_ai + has_keyword + has_filters
-    merged: dict[str, dict] = {}
-    deduped: dict[str, dict] = {}
-    for source in SOURCES:
-        for row in results.get(source, []):
-            if row["id"] in merged:
-                continue
-            if not criteria_pass(row, hard_criteria):
-                continue
-            merged[row["id"]] = row
-            key = _browse_dedupe_key(row)
-            if key in deduped:
-                continue
-            match = score_criteria(row, criteria)
-            ai_ok = criteria_pass(row, criteria) if has_ai else False
-            keyword_ok = _term_matches(cleaned.lower(), _item_text(row)) if has_keyword else False
-            filter_ok = metadata_pass(row, filters, skip_region=use_codes and region_applied) if has_filters else False
-            matched_signals = int(ai_ok) + int(keyword_ok) + int(filter_ok)
-            if active_signals >= 2 and matched_signals == active_signals:
-                tier = 0
-            elif ai_ok:
-                tier = 1
-            elif keyword_ok:
-                tier = 2
-            elif filter_ok:
-                tier = 3
-            elif match["hits"]:
-                tier = 4
-            else:
-                tier = 5
-            row["matchTier"] = tier
-            if tier == 0:
-                matched = [name for name, ok in (("AI", ai_ok), ("검색어", keyword_ok), ("조건 필터", filter_ok)) if ok]
-                row["matchLabel"] = "+".join(matched) + " 일치"
-            else:
-                row["matchLabel"] = MATCH_TIERS[tier]
-            row["matchScore"] = _score(row, cleaned)
-            row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
-            deduped[key] = row
+    def collect(hard: dict) -> dict[str, dict]:
+        merged: dict[str, dict] = {}
+        deduped: dict[str, dict] = {}
+        for source in SOURCES:
+            for row in results.get(source, []):
+                if row["id"] in merged:
+                    continue
+                if not criteria_pass(row, hard):
+                    continue
+                merged[row["id"]] = row
+                key = _browse_dedupe_key(row)
+                if key in deduped:
+                    continue
+                match = score_criteria(row, criteria)
+                ai_ok = criteria_pass(row, criteria) if has_ai else False
+                keyword_ok = _term_matches(cleaned.lower(), _item_text(row)) if has_keyword else False
+                filter_ok = metadata_pass(row, filters, skip_region=use_codes and region_applied) if has_filters else False
+                matched_signals = int(ai_ok) + int(keyword_ok) + int(filter_ok)
+                if active_signals >= 2 and matched_signals == active_signals:
+                    tier = 0
+                elif ai_ok:
+                    tier = 1
+                elif keyword_ok:
+                    tier = 2
+                elif filter_ok:
+                    tier = 3
+                elif match["hits"]:
+                    tier = 4
+                else:
+                    tier = 5
+                row["matchTier"] = tier
+                if tier == 0:
+                    matched = [name for name, ok in (("AI", ai_ok), ("검색어", keyword_ok), ("조건 필터", filter_ok)) if ok]
+                    row["matchLabel"] = "+".join(matched) + " 일치"
+                else:
+                    row["matchLabel"] = MATCH_TIERS[tier]
+                row["matchScore"] = _score(row, cleaned)
+                row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
+                deduped[key] = row
+        return deduped
+
+    deduped = collect(hard_criteria)
+    if not deduped and hard_include:
+        # 분류명 그대로의 품목어가 하나도 없으면 화면을 비우지 않는다.
+        # 이때도 NOT는 유지하고, 품목어는 다른 단서와 함께 순위에만 반영한다.
+        deduped = collect({key: value for key, value in criteria.items() if key == "exclude"})
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
     # 같은 등급 안에서도 제목·본문에 맞은 말이 많은 물건부터 보여준다.
     # 사진 점수는 텍스트 신호×10과 합산해 텍스트 우선 순위를 유지한다(최종 정렬도 같은 규칙).

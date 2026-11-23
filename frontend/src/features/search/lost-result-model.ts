@@ -83,6 +83,17 @@ export function resolveAiDateFilters(
   return { from: values.from || aiDates.from, to: values.to || aiDates.to }
 }
 
+/** 자연어에서 읽은 지역과 사용자가 고른 지역을 합친다(기간과 같은 '지웠음' 신호 사용). */
+export function resolveAiRegionFilter(
+  params: URLSearchParams,
+  aiRegion: string,
+  aiRegionOff = false,
+): string {
+  const selected = readLostResultFilters(params).region
+  if (aiRegionOff) return selected
+  return selected || aiRegion
+}
+
 export function lostResultFilterLabel(key: LostResultFilterKey, value: string): string {
   return key === 'view' ? REFERENCE_PHOTO_VIEWS.find(option => option.value === value)?.label ?? '전체 방향' : value
 }

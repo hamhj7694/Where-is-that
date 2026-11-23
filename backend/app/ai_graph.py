@@ -85,7 +85,15 @@ def _search_finish(state: SearchState) -> dict:
     value = dict(state["value"])
     value["originalQuery"] = request.query
     value["imageDescriptions"] = state.get("descriptions", [])
-    value["criteria"] = ai_pipeline._normalize_criteria(value.get("criteria"), value.get("channels"))
+    value["criteria"] = ai_pipeline._normalize_criteria(value.get("criteria"), value.get("channels"), request.query)
+    # AI가 '강남역' 같은 값을 지역에 넣어도 17개 시도 이름으로 정리한다.
+    # 여기서 걸러진 값은 화면이 문장에서 다시 유추하므로 지역 단서가 사라지지 않는다.
+    from .lostfound_codes import REGION_CODES
+
+    filters = value.get("filters") if isinstance(value.get("filters"), dict) else {}
+    region = str(filters.get("region") or "").strip()
+    filters["region"] = next((name for name in REGION_CODES if region and (name in region or region in name)), "")
+    value["filters"] = filters
     try:
         return {"plan": AiSearchPlan.model_validate(value)}
     except ValidationError as error:

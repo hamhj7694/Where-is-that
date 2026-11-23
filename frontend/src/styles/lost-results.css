@@ -36,6 +36,7 @@ button.gallery-result-section__more { border: 0; background: none; cursor: point
 .lost-ai-criteria__chip strong { color: var(--ink); font-weight: 600; white-space: nowrap; }
 .lost-ai-criteria__chip--include strong { color: #1c6b4a; }
 .lost-ai-criteria__chip--any strong { color: #2f5d9e; }
+.lost-ai-criteria__chip--prefer strong { color: #a15c00; }
 .lost-ai-criteria__chip--exclude strong { color: #a32d2d; }
 .lost-ai-criteria__chip--imageFeatures strong { color: #7a4ca3; }
 .lost-ai-criteria__note { margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }

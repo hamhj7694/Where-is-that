@@ -62,7 +62,7 @@ VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
 VISUAL_EARLY_STOP_HIT_MIN = 70
 # 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
-BROWSE_ALGO_VERSION = 9
+BROWSE_ALGO_VERSION = 11
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:

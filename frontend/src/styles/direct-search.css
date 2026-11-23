@@ -215,7 +215,7 @@
   gap: 5px;
   margin: 12px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .direct-search__tiers strong { margin-right: 3px; color: var(--text-secondary); }
 .direct-search__tier {
@@ -231,7 +231,7 @@
   padding: 2px 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
   color: var(--text-secondary);
@@ -250,7 +250,7 @@
   padding: 2px 7px;
   border: 1px solid #b7dcc9;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
   color: #0f6b4f;
@@ -274,3 +274,24 @@
   line-height: 1.5;
 }
 .direct-search__deeper .button { min-height: 36px; padding-inline: 14px; font-size: 13px; white-space: nowrap; }
+
+/* 검색 도우미가 장소를 물을 때: 답하면 그 지역 전체를 다시 살펴본다 */
+.direct-search__question {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #e9c98d;
+  border-radius: 10px;
+  background: #fffaf0;
+}
+.direct-search__question p { margin: 0 0 8px; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.5; }
+.direct-search__question-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.direct-search__question-row input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.direct-search__question-row .button { min-height: 38px; white-space: nowrap; }
+.direct-search__question small { display: block; margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }

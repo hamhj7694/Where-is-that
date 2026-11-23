@@ -410,6 +410,62 @@ def test_browse_applies_ai_criteria_across_pages_and_dedupes(monkeypatch):
     assert result["items"][0]["aiMatch"]["hits"] == ["가죽"]
 
 
+def test_browse_category_term_filters_out_other_categories(monkeypatch):
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {
+            "items": [
+                row("police:phone", "2026-03-03", name="검은색 휴대폰", subject="검은색 휴대폰", category="휴대폰 > 삼성휴대폰"),
+                row("police:wallet", "2026-03-02", name="검은색 지갑", subject="검은색 지갑", category="지갑 > 남성용 지갑"),
+            ] if page == 1 else [],
+            "totalCount": 2,
+        }
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all(
+        "", 1, 10,
+        hints={"include": ["지갑"], "any": ["검은색"], "prefer": ["지하철"]},
+        max_pages=1,
+    )
+
+    # 지갑은 공식 분류명이므로 하드 필터로 적용되고, 장소어·색상은 순위에만 반영된다.
+    assert [item["id"] for item in result["items"]] == ["police:wallet"]
+    assert result["total"] == 1
+
+
+def test_browse_falls_back_when_category_term_has_no_match(monkeypatch):
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {
+            "items": [row("police:carrier", "2026-03-01", name="회색 캐리어", category="가방 > 기타가방")],
+            "totalCount": 1,
+        }
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all(
+        "", 1, 10, hints={"include": ["노트북"], "any": ["회색"]}, max_pages=1,
+    )
+
+    # 해당 분류가 없으면 빈 화면 대신 부분 일치 결과를 보여준다.
+    assert [item["id"] for item in result["items"]] == ["police:carrier"]
+    assert result["items"][0]["matchTier"] == 4
+
+
+def test_browse_keeps_modified_phrase_as_soft_condition(monkeypatch):
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {
+            "items": [
+                row("police:branded", "2026-03-02", name="교촌 쇼핑백", category="쇼핑백 > 쇼핑백"),
+                row("police:books", "2026-03-01", name="책이 든 쇼핑백", category="쇼핑백 > 쇼핑백"),
+            ] if page == 1 else [],
+            "totalCount": 2,
+        }
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all("", 1, 10, hints={"include": ["교촌 쇼핑백"]}, max_pages=1)
+
+    # 분류명에 수식어가 붙은 문구는 하드 필터로 쓰지 않는다.
+    assert {item["id"] for item in result["items"]} == {"police:branded", "police:books"}
+
+
 def test_browse_shows_unmatched_item_as_public_tier(monkeypatch):
     def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
         return {"items": [row("police:item", "2026-03-01")] if page == 1 else [], "totalCount": 1}
@@ -568,6 +624,23 @@ def test_same_result_is_not_scanned_twice(monkeypatch):
     main._apply_visual_hints(result, payload)
     main._apply_visual_hints(result, payload)
     assert len(batches) == 1
+
+
+def test_prefer_terms_rank_higher_without_filtering_out_others():
+    near = row("police:near", "2026-01-02", subject="지하철에서 습득한 지갑", matchTier=1)
+    far = row("police:far", "2026-01-01", subject="지갑", matchTier=1)
+    result = {"items": [far, near], "allItems": [far, near], "total": 2}
+    payload = SimpleNamespace(
+        keyword="지갑", hints={"include": ["지갑"], "prefer": ["지하철"]},
+        page=1, rows=2, skipVisual=0, priorVisualScores={},
+    )
+
+    updated = main._apply_visual_hints(result, payload)
+
+    ids = [item["id"] for item in updated["items"]]
+    assert ids[0] == "police:near"
+    assert "police:far" in ids
+    assert all(item["matchTier"] == 1 for item in updated["items"])
 
 
 def test_duplicate_public_photo_is_sent_once_and_score_is_copied(monkeypatch):

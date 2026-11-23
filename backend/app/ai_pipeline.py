@@ -149,10 +149,51 @@ def _describe_images(images: list[str]) -> list[str]:
     return [item[:300] for item in descriptions]
 
 
-def _normalize_criteria(value: object, channels: dict) -> dict[str, list[str]]:
+_PLACE_WORDS = (
+    "지하철", "전철", "기차", "버스", "정류장", "공항", "터미널", "역", "인근", "근처", "주변",
+    "편의점", "카페", "식당", "공원", "학교", "병원", "도서관", "백화점", "마트", "영화관",
+)
+_STATION_NAME = re.compile(r"[가-힣A-Za-z0-9]{1,8}(?:지하철역|전철역|역)")
+_PLACE_SUFFIX = re.compile(r"(?:시|구|군|동|로|길|역)$")
+
+
+def _is_place_term(term: str) -> bool:
+    """'지하철에서 잃었다' 같은 장소 단서인지 확인한다(물건명은 제외)."""
+    return any(word in term for word in _PLACE_WORDS) or bool(_STATION_NAME.search(term)) or bool(_PLACE_SUFFIX.search(term))
+
+
+def _place_terms_from_query(query: str) -> list[str]:
+    found: list[str] = []
+    for match in re.findall(r"[가-힣A-Za-z0-9]{1,8}(?:지하철역|전철역|역)", query):
+        if match not in found:
+            found.append(match)
+    for word in ("지하철", "전철", "버스"):
+        if word in query and word not in found:
+            found.append(word)
+    return found[:8]
+
+
+def _soften_place_terms(criteria: dict[str, list[str]], query: str) -> dict[str, list[str]]:
+    # 장소는 등록자가 적지 않는 경우가 많다. 꼭 포함·하나라도 포함에서 빼고
+    # 순위만 올리는 단서로 옮겨서, 장소가 없어도 물건 자체는 결과에 남게 한다.
+    terms = [
+        *[term for term in criteria.get("include", []) if _is_place_term(term)],
+        *[term for term in criteria.get("any", []) if _is_place_term(term)],
+        *criteria.get("prefer", []),
+        *_place_terms_from_query(query),
+    ]
+    if not terms:
+        return criteria
+    criteria["include"] = [term for term in criteria.get("include", []) if not _is_place_term(term)]
+    criteria["any"] = [term for term in criteria.get("any", []) if not _is_place_term(term)]
+    criteria["prefer"] = list(dict.fromkeys(terms))[:8]
+    return criteria
+
+
+def _normalize_criteria(value: object, channels: dict, query: str = "") -> dict[str, list[str]]:
     """AI 응답의 맞춤 검색 조건을 정리하고, 빠진 탐색어는 채널 계획에서 보완한다."""
     raw = value if isinstance(value, dict) else {}
-    limits = {"apiKeywords": 3, "include": 8, "any": 8, "exclude": 8, "imageFeatures": 8}
+    limits = {"apiKeywords": 3, "include": 8, "any": 8, "exclude": 8, "prefer": 8, "imageFeatures": 8}
     result: dict[str, list[str]] = {}
     for key, limit in limits.items():
         source = raw.get(key)
@@ -179,7 +220,7 @@ def _normalize_criteria(value: object, channels: dict) -> dict[str, list[str]]:
         result["apiKeywords"] = [term for term in fallback if term][:3]
     if not any(result[key] for key in ("include", "any", "exclude", "imageFeatures")):
         result["include"] = [term for term in fallback[2:] if term][:8]
-    return result
+    return _soften_place_terms(result, query or str(fallback[0] or ""))
 
 
 def prepare_search(request: AiSearchRequest) -> AiSearchPlan:

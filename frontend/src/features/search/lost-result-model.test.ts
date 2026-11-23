@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate } from './catalog-model'
-import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, sortByRankTier, validateLostResultDates, type LostResultState } from './lost-result-model'
+import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, resolveAiRegionFilter, sortByRankTier, validateLostResultDates, type LostResultState } from './lost-result-model'
 import { REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from './model'
 
 function candidate(id: string, patch: Partial<Candidate> = {}): Candidate {
   return { id, title: id, image: '/sample.jpg', photoStatus: 'verified_photo', category: '지갑', color: '검정', description: '', foundAt: '2026-11-18', foundPlace: '서울 · 샘플 장소', custodyName: null, officialUrl: null, matchReasons: [], location: { status: 'missing', address: null }, ...patch }
 }
+
+describe('자연어 지역 필터', () => {
+  it('선택한 지역이 있으면 AI 추정 지역보다 우선하고, 지웠으면 다시 넣지 않는다', () => {
+    expect(resolveAiRegionFilter(new URLSearchParams(), '서울')).toBe('서울')
+    expect(resolveAiRegionFilter(new URLSearchParams({ region: '제주' }), '서울')).toBe('제주')
+    expect(resolveAiRegionFilter(new URLSearchParams(), '서울', true)).toBe('')
+  })
+})
 
 describe('AI 점수 계층 정렬', () => {
   const banana = candidate('banana')
