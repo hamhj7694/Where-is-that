@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app import ai_pipeline, config, db, main
+from app import ai_pipeline, config, db, image_similarity, main
 
 
 @pytest.fixture
@@ -407,6 +407,33 @@ def test_match_public_images_scores_photos_and_descriptions_together(client, mon
     assert results["description-only"]["imageSimilarity"] == 100
     assert results["no-trait"]["imageSimilarity"] == 50
     assert [item["id"] for item in body["results"]][0] == "description-only"
+
+
+def test_weak_web_reference_score_falls_back_to_multimodal(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(image_similarity, "is_configured", lambda: True)
+    monkeypatch.setattr(image_similarity, "score_similarity", lambda *_args: {"card": 0})
+    monkeypatch.setattr(
+        ai_pipeline, "_fetch_public_image",
+        lambda url: "data:image/jpeg;base64,YQ==" if url.endswith("photo.do") else None,
+    )
+    monkeypatch.setattr(
+        ai_pipeline, "_multimodal_visual_scores",
+        lambda query, features, references, images: (calls.append(images) or {"card": 88}),
+    )
+
+    response = client.post("/api/ai/vision/match-public", json={
+        "query": "치이카와", "imageFeatures": ["치이카와"],
+        "references": ["data:image/jpeg;base64,YQ=="],
+        "candidates": [{"id": "card", "imageUrl": "https://minwon24.police.go.kr/photo.do"}],
+        "externalProcessingConfirmed": True,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert calls == [{"card": "data:image/jpeg;base64,YQ=="}]
+    assert body["source"] == "multimodal"
+    assert body["results"][0]["imageSimilarity"] == 88
 
 
 def test_match_public_images_without_photo_uses_only_text(client, monkeypatch):

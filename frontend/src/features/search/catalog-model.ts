@@ -43,6 +43,8 @@ export interface Candidate {
   /** 직접 찾기: 어떤 신호가 맞았는지 등급과 표시 문구. */
   matchTier?: number
   matchLabel?: string
+  /** AI가 공개 사진을 직접 보고 매긴 점수. */
+  visualScore?: number | null
   location: CandidateLocation
   /** 실제 공개 API 상세에서 받은 보관기관 연락처. */
   tel?: string | null

@@ -252,12 +252,20 @@ def _low_confidence_text_scores(scores: dict[str, int]) -> bool:
     )
 
 
+def _low_confidence_reference_scores(scores: dict[str, int]) -> bool:
+    # 웹에서 가져온 참고 사진은 작거나 각도가 달라 CLIP 점수가 0으로 나오는 경우가 있다.
+    # 이때 멀티모달이 사진을 직접 보지 않으면 낯선 캐릭터를 놓친다.
+    values = sorted(scores.values(), reverse=True)
+    return not values or values[0] < 40
+
+
 def _visual_route_after_embed(state: VisualState) -> str:
     if not state["computed"]:
         return "fallback"
-    # 참고 사진이 있는 CLIP 비교는 실측 R@1 1.0이므로 폴백을 생략한다.
+    if state["request"].references:
+        return "fallback" if _low_confidence_reference_scores(state["computed"]) else "describe"
     # 텍스트만 있는 비교는 점수가 평평하면 멀티모달이 사진을 직접 보게 한다.
-    if not state["request"].references and _low_confidence_text_scores(state["computed"]):
+    if _low_confidence_text_scores(state["computed"]):
         return "fallback"
     return "describe"
 

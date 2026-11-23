@@ -291,6 +291,7 @@ class FoundItem(BaseModel):
     matchScore: float = 0
     matchTier: int = 5
     matchLabel: str = ""
+    visualScore: int | None = None
     detailLoaded: bool = False
     display: dict[str, str] = Field(default_factory=dict)
     aiMatch: AiMatchInfo | None = None
@@ -334,6 +335,7 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     scanLimitReached: bool = False
     criteriaApplied: bool = False
     filtersApplied: dict[str, str] = Field(default_factory=dict)
+    visualAnalyzed: bool = False
 
 
 class BrowseJobStart(BaseModel):
@@ -350,6 +352,8 @@ class BrowseJobStatus(BaseModel):
     status: str
     result: LostFoundBrowseResponse | None = None
     error: str | None = None
+    visualScanned: int = 0
+    visualTotal: int = 0
 
 
 class MapConfigResponse(BaseModel):

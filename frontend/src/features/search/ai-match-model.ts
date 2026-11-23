@@ -127,13 +127,35 @@ export function publicItemText(item: TextSource): string {
     .toLocaleLowerCase('ko-KR')
 }
 
+const MASK_CHARS = '*?●○×'
+const MASKED_SPAN = /[^\s()[\],·|]+[*?●○×][^\s()[\],·|]+/g
+const WORD = /[^\s()[\],·|]+/g
+
+function maskPattern(token: string): RegExp | null {
+  if (![...token].some(char => MASK_CHARS.includes(char))) return null
+  const body = [...token].map(char => MASK_CHARS.includes(char) ? '.{1,3}' : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')
+  return new RegExp('^' + body + '$')
+}
+
+function maskedNameMatch(needle: string, text: string): boolean {
+  const queryPattern = maskPattern(needle)
+  if (queryPattern) return (text.match(WORD) ?? []).some(token => queryPattern.test(token))
+  for (const span of text.match(MASKED_SPAN) ?? []) {
+    const pattern = maskPattern(span)
+    if (pattern && needle.split(' ').some(token => pattern.test(token))) return true
+  }
+  return false
+}
+
 function termMatches(term: string, text: string): boolean {
   const needle = term.trim().toLocaleLowerCase('ko-KR')
   if (!needle || !text) return false
   if (text.includes(needle)) return true
   // '가죽 지갑'처럼 띄어쓰기가 섞인 표현은 각 어절이 모두 있으면 일치로 본다.
   const tokens = needle.split(' ').filter(Boolean)
-  return tokens.length > 1 && tokens.every(token => text.includes(token))
+  if (tokens.length > 1 && tokens.every(token => text.includes(token))) return true
+  // 공개값이 '류*진'처럼 가려져 있어도 '류영진' 검색을 찾아낸다.
+  return maskedNameMatch(needle, text)
 }
 
 export interface CriteriaMatch {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from app import police_api
+from types import SimpleNamespace
+
+from app import ai_pipeline, main, police_api
 
 
 def row(identifier: str, date: str, **overrides) -> dict:
@@ -29,6 +31,74 @@ def row(identifier: str, date: str, **overrides) -> dict:
     }
     item.update(overrides)
     return item
+
+
+def test_masked_name_matches_a_filled_in_query():
+    # 공개 API가 '류*진'으로 가려도 사용자가 '류영진'·'류세진'을 쳐서 찾을 수 있다.
+    assert police_api._term_matches("류영진", "이름 류*진 입니다")
+    assert police_api._term_matches("류세진", "이름 류*진 입니다")
+    assert police_api._term_matches("류*진", "이름 류영진 입니다")
+    assert not police_api._term_matches("김영진", "이름 류*진 입니다")
+
+
+def test_browse_scans_broad_when_keyword_returns_nothing(monkeypatch):
+    hidden = row("police:hidden", "2026-11-22", name="류*진", subject="가죽 지갑")
+
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {"items": [hidden] if not keyword else [], "totalCount": 1 if not keyword else 0}
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all("류영진", 1, 10, max_pages=2)
+    assert [item["id"] for item in result["items"]] == ["police:hidden"]
+    assert result["items"][0]["matchTier"] == 2  # 가려진 이름이라도 검색어 일치로 올라온다
+
+
+def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="치이카와", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+    )
+    plain = row("police:plain", "2026-11-23")
+    card = row("police:card", "2026-11-22", imageUrl="https://www.lost112.go.kr/a.jpg", name="신한카드")
+    result = {"items": [plain], "allItems": [plain, card], "total": 2}
+
+    def fake_match(request):
+        assert request.externalProcessingConfirmed is True
+        return SimpleNamespace(results=[
+            SimpleNamespace(id="police:card", imageSimilarity=90, basis="photo"),
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    updated = main._apply_visual_hints(result, payload)
+    assert updated["items"][0]["id"] == "police:card"
+    assert updated["items"][0]["matchTier"] == 0
+    assert updated["items"][0]["visualScore"] == 90
+    assert updated["visualAnalyzed"] is True
+
+
+def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+    )
+    items = [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 11)
+    ]
+    items[9]["foundDate"] = "2026-11-22"  # 가장 최신 항목을 맨 뒤에 둔다.
+    result = {"items": [items[0]], "allItems": items, "total": 10}
+    batches: list[list[str]] = []
+
+    def fake_match(request):
+        batches.append([candidate.id for candidate in request.candidates])
+        return SimpleNamespace(results=[
+            SimpleNamespace(id=candidate.id, imageSimilarity=95, basis="photo")
+            for candidate in request.candidates
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    main._apply_visual_hints(result, payload)
+    assert len(batches) == 1  # 90점 이상이 나오면 더 오래된 묶음은 보지 않는다.
+    assert batches[0][0] == "police:10"
+    assert batches[0] == [f"police:{index}" for index in range(10, 2, -1)]
 
 
 def test_browse_filters_whole_pool_and_recalculates_total(monkeypatch):

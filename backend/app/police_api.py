@@ -249,13 +249,41 @@ def _item_text(item: dict) -> str:
     return re.sub(r"\s+", " ", text).lower()
 
 
+# 공개 API는 개인정보를 '류*진'처럼 가려서 준다. 사용자가 '류영진'을 쳐도 같은 사람으로 찾아야 한다.
+MASK_CHARS = "*?●○×"
+_MASKED_SPAN = re.compile(r"[^\s()\[\],·|]+[" + re.escape(MASK_CHARS) + r"][^\s()\[\],·|]+")
+_WORD = re.compile(r"[^\s()\[\],·|]+")
+
+
+def _mask_pattern(token: str) -> re.Pattern | None:
+    """가려진 글자를 한 글자 이상의 와일드카드로 바꾼 정규식."""
+    if not any(char in token for char in MASK_CHARS):
+        return None
+    parts = [".{1,3}" if char in MASK_CHARS else re.escape(char) for char in token]
+    return re.compile("^" + "".join(parts) + "$", re.IGNORECASE)
+
+
+def _masked_name_match(needle: str, text: str) -> bool:
+    """검색어 쪽이나 공개값 쪽이 가려진 이름이어도 서로 맞는지 본다."""
+    query_pattern = _mask_pattern(needle)
+    if query_pattern:
+        return any(query_pattern.fullmatch(token) for token in _WORD.findall(text))
+    for span in _MASKED_SPAN.findall(text):
+        span_pattern = _mask_pattern(span)
+        if span_pattern and any(span_pattern.fullmatch(token) for token in needle.split()):
+            return True
+    return False
+
+
 def _term_matches(term: str, text: str) -> bool:
     if not term or not text:
         return False
     if term in text:
         return True
     tokens = term.split()
-    return len(tokens) > 1 and all(token in text for token in tokens)
+    if len(tokens) > 1 and all(token in text for token in tokens):
+        return True
+    return _masked_name_match(term.lower(), text.lower())
 
 
 def score_criteria(item: dict, criteria: dict[str, list[str]]) -> dict:
@@ -475,29 +503,51 @@ def browse_all(
         results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(param_sets, cleaned, page, rows, max_pages)
         reported_totals["filtered"] = total_reported
     else:
-        api_keywords = (criteria.get("apiKeywords") or ([cleaned] if cleaned else [""]))[:3]
+        raw_keywords = criteria.get("apiKeywords") or ([cleaned] if cleaned else [""])
+        split_keywords: list[str] = []
+        for term in raw_keywords:
+            split_keywords.extend(term.split())
+        api_keywords = list(dict.fromkeys(split_keywords))[:3] or [""]
         cap = config.LOSTFOUND_MAX_PAGES if max_pages is None else max_pages
-        pages_per_term = max(1, cap // len(api_keywords)) if cap else 1
         results: dict[str, list[dict]] = {}
         errors: list[dict] = []
-        with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
-            futures = {
-                (term, source, number): executor.submit(search, source, term, number, rows)
-                for term in api_keywords
-                for number in range(1, pages_per_term + 1)
-                for source in SOURCES
-            }
-            for (term, source, _number), future in futures.items():
-                try:
-                    payload = future.result()
-                except PoliceError as error:
-                    if not any(error_item["source"] == source for error_item in errors):
-                        errors.append({"source": source, "code": error.code, "message": error.message})
-                    continue
-                results.setdefault(source, []).extend(payload["items"])
-                reported_totals[term] = max(reported_totals.get(term, 0), payload["totalCount"])
-        pages_scanned = pages_per_term * len(api_keywords)
-        limit_reached = cap > 0 and any(value > pages_per_term * rows for value in reported_totals.values())
+
+        scanned_per_term = 1
+
+        def scan_terms(terms: list[str]) -> int:
+            nonlocal scanned_per_term
+            per_term = max(1, cap // len(terms)) if cap else 1
+            scanned_per_term = per_term
+            with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
+                futures = {
+                    (term, source, number): executor.submit(search, source, term, number, rows)
+                    for term in terms
+                    for number in range(1, per_term + 1)
+                    for source in SOURCES
+                }
+                for (term, source, _number), future in futures.items():
+                    try:
+                        payload = future.result()
+                    except PoliceError as error:
+                        if not any(error_item["source"] == source for error_item in errors):
+                            errors.append({"source": source, "code": error.code, "message": error.message})
+                        continue
+                    results.setdefault(source, []).extend(payload["items"])
+                    reported_totals[term] = max(reported_totals.get(term, 0), payload["totalCount"])
+            return per_term * len(terms)
+
+        # 좁은 탐색어만 쓰면 공개 원문에 없는 이름·사진 특징을 놓친다.
+        # 같은 페이지 예산 안에서 빈 탐색어로 최신 항목도 함께 훑는다.
+        scan_terms_list = list(dict.fromkeys([*api_keywords, ""])) if cleaned else api_keywords
+        pages_scanned = scan_terms(scan_terms_list)
+        # 이름처럼 공개 원문에 그대로 없는 검색어는 0건이 나온다.
+        # 이때 한 번 더 넓게 훑어 가려진 이름('류*진')이나 사진 속 특징을 찾을 수 있게 한다.
+        if cleaned and not any(results.values()):
+            results = {}
+            reported_totals = {}
+            pages_scanned = scan_terms([""])
+            api_keywords = []
+        limit_reached = cap > 0 and any(value > scanned_per_term * rows for value in reported_totals.values())
 
     # 어떤 신호가 맞았는지 등급으로 표시하고 전부 보여준다. NOT만 명시적으로 제외한다.
     # 등급이 높을수록 앞에 오고, 같은 등급 안에서는 공개 API의 최신순/ID순을 유지한다.
@@ -554,6 +604,9 @@ def browse_all(
         "sources": [source for source in SOURCES if source in results],
         "total": total,
         "items": items[start:start + rows],
+        # 사진 분석은 페이지에 잘려 나간 항목도 봐야 하므로 전체 후보를 함께 넘긴다.
+        # 응답 모델에서는 제외되고, 서버 안에서만 재정렬·재페이지네이션에 쓴다.
+        "allItems": items,
         "errors": errors,
         "page": page,
         "rows": rows,

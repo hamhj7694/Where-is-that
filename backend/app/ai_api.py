@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from . import web_reference
 from .ai_pipeline import (
     AiPipelineError,
     match_visual_features,
@@ -40,9 +41,21 @@ def ai_compare_candidates(request: AiRankRequest) -> dict:
 
 @router.post("/vision/match-public")
 def ai_match_public_images(request: AiVisualMatchRequest) -> dict:
-    """참고 사진 유무와 무관하게 공개 항목의 사진·설명을 시각 특징으로 비교한다."""
+    """참고 사진 유무와 무관하게 공개 항목의 사진·설명을 시각 특징으로 비교한다.
+
+    말로만 모르는 캐릭터는 웹에서 찾은 참고 사진·특징을 중간 단계에서 추가한다.
+    """
     try:
-        return match_visual_features(request).model_dump()
+        if request.webReferenceApplied:
+            return match_visual_features(request).model_dump()
+        features, references = web_reference.enrich(
+            list(request.imageFeatures), list(request.references)
+        )
+        enriched = request.model_copy(update={
+            "imageFeatures": features, "references": references,
+            "webReferenceApplied": True,
+        })
+        return match_visual_features(enriched).model_dump()
     except AiPipelineError as error:
         raise _http_error(error) from error
 

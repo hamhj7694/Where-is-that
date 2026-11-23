@@ -30,6 +30,8 @@ export interface FoundItem {
   /** 어떤 신호가 맞았는지 등급. 낮을수록 우선순위가 높다. */
   matchTier?: number
   matchLabel?: string
+  /** 서버가 공개 사진을 직접 보고 매긴 시각 특징 점수. */
+  visualScore?: number | null
 }
 
 export interface RouteResult {
@@ -231,6 +233,9 @@ export interface BrowseJobStatus {
   status: 'pending' | 'running' | 'done' | 'error'
   result?: BrowsePayload
   error?: string | null
+  /** 서버가 공개 사진을 몇 장까지 봤는지. */
+  visualScanned?: number
+  visualTotal?: number
 }
 
 function browseBody(
@@ -332,6 +337,7 @@ export function toCandidate(item: FoundItem, detailed = false): Candidate {
     matchReasons: [],
     matchTier: item.matchTier,
     matchLabel: item.matchLabel,
+    visualScore: item.visualScore,
     location: {
       status: hasCoords ? 'verified' : item.address ? 'address_only' : 'missing',
       address: item.address || null,

@@ -243,3 +243,16 @@
 .direct-search__tier--tier3, .found-card__tier--3 { color: #6b3fa0; border-color: #cbb0e8; background: #f5effd; }
 .direct-search__tier--tier4, .found-card__tier--4 { color: #8a5a00; border-color: #e5cfa4; background: #fbf5e9; }
 .direct-search__tier--tier5, .found-card__tier--5 { color: var(--text-muted); border-color: var(--line); background: var(--surface); }
+.found-card__visual {
+  display: inline-block;
+  width: fit-content;
+  margin: 0 0 2px 4px;
+  padding: 2px 7px;
+  border: 1px solid #b7dcc9;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #0f6b4f;
+  background: #e7f8f0;
+}

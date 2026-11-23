@@ -74,6 +74,8 @@ export default function DirectSearchPage() {
   const [live, setLive] = useState<LiveState>(() => initialLive(true))
   const [reloadToken, setReloadToken] = useState(0)
   const [elapsed, setElapsed] = useState(0)
+  const [visualProgress, setVisualProgress] = useState({ scanned: 0, total: 0 })
+  const [aiDates, setAiDates] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [criteria, setCriteria] = useState<AiSearchCriteria>(EMPTY_SEARCH_CRITERIA)
   const [aiBusy, setAiBusy] = useState(false)
   // 분석이 끝난 검색어만 조회한다. AI 응답 전 원문 검색이 먼저 실행돼 깜빡이는 것을 막는다.
@@ -85,6 +87,7 @@ export default function DirectSearchPage() {
   useEffect(() => {
     if (!keyword) {
       setCriteria(EMPTY_SEARCH_CRITERIA)
+      setAiDates({ from: '', to: '' })
       setAiBusy(false)
       setAnalyzedKeyword('')
       return
@@ -95,12 +98,15 @@ export default function DirectSearchPage() {
       .then(plan => {
         if (cancelled) return
         setCriteria(criteriaFromPlan(plan, keyword))
+        // "약 한 달 전", "오래전에" 같은 말을 AI가 날짜로 바꾸면 조회 기간에 적용한다.
+        setAiDates({ from: plan?.filters?.fromDate || '', to: plan?.filters?.toDate || '' })
         setAnalyzedKeyword(keyword)
       })
       .catch(() => {
         if (cancelled) return
         // AI가 실패해도 원문 검색으로 공개 목록을 유지한다.
         setCriteria(EMPTY_SEARCH_CRITERIA)
+        setAiDates({ from: '', to: '' })
         setAnalyzedKeyword(keyword)
       })
       .finally(() => { if (!cancelled) setAiBusy(false) })
@@ -112,9 +118,11 @@ export default function DirectSearchPage() {
     const values = readLostResultFilters(params)
     return {
       category: values.category, color: values.color, region: values.region,
-      from: values.from, to: values.to,
+      // 사용자가 직접 고른 기간이 우선이고, 없으면 자연어에서 읽은 기간을 쓴다.
+      from: values.from || aiDates.from,
+      to: values.to || aiDates.to,
     }
-  }, [params])
+  }, [params, aiDates])
 
   // 검색은 서버 작업으로 넘긴다. 페이지를 옮기거나 탭을 닫아도 서버는 계속 진행하고,
   // 돌아오면 저장해 둔 jobId로 결과를 이어받는다.
@@ -124,6 +132,7 @@ export default function DirectSearchPage() {
     let timer: number | undefined
     setLive(initialLive(true))
     setElapsed(0)
+    setVisualProgress({ scanned: 0, total: 0 })
 
     const finish = (payload: BrowsePayload) => {
       clearStoredJob()
@@ -148,6 +157,9 @@ export default function DirectSearchPage() {
       try {
         const status = await getBrowseJob(jobId)
         if (cancelled) return
+        if (status.visualTotal) {
+          setVisualProgress({ scanned: status.visualScanned ?? 0, total: status.visualTotal })
+        }
         if (status.status === 'done' && status.result) return finish(status.result)
         if (status.status === 'error') return fail(status.error ?? '검색 중 문제가 생겼어요.')
         timer = window.setTimeout(() => { void poll(jobId) }, 900)
@@ -241,20 +253,27 @@ export default function DirectSearchPage() {
             {keyword && <button type="button" className="button button--secondary" onClick={showAll}>전체 보기</button>}
           </div>
         </div>
-        <p className="direct-search__ai-hint">AI가 검색어의 핵심 명사와 AND/OR/NOT를 정리해 공개 정보를 넓게 찾아요. 점수 대신 일치 등급으로만 줄 세웁니다.</p>
+        <p className="direct-search__ai-hint">AI가 검색어의 핵심 명사·시각 특징·AND/OR/NOT를 정리하고 공개 API 사진까지 직접 봐요. 일치 등급과 사진 특징 점수로 줄 세웁니다.</p>
       </form>
       <div className="direct-search__filters"><LostResultFilters compact colorOptions={colorOptions} showDirection={false} customDropdowns /></div>
     </div>
     {(aiBusy || live.loading) && <div className="direct-search__progress" role="status" aria-live="polite">
       <span className="direct-search__spinner" aria-hidden="true" />
-      <span>{aiBusy ? 'AI가 검색어를 정리하고 있어요' : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
-      {!aiBusy && elapsed > 2 && <small>공개 정보를 넓게 살펴보는 중 · {elapsed}초</small>}
+      <span>{aiBusy
+        ? 'AI가 검색어를 정리하고 있어요'
+        : visualProgress.total > 0
+          ? `AI가 공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 보고 있어요`
+          : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
+      {!aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
       {!aiBusy && <small>다른 페이지로 가도 검색은 계속돼요.</small>}
     </div>}
-    {hasSearchCriteria(criteria) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
+    {(hasSearchCriteria(criteria) || aiDates.from || aiDates.to) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
       <p className="lost-ai-criteria__title">AI가 자연어에서 읽은 검색 조건</p>
-      <div className="lost-ai-criteria__chips">{criteriaGroups.filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}</div>
-      <p className="direct-search__ai-note">핵심 명사로 공개 정보를 넓게 조회하고 AND/OR/NOT 조건을 적용했어요. 같은 등급 안에서는 공개 API 순서를 유지합니다.</p>
+      <div className="lost-ai-criteria__chips">
+        {criteriaGroups.filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}
+        {(aiDates.from || aiDates.to) && <span className="lost-ai-criteria__chip"><strong>기간</strong>{[aiDates.from, aiDates.to].filter(Boolean).join(' ~ ')}</span>}
+      </div>
+      <p className="direct-search__ai-note">핵심 명사로 공개 정보를 넓게 조회하고 AND/OR/NOT 조건을 적용했어요. 사진 특징이 맞으면 등급을 올리고, 같은 등급 안에서는 공개 API 순서를 유지합니다.</p>
     </div>}
     {showTiers && <div className="direct-search__tiers" role="note">
       <strong>표시 순서</strong>

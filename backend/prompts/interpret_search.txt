@@ -18,16 +18,17 @@ Return only a JSON object with this shape:
 }
 
 The public found-item API only matches one short product-name keyword (PRDT_NM). A long natural-language sentence usually returns zero rows. So split the request into:
-- apiKeywords: 1-3 SHORT broad Korean noun phrases to retrieve candidates, e.g. ["지갑"], ["지갑", "가방"]. Never copy the whole sentence, never send AND/OR/NOT operators here.
+- apiKeywords: 1-3 SHORT broad Korean noun phrases to retrieve candidates, e.g. ["지갑"], ["지갑", "가방"]. Never copy the whole sentence, never send AND/OR/NOT operators here. For branded or typed cards (신한카드, 체크카드, 캐릭터 카드), use the broad noun "카드" as the apiKeyword and keep the specific name in include and imageFeatures, because the public API often stores such cards under a different product-name string.
 - include: AND terms that should all appear in the item's JSON (name, subject, notes, category, color, found place, storage place, org name, address). Use a separate short term for each fact, e.g. ["가죽", "지갑"].
 - any: OR alternatives, e.g. ["검정", "블랙", "검은색", "남색"]. Put synonyms and alternative wording here.
 - exclude: NOT terms that must not appear, only when the user clearly excludes something, e.g. ["고장", "파손"]. Otherwise [].
-- imageFeatures: concrete visual traits read from imageDescriptions AND from the user's own words even when there is no reference photo, e.g. "딸기가 그려진 지갑" -> ["딸기 그림", "지갑"], "하트 모양 분홍 키링" -> ["하트 모양", "분홍색", "키링"]. These are used to visually compare the public candidates' photographs. Use [] only when the user gives no visual trait at all. Do not invent traits that were not stated or visibly described.
+- imageFeatures: concrete visual traits read from imageDescriptions AND from the user's own words even when there is no reference photo, e.g. "딸기가 그려진 지갑" -> ["딸기 그림", "지갑"], "하트 모양 분홍 키링" -> ["하트 모양", "분홍색", "키링"]. These are used to visually compare the public candidates' photographs. ALWAYS include named characters (치이카와, 하치와레, 캐릭터), brands or card types (신한카드, 체크카드), colors (파란색, 하늘색), and printed names or Latin text (히영, Hey Young) when the user mentions them, even if the whole query is a single word or the term appears only inside a longer phrase. Use [] only for purely abstract requests with no visible detail at all. Do not invent traits that were not stated or visibly described.
 
 Rules:
 - Preserve the user's original meaning; never invent facts, dates, locations, or object details.
 - Use only explicit details for category, Korean region, image direction, or dates. Keep unknown fields empty.
 - Dates must use YYYY-MM-DD. Resolve relative dates only from todayInSeoul.
+- The user often says when the item was lost in plain Korean. Read it and fill fromDate/toDate around that time: "약 한 달 전" / "한 달쯤 전" -> that date -7 days to +7 days; "며칠 전" / "지난주" -> a few days around it; "오래전에" / "몇 달 전" -> leave fromDate empty and set toDate to about 90 days before today (older items only). Use the user's own time wording even when the rest of the request is a single noun like "치이카와". If no time is mentioned, leave both dates empty.
 - Keep each channel query compact and within 100 characters for the public search API.
 - apiKeywords / include / any / exclude / imageFeatures: at most 8 short terms each (apiKeywords at most 3), each within 40 characters.
 - Translate "A AND B" into include ["A","B"]; "A OR B" into any ["A","B"]; "not A" / "A 말고" into exclude ["A"]; vague or uncertain wording stays in any instead of include.

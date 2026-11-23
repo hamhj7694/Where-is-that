@@ -11,7 +11,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -50,6 +50,15 @@ from .schemas import (
 
 SAFE_RETURN = re.compile(r"^/(gallery|lost-found|history|valuables|settings|account)(/|\?|$)")
 logger = logging.getLogger(__name__)
+
+# 사진 분석은 느려도 놓치지 않는 쪽을 택한다. 스캔한 공개 사진을 여러 번에 나눠 본다.
+VISUAL_SCAN_CAP = 60
+VISUAL_BATCH_SIZE = 8
+VISUAL_MATCH_MIN = 40
+VISUAL_STRONG_MIN = 70
+# 최신순으로 조금씩 보다가 충분히 맞는 것이 나오면 더 오래된 사진은 보지 않는다.
+VISUAL_EARLY_STOP_MIN = 90
+VISUAL_EARLY_STOP_HITS = 3
 
 # 파이프라인 확인용 로컬 문서/요청함. 서버 코드와 같은 저장소에 두고 HTML에서 직접 불러온다.
 PIPELINE_DIR = Path(__file__).resolve().parents[2] / "파이프라인"
@@ -474,6 +483,7 @@ def _lostfound_list_key(payload: LostFoundListRequest) -> str:
 def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
     raw = json.dumps(
         {
+            "v": 2,  # 사진 분석 결과가 들어간 응답으로 캐시 버전 올림
             "keyword": payload.keyword.strip(),
             "page": payload.page,
             "rows": payload.rows,
@@ -522,6 +532,98 @@ def lostfound_list(payload: LostFoundListRequest) -> dict:
     return result
 
 
+def _apply_visual_hints(
+    result: dict,
+    payload: LostFoundBrowseRequest,
+    progress: Callable[[int, int], None] | None = None,
+) -> dict:
+    """직접 찾기도 공개 API 사진을 AI로 보고 시각 특징이 맞으면 등급을 올린다.
+
+    놓치는 것보다 조금 더 보는 편이 낫다. 페이지에 잘린 항목까지 스캔한 전체 후보를
+    여러 번에 나눠 분석하고, 사진 점수가 조금이라도 있으면 앞으로 끌어올린다.
+    """
+    hints = payload.hints or {}
+    features = [term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()]
+    if not features or result.get("visualAnalyzed"):
+        return result
+    from . import web_reference
+    from .ai_pipeline import match_visual_features
+    from .ai_schemas import AiVisualMatchCandidate, AiVisualMatchRequest
+
+    # 낯선 캐릭터·브랜드는 웹에서 찾은 설명과 참고 사진을 먼저 붙인다.
+    features, web_references = web_reference.enrich(features)
+
+    pool = result.get("allItems") or result.get("items") or []
+    if not pool:
+        return result
+    # 필터는 이미 서버에서 다 적용됐다. 이제는 최신 습득일부터 본다.
+    # 잃어버린 지 얼마 안 된 물건을 찾을 확률이 훨씬 높기 때문이다.
+    ordered = sorted(pool, key=lambda row: row.get("matchTier", 5))
+    ordered.sort(key=lambda row: row.get("foundDate", ""), reverse=True)
+    photo_items = [item for item in ordered if item.get("imageUrl")][:VISUAL_SCAN_CAP]
+    if not photo_items:
+        result["visualAnalyzed"] = True
+        return result
+    if progress:
+        progress(0, len(photo_items))
+
+    scores: dict[str, int] = {}
+    for start in range(0, len(photo_items), VISUAL_BATCH_SIZE):
+        batch = photo_items[start:start + VISUAL_BATCH_SIZE]
+        candidates = []
+        for item in batch:
+            text = " ".join(str(item.get(field) or "") for field in ("name", "subject", "notes", "category", "color"))
+            candidates.append(AiVisualMatchCandidate(
+                id=item["id"], imageUrl=item["imageUrl"], text=text[:2000],
+            ))
+        try:
+            matched = match_visual_features(AiVisualMatchRequest(
+                query=payload.keyword,
+                imageFeatures=features[:8],
+                references=web_references,
+                candidates=candidates,
+                externalProcessingConfirmed=True,
+                webReferenceApplied=True,
+            ))
+        except Exception:
+            # 한 묶음이 실패해도 나머지 묶음과 공개 원문 목록은 유지한다.
+            continue
+        finally:
+            if progress:
+                progress(min(start + VISUAL_BATCH_SIZE, len(photo_items)), len(photo_items))
+        for row in matched.results:
+            if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
+                scores[row.id] = row.imageSimilarity
+        # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
+        if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
+            break
+        if sum(1 for value in scores.values() if value >= VISUAL_STRONG_MIN) >= VISUAL_EARLY_STOP_HITS:
+            break
+
+    result["visualAnalyzed"] = True
+    if not scores:
+        return result
+    for item in pool:
+        score = scores.get(item["id"])
+        if score is None:
+            continue
+        ai = item.get("aiMatch") or {"hits": [], "allInclude": False}
+        hits = list(ai.get("hits") or [])
+        hits.append(f"사진 특징 {score}점")
+        item["aiMatch"] = {**ai, "hits": hits}
+        item["visualScore"] = score
+        item["matchTier"] = 0 if score >= VISUAL_STRONG_MIN else 1
+        item["matchLabel"] = "AI 사진 일치"
+    # 전체 후보를 다시 정렬한 뒤 현재 페이지만 되돌린다.
+    pool.sort(key=lambda row: row.get("foundDate", ""), reverse=True)
+    pool.sort(key=lambda row: row.get("visualScore") or 0, reverse=True)
+    pool.sort(key=lambda row: row.get("matchTier", 5))
+    result["total"] = len(pool)
+    start = max(0, (payload.page - 1) * payload.rows)
+    result["items"] = pool[start:start + payload.rows]
+    return result
+
+
 @app.post("/api/lostfound/browse", response_model=LostFoundBrowseResponse)
 def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
     """직접 찾기: 여러 페이지를 스캔해 필터·AI 조건을 적용하고 필터 기준 건수/페이지를 반환한다."""
@@ -545,6 +647,7 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
             hints=payload.hints,
             max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
         )
+        result = _apply_visual_hints(result, payload)
     except police_api.PoliceError as error:
         raise api_error(400 if "invalid" in error.code else 502, error.code, error.message)
     if not result["sources"]:
@@ -581,6 +684,12 @@ def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
             hints=payload.hints,
             max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
         )
+        def report_visual(scanned: int, total: int) -> None:
+            with _browse_jobs_lock:
+                if job_id in _browse_jobs:
+                    _browse_jobs[job_id].update(visualScanned=scanned, visualTotal=total)
+
+        result = _apply_visual_hints(result, payload, report_visual)
         if not result["sources"]:
             first = result["errors"][0] if result["errors"] else None
             raise police_api.PoliceError(
@@ -623,6 +732,8 @@ def start_lostfound_browse_job(payload: LostFoundBrowseRequest) -> dict:
             "status": "done" if cached is not None else "pending",
             "result": cached,
             "error": None,
+            "visualScanned": 0,
+            "visualTotal": 0,
             "createdAt": time.time(),
             "finishedAt": time.time() if cached is not None else None,
         }
@@ -642,6 +753,8 @@ def get_lostfound_browse_job(job_id: str) -> dict:
         "status": job["status"],
         "result": job["result"],
         "error": job["error"],
+        "visualScanned": job.get("visualScanned", 0),
+        "visualTotal": job.get("visualTotal", 0),
     }
 
 

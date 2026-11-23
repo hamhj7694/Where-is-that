@@ -208,6 +208,8 @@ class AiVisualMatchRequest(BaseModel):
     references: list[RequiredImageDataUrl] = Field(default_factory=list, max_length=6)
     candidates: list[AiVisualMatchCandidate] = Field(min_length=1, max_length=12)
     externalProcessingConfirmed: bool = False
+    # 서버 내부에서 이미 웹 참고를 붙였으면 중복 검색하지 않는다.
+    webReferenceApplied: bool = False
 
     @model_validator(mode="after")
     def validate_visual_match_input(self) -> AiVisualMatchRequest:

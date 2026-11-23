@@ -268,10 +268,12 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     return raw ? [toAiContextRankCandidate(raw)] : []
   })
   // 사진이 있는 후보를 우선하되, 사진이 없는 공개 항목도 설명으로 같은 풀에서 비교한다.
+  // 필터는 이미 적용됐고, 분석은 잃어버린 지 얼마 안 된 최신순으로 먼저 진행한다.
   const visualCandidates: ReturnType<typeof toVisualMatchCandidate>[] = []
   const visualSeen = new Set<string>()
-  for (const item of [...imageSourceBase.slice(0, 12), ...contextPageItems]) {
-    if (visualSeen.has(item.id) || visualCandidates.length >= 12) continue
+  const newestImageSource = [...imageSourceBase].sort((a, b) => (b.foundAt || '').localeCompare(a.foundAt || ''))
+  for (const item of [...newestImageSource.slice(0, 36), ...contextPageItems]) {
+    if (visualSeen.has(item.id) || visualCandidates.length >= 36) continue
     const raw = rawByCandidateId.get(item.id)
     if (!raw) continue
     visualSeen.add(item.id)
@@ -396,23 +398,38 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       if (requestId === rankRequestSequence.current) setRankBusy(false)
     })
   }
-  function startVisualRanking(scope: string) {
+  async function startVisualRanking(scope: string) {
     if (!visualCandidates.length) return
     const requestId = ++visualRequestSequence.current
     setVisualBusy(true)
     setVisualError('')
-    void matchPublicItemImages({
-      query: draft.aiPlan?.channels.image.query || draft.aiPlan?.originalQuery || draft.query,
-      imageFeatures: criteria.imageFeatures,
-      references: draft.photo ? [draft.photo] : [],
-      candidates: visualCandidates,
-    }).then(body => {
-      if (requestId === visualRequestSequence.current) setVisualMatch({ scope, results: body.results, source: body.source })
-    }).catch(cause => {
-      if (requestId === visualRequestSequence.current) setVisualError(cause instanceof Error ? cause.message : 'AI가 공개 사진·설명을 비교하지 못했어요.')
-    }).finally(() => {
+    // 서버는 한 번에 12건까지만 받는다. 최신순으로 한 묶음씩 보고, 이미 충분히 맞으면 멈춘다.
+    const batches = Array.from({ length: Math.ceil(visualCandidates.length / 12) }, (_, index) =>
+      visualCandidates.slice(index * 12, index * 12 + 12))
+    const results: AiVisualMatchResult[] = []
+    let source: 'vision-model' | 'multimodal' = 'multimodal'
+    try {
+      for (const candidates of batches) {
+        const body = await matchPublicItemImages({
+          query: draft.aiPlan?.channels.image.query || draft.aiPlan?.originalQuery || draft.query,
+          imageFeatures: criteria.imageFeatures,
+          references: draft.photo ? [draft.photo] : [],
+          candidates,
+        })
+        if (requestId !== visualRequestSequence.current) return
+        results.push(...body.results)
+        source = body.source ?? source
+        const photoHits = body.results.filter(result => result.basis === 'photo' && result.imageSimilarity >= 70)
+        if (body.results.some(result => result.basis === 'photo' && result.imageSimilarity >= 90) || photoHits.length >= 3) break
+      }
+      if (requestId === visualRequestSequence.current) setVisualMatch({ scope, results, source })
+    } catch (cause) {
+      if (requestId === visualRequestSequence.current) {
+        setVisualError(cause instanceof Error ? cause.message : 'AI가 공개 사진·설명을 비교하지 못했어요.')
+      }
+    } finally {
       if (requestId === visualRequestSequence.current) setVisualBusy(false)
-    })
+    }
   }
   function rankCurrentContext() {
     if (!contextPageCandidates.length) return

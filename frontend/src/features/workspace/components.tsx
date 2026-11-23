@@ -92,7 +92,7 @@ export function FoundCard({ item, to, context = false }: { item: Candidate; to: 
   const photo = item.photoStatus === 'verified_photo' && item.image && !failed
   return <Link to={to} className={context ? 'context-card' : 'found-card'}>
     <div className={context ? 'context-card__image' : 'found-card__image'}>{photo ? <img src={item.image!} alt={item.title + ' 사진'} loading="lazy" onError={() => setFailed(true)} /> : <NoPhoto message={failed ? '사진 표시 오류' : undefined} category={item.category} />}</div>
-    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && item.matchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{item.matchLabel}</span>}{!context && <p>{item.color} · {item.category}</p>}
+    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && item.matchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{item.matchLabel}</span>}{!context && typeof item.visualScore === 'number' && <span className="found-card__visual">사진 특징 {item.visualScore}점</span>}{!context && <p>{item.color} · {item.category}</p>}
       {context && <><div className="match-reasons">{item.matchReasons.map(reason => <span key={reason}>{reason}</span>)}</div><p>{item.foundPlace}</p></>}
       <small>{item.foundAt}</small></div>
     {context && <ArrowRight className="context-card__actions" aria-label="상세 보기" />}
