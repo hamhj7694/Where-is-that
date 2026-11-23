@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ai_api, config, db, geo, kakao, police_api, recovery, security
+from . import ai_api, config, db, geo, kakao, name_terms, police_api, recovery, security
 from .schemas import (
     ACCOUNT_DELETE_CONFIRMATION,
     BrowseJobStart,
@@ -62,7 +62,7 @@ VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
 VISUAL_EARLY_STOP_HIT_MIN = 70
 # 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
-BROWSE_ALGO_VERSION = 7
+BROWSE_ALGO_VERSION = 9
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
@@ -957,8 +957,16 @@ def _apply_visual_hints(
     result.setdefault("visualScanned", 0)
     result.setdefault("visualMore", False)
     hints = payload.hints or {}
-    features = [term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()]
+    # 사람 이름은 공개 원문의 텍스트 단서다. 사진에서 그 글자를 읽은 근거가 없으므로
+    # 시각 특징·웹 참고·사진 비교 프롬프트에서 모두 제외한다.
+    features = name_terms.without_person_names([
+        term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()
+    ])
+    visual_query = name_terms.strip_person_names(payload.keyword)
     prior = _normalize_prior_scores(payload)
+    if not visual_query:
+        # 이름만 검색한 경우 예전 작업에 남은 사진 점수도 되살리지 않는다.
+        prior = {}
     pool = result.get("allItems") or result.get("items") or []
     # AI 조건이 비었거나 후보가 없어도 이전에 찾은 점수는 되살리고 정렬은 한다.
     _restore_visual_scores(result, prior)
@@ -1018,7 +1026,7 @@ def _apply_visual_hints(
             ))
         try:
             matched = match_visual_features(AiVisualMatchRequest(
-                query=payload.keyword,
+                query=visual_query,
                 imageFeatures=features[:8],
                 references=web_references,
                 candidates=candidates,

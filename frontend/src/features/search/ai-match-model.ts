@@ -29,6 +29,20 @@ const GENERIC_KEYWORDS = new Set([
 ])
 const isSpecificKeyword = (term: string) => term.length >= 2 && !GENERIC_KEYWORDS.has(term)
 
+// 사람 이름처럼 보이는 짧은 한글어는 공개 원문 텍스트 단서다. 사진 특징으로 넘기면
+// 무관한 공개 사진이 이름과 90점으로 맞는 오매칭이 난다.
+const KOREAN_NAME = /^[가-힣]{2,3}$/
+const SURNAMES = new Set('김이박최정강조윤장임한오서신권황안송전홍류유고문양손배백허남심노하곽성차주우구나지엄채원천방공현함변염여추도소석선설마길연위표명기반라사')
+const NON_PERSON_TERMS = new Set([
+  '안경', '이불', '신발', '유리', '고무', '문구', '장난감', '박스', '김치',
+  '오리', '고양이', '호랑이', '박쥐', '우산', '우표', '연필', '노트',
+  '하트', '하늘', '남색', '백색', '유니콘', '이모지', '이모', '진주',
+  '민트', '홍삼', '유아', '오락', '기관', '차량', '주머니', '우주',
+  '지갑', '지우개', '지폐', '지도', '장갑', '반지',
+])
+const isPersonName = (term: string) =>
+  KOREAN_NAME.test(term) && SURNAMES.has(term[0]) && !NON_PERSON_TERMS.has(term)
+
 function cleanTerms(value: readonly unknown[] | undefined, limit: number): string[] {
   if (!Array.isArray(value)) return []
   const seen = new Set<string>()
@@ -52,7 +66,7 @@ function normalizeCriteria(value: unknown): AiSearchCriteria {
     include: cleanTerms(raw.include, MAX_TERMS),
     any: cleanTerms(raw.any, MAX_TERMS),
     exclude: cleanTerms(raw.exclude, MAX_TERMS),
-    imageFeatures: cleanTerms(raw.imageFeatures, MAX_TERMS),
+    imageFeatures: cleanTerms(raw.imageFeatures, MAX_TERMS).filter(term => !isPersonName(term)),
   }
 }
 
@@ -151,7 +165,8 @@ const WORD = /[^\s()[\],·|]+/g
 
 function maskPattern(token: string): RegExp | null {
   if (![...token].some(char => MASK_CHARS.includes(char))) return null
-  const body = [...token].map(char => MASK_CHARS.includes(char) ? '.{1,3}' : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')
+  // 가려진 글자는 0글자 이상일 수 있다(공개값 '류*진' ↔ 원문 '류진'·'류영진').
+  const body = [...token].map(char => MASK_CHARS.includes(char) ? '.{0,3}' : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')
   return new RegExp('^' + body + '$')
 }
 

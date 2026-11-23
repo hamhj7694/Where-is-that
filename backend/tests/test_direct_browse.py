@@ -42,6 +42,12 @@ def test_masked_name_matches_a_filled_in_query():
     assert not police_api._term_matches("김영진", "이름 류*진 입니다")
 
 
+def test_two_letter_name_matches_masked_public_text():
+    # 공개 원문이 '류*진'이어서 가려진 부분이 0글자여도 짧은 실명 '류진'과 맞아야 한다.
+    assert police_api._term_matches("류진", "여성지갑(류*진)")
+    assert police_api._term_matches("류*진", "이름 류진 입니다")
+
+
 def test_browse_scans_broad_when_keyword_returns_nothing(monkeypatch):
     hidden = row("police:hidden", "2026-11-22", name="류*진", subject="가죽 지갑")
 
@@ -74,6 +80,57 @@ def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
     assert updated["items"][0]["matchTier"] == 1  # 사진만 맞으면 텍스트 일치 바로 아래
     assert updated["items"][0]["visualScore"] == 90
     assert updated["visualAnalyzed"] is True
+
+
+def test_person_name_query_never_scores_an_unrelated_photo(monkeypatch):
+    """이름은 공개 원문 텍스트 단서일 뿐, 사진 특징 점수 근거가 될 수 없다."""
+    payload = SimpleNamespace(
+        keyword="류진",
+        hints={"apiKeywords": ["류진"], "include": ["류진"], "imageFeatures": ["류진"]},
+        page=1, rows=2, priorVisualScores={"police:card": 90},
+    )
+    named = row(
+        "police:named", "2026-11-22", name="여성지갑(류*진)",
+        matchTier=0, matchLabel="AI+검색어 일치",
+    )
+    card = row(
+        "police:card", "2026-11-22", imageUrl="https://www.lost112.go.kr/a.jpg",
+        name="신한카드", matchTier=5, matchLabel="공개 원문",
+    )
+    result = {"items": [card, named], "allItems": [card, named], "total": 2}
+    calls = []
+
+    def must_not_call(request):
+        calls.append(request)
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", must_not_call)
+    updated = main._apply_visual_hints(result, payload)
+
+    assert calls == []  # 이름만 있으면 사진을 들여다보지 않는다.
+    assert updated["visualScores"] == {}
+    assert updated["items"][0]["id"] == "police:named"
+    assert updated["items"][1].get("visualScore") is None
+    assert updated["items"][1]["matchTier"] == 5
+    assert updated["items"][1]["matchLabel"] == "공개 원문"
+
+
+def test_person_name_is_stripped_from_visual_query(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="류진 지갑", hints={"imageFeatures": ["류진", "지갑"]}, page=1, rows=1,
+    )
+    item = row("police:bag", "2026-11-22", imageUrl="https://www.lost112.go.kr/a.jpg")
+    result = {"items": [item], "allItems": [item], "total": 1}
+    seen = {}
+
+    def fake_match(request):
+        seen["query"] = request.query
+        seen["features"] = request.imageFeatures
+        return SimpleNamespace(results=[])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    main._apply_visual_hints(result, payload)
+
+    assert seen == {"query": "지갑", "features": ["지갑"]}
 
 
 def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):

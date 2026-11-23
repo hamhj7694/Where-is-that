@@ -371,6 +371,9 @@ def test_interpret_prompt_reads_visual_traits_from_words_without_photo():
 
     assert "even when there is no reference photo" in prompt
     assert "딸기가 그려진 지갑" in prompt
+    # 사람 이름은 사진 특징이 아니라 공개 원문 텍스트 단서로 다룬다.
+    assert "A bare personal name such as 류진 or 히영 is a TEXT clue, not a photo trait" in prompt
+    assert "return imageFeatures []" in prompt
 
 
 def test_match_public_images_scores_photos_and_descriptions_together(client, monkeypatch):

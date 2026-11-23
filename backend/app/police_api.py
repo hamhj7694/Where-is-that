@@ -261,7 +261,8 @@ def _mask_pattern(token: str) -> re.Pattern | None:
     """가려진 글자를 한 글자 이상의 와일드카드로 바꾼 정규식."""
     if not any(char in token for char in MASK_CHARS):
         return None
-    parts = [".{1,3}" if char in MASK_CHARS else re.escape(char) for char in token]
+    # '*'는 실제 이름에서 0글자 이상을 가릴 수 있다(예: 공개값 '류*진' ↔ 원문 '류진'·'류영진').
+    parts = [".{0,3}" if char in MASK_CHARS else re.escape(char) for char in token]
     return re.compile("^" + "".join(parts) + "$", re.IGNORECASE)
 
 

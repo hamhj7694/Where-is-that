@@ -20,6 +20,7 @@ import httpx
 from PIL import Image
 
 from . import config, db
+from .name_terms import is_person_name
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,14 @@ NAVER_IMAGE_PATTERN = re.compile(r"https://search\.pstatic\.net/common/\?[^\s\"'
 
 def is_generic(term: str) -> bool:
     value = term.strip().lower()
-    return not value or value in GENERIC_TERMS or any(word in GENERIC_TERMS for word in value.split())
+    # 사람 이름은 위키 인물 문서·연예인 사진으로 확장되면 엉뚱한 공개 사진에 높은 점수를 준다.
+    # 공개 원문 텍스트 단서로만 남기고 웹 참고에서 아예 제외한다.
+    return (
+        not value
+        or value in GENERIC_TERMS
+        or any(word in GENERIC_TERMS for word in value.split())
+        or is_person_name(term)
+    )
 
 
 def _cache_key(term: str) -> str:

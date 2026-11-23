@@ -59,3 +59,31 @@ def test_generic_terms_are_skipped():
     assert web_reference.is_generic("카드")
     assert web_reference.is_generic("하늘색")
     assert not web_reference.is_generic("치이카와")
+
+
+def test_person_names_are_not_enriched_with_web_photos(monkeypatch):
+    monkeypatch.setattr(config, "WEB_REFERENCE_ENABLED", True)
+    calls = []
+    monkeypatch.setattr(web_reference, "lookup", lambda term: calls.append(term) or {
+        "features": ["인물 약력"], "images": ["data:image/jpeg;base64,YQ=="],
+    })
+
+    features, references = web_reference.enrich(["류진"])
+
+    assert calls == []
+    assert features == ["류진"]
+    assert references == []
+
+
+def test_character_names_still_get_web_references(monkeypatch):
+    monkeypatch.setattr(config, "WEB_REFERENCE_ENABLED", True)
+    calls = []
+    monkeypatch.setattr(web_reference, "lookup", lambda term: calls.append(term) or {
+        "features": ["흰색 동그란 캐릭터"], "images": ["data:image/jpeg;base64,YQ=="],
+    })
+
+    features, references = web_reference.enrich(["치이카와"])
+
+    assert calls == ["치이카와"]
+    assert "흰색 동그란 캐릭터" in features
+    assert references == ["data:image/jpeg;base64,YQ=="]

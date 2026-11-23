@@ -67,6 +67,27 @@ const initialLive = (loading: boolean): LiveState => ({
   loading, error: null, partial: false,
 })
 
+/**
+ * 사진 점수는 같은 검색을 이어볼 때만 되살린다.
+ * 검색어를 바꾸면 이전 결과가 아직 화면 상태에 남아 있으므로, 여기서 걸러주지 않으면
+ * 전혀 다른 물건에 이전 검색의 "사진 특징 90점"이 붙는다.
+ */
+export function priorScoresForSearch(
+  stored: StoredJob | null,
+  live: LiveState,
+  continuation: boolean,
+): Record<string, number> {
+  if (!continuation) return {}
+  const scores: Record<string, number> = { ...(stored?.priorVisualScores ?? {}) }
+  for (const [id, score] of Object.entries(live.visualScores ?? {})) {
+    if (score > 0) scores[id] = score
+  }
+  for (const item of live.raw) {
+    if (item.visualScore && item.visualScore > 0) scores[item.id] = item.visualScore
+  }
+  return scores
+}
+
 interface StoredSearch {
   keyword: string
   input: string
@@ -283,15 +304,10 @@ export default function DirectSearchPage() {
         const stored = readStoredJob()
         const resumable = stored && stored.keyword === keyword
           && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
-        // 더 찾아보기로 넘어가도 앞서 찾은 사진 점수는 서버에 되돌려 준다.
-        // 서버가 돌려준 전체 맵을 우선 쓰고, 이전 응답에만 있던 점수도 합친다.
-        const priorVisualScores: Record<string, number> = { ...(stored?.priorVisualScores ?? {}) }
-        for (const [id, score] of Object.entries(live.visualScores ?? {})) {
-          if (score > 0) priorVisualScores[id] = score
-        }
-        for (const item of live.raw) {
-          if (item.visualScore && item.visualScore > 0) priorVisualScores[item.id] = item.visualScore
-        }
+        // 더 찾아보기·작업 이어받기·새로고침처럼 같은 검색을 계속할 때만 점수를 되살린다.
+        // 새 검색어에서는 이전 결과가 화면에 남아 있어도 점수를 절대 넘기지 않는다.
+        const continuation = resumable || skipVisual > 0
+        const priorVisualScores = priorScoresForSearch(stored, live, continuation)
         // page는 캐시 키와 무관하다. 처음 한 번만 전체를 조회한다.
         const job = resumable
           ? { jobId: stored.jobId, status: 'pending' }
@@ -299,10 +315,7 @@ export default function DirectSearchPage() {
         if (cancelled) return
         writeStoredJob({
           jobId: job.jobId, keyword, reloadToken, skipVisual,
-          priorVisualScores: {
-            ...(stored?.priorVisualScores ?? {}),
-            ...live.visualScores,
-          },
+          priorVisualScores,
         })
         await poll(job.jobId)
       } catch (cause) {
@@ -358,6 +371,7 @@ export default function DirectSearchPage() {
     updated.delete('page')
     restoreAiRef.current = null
     restoreSearchRef.current = null
+    if (next !== keyword) clearStoredJob()
     setParams(updated, { replace: true })
     if (next !== keyword) setKeyword(next)
     else setReloadToken(token => token + 1)

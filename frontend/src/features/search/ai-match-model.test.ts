@@ -75,6 +75,32 @@ describe('AI 맞춤 검색 조건', () => {
     expect(result.include).toEqual(['가죽', 'x'.repeat(40)])
   })
 
+  it('사람 이름은 사진 특징에서 제외하고 공개 원문 탐색어로만 남긴다', () => {
+    const plan = {
+      ...basePlan,
+      originalQuery: '류진',
+      criteria: {
+        apiKeywords: ['류진'], include: ['류진'], any: [], exclude: [],
+        imageFeatures: ['류진', '검정색'],
+      },
+    }
+    const result = criteriaFromPlan(plan, '류진')
+    expect(result.apiKeywords).toContain('류진')
+    expect(result.include).toContain('류진')
+    expect(result.imageFeatures).toEqual(['검정색'])
+  })
+
+  it('캐릭터·브랜드 이름은 사진 특징으로 유지한다', () => {
+    const plan = {
+      ...basePlan,
+      criteria: {
+        apiKeywords: ['치이카와'], include: [], any: [], exclude: [],
+        imageFeatures: ['치이카와', '신한카드'],
+      },
+    }
+    expect(criteriaFromPlan(plan, '치이카와').imageFeatures).toEqual(['치이카와', '신한카드'])
+  })
+
   it('AI가 고유 명사를 탐색어에서 빼먹으면 다시 넣는다', () => {
     const plan = {
       ...basePlan,
@@ -159,5 +185,12 @@ describe('AI 맞춤 검색 조건', () => {
     const match = matchPublicItem(item, { ...criteria, include: ['가죽 지갑'], any: [], imageFeatures: [], exclude: [] })
     expect(match.allInclude).toBe(true)
     expect(match.hits).toEqual(['가죽 지갑'])
+  })
+
+  it('공개 원문의 가려진 이름은 0글자 마스크여도 짧은 실명과 일치한다', () => {
+    const named = { ...item, name: '여성지갑(류*진)', subject: '', notes: '' }
+    const match = matchPublicItem(named, { apiKeywords: [], include: ['류진'], any: [], imageFeatures: [], exclude: [] })
+    expect(match.allInclude).toBe(true)
+    expect(match.hits).toEqual(['류진'])
   })
 })
