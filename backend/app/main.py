@@ -374,12 +374,55 @@ PIPELINE_ALGORITHMS = [
 ]
 PIPELINE_TARGETS = {item["id"] for item in PIPELINE_ALGORITHMS}
 
+# 확인실 각 화면 아래에 보여줄 '수정해야 할 것들'. 화면은 /api/pipeline/issues로 이걸 읽고,
+# requests.json의 issueId와 대조해 '요청됨' 상태를 실시간으로 갱신한다.
+# 필수=동작·정확도에 직접 영향, 추천=품질 개선, 선택=여유 있을 때 손보면 좋은 항목.
+PIPELINE_ISSUES = [
+    {"id": "home-1", "page": "home", "priority": "추천", "title": "정렬식·임계값 문구를 코드와 주기적으로 대조", "detail": "Home의 결과 순서·점수 설명이 main.py의 실제 규칙(등급 → 텍스트×10+사진, 40점 표시/50점 승격)과 어긋나지 않는지 확인한다.", "pipeline": "audit", "target": ""},
+    {"id": "home-2", "page": "home", "priority": "선택", "title": "'부분 연결' 파이프라인 카드 갱신", "detail": "실제 구현 범위가 넓어진 항목은 카드의 연결 상태와 설명을 함께 고친다.", "pipeline": "audit", "target": ""},
+    {"id": "gallery-prepare-1", "page": "gallery-prepare", "priority": "필수", "title": "A1 인풋·아웃풋 캡처를 최신 화면으로 유지", "detail": "브라우저 캡처가 바뀌면 /pipeline/03_gallery_before.png·after.png를 다시 찍어 교체한다.", "pipeline": "candidate-compare", "target": ""},
+    {"id": "gallery-prepare-2", "page": "gallery-prepare", "priority": "추천", "title": "첨부 사진 상한·실패 안내 표시", "detail": "사진 6장 제한과 분석 실패 시 대동작을 화면에서도 볼 수 있게 적는다.", "pipeline": "candidate-compare", "target": ""},
+    {"id": "gallery-compare-1", "page": "gallery-compare", "priority": "추천", "title": "YOLOE 크롭 조건 문서·코드 대조", "detail": "객체 2개 이상 또는 종류 2가지 이상일 때만 크롭한다는 조건이 실제 코드와 같은지 확인한다.", "pipeline": "candidate-compare", "target": "model-yoloe"},
+    {"id": "gallery-compare-2", "page": "gallery-compare", "priority": "선택", "title": "유사도 낮은 사례 캡처 추가", "detail": "임계값 아래로 떨어진 케이스를 아웃풋 옆에 남기면 회귀 확인에 쓸 수 있다.", "pipeline": "candidate-compare", "target": "algo-gallery-compare"},
+    {"id": "gallery-result-1", "page": "gallery-result", "priority": "추천", "title": "종합·이미지·맥락 3축 가중치 근거 명시", "detail": "점수 합산 방식과 가중치 값을 결과 화면에서 바로 볼 수 있게 정리한다.", "pipeline": "candidate-compare", "target": "algo-gallery-compare"},
+    {"id": "gallery-result-2", "page": "gallery-result", "priority": "선택", "title": "결과 카드 접근성 라벨 점검", "detail": "사진 대체 텍스트와 버튼 이름이 스크린리더에서 읽히는지 확인한다.", "pipeline": "candidate-compare", "target": ""},
+    {"id": "lost-prepare-1", "page": "lost-prepare", "priority": "필수", "title": "자연어 기간 파싱 실패 시 안내", "detail": "'지난달쯤' 같은 말을 날짜로 못 바꿀 때 조용히 필터를 버리지 말고 사용자에게 알린다.", "pipeline": "search-prepare", "target": "algo-query-interpret"},
+    {"id": "lost-prepare-2", "page": "lost-prepare", "priority": "추천", "title": "웹 참고 실패 시 대체 경로 안내", "detail": "인터넷 참고가 실패해도 특징만으로 비교를 계속한다는 점을 화면에 표시한다.", "pipeline": "search-prepare", "target": "algo-web-reference"},
+    {"id": "lost-visual-1", "page": "lost-visual", "priority": "필수", "title": "40점 표시·50점 승격 경계 확인", "detail": "40~49점은 점수만 남기고 50점부터 등급 1로 올리는 규칙이 화면 배지까지 일치해야 한다.", "pipeline": "public-visual-match", "target": "algo-visual-match"},
+    {"id": "lost-visual-2", "page": "lost-visual", "priority": "추천", "title": "약한 CLIP 점수 폴백 결과 표시", "detail": "참고 사진 점수가 40점 미만일 때 멀티모달이 원본을 다시 본 결과를 배지로 남긴다.", "pipeline": "public-visual-match", "target": "model-multimodal"},
+    {"id": "lost-context-1", "page": "lost-context", "priority": "필수", "title": "사진만 맞은 항목의 등급 회귀 확인", "detail": "사진 일치 항목은 등급 1에 두고, 제목·본문이 정확히 맞은 등급 0보다 뒤에 오는지 검증한다.", "pipeline": "context-rank", "target": "algo-context-rank"},
+    {"id": "lost-context-2", "page": "lost-context", "priority": "추천", "title": "동점 정렬 기준 안내", "detail": "동점이면 최신 습득일, 그다음 ID 내림차순이라는 규칙을 결과 화면 범례에 추가한다.", "pipeline": "context-rank", "target": "algo-ranking"},
+    {"id": "direct-prepare-1", "page": "direct-prepare", "priority": "필수", "title": "고유명사 탐색어 우선 유지 회귀", "detail": "'치이카와 카드'에서 고유명사가 apiKeywords에서 밀려 일반 카드보다 뒤로 가지 않는지 정기 확인한다.", "pipeline": "direct-search", "target": "algo-query-interpret"},
+    {"id": "direct-prepare-2", "page": "direct-prepare", "priority": "추천", "title": "기간 해제 상태 초기화 확인", "detail": "사용자가 AI 추정 기간을 지운 뒤 새 검색을 시작하면 해제 상태가 남지 않는지 점검한다.", "pipeline": "direct-search", "target": "algo-code-filter"},
+    {"id": "direct-browse-1", "page": "direct-browse", "priority": "필수", "title": "공식 코드 필터 사용 시 사진 스캔 풀 확보", "detail": "필터 결과 40건만 읽고 멈추면 사진 분석·더 찾아보기가 꺼진다. visual_need 전달이 유지되는지 본다.", "pipeline": "direct-search", "target": "algo-code-filter"},
+    {"id": "direct-browse-2", "page": "direct-browse", "priority": "추천", "title": "24페이지 상한 정책 결정", "detail": "현재 최대 24페이지로 제한한다. 더 깊게 볼지 결정하고 바꾸면 캐시 버전도 올린다.", "pipeline": "direct-search", "target": "algo-browse-more"},
+    {"id": "direct-result-1", "page": "direct-result", "priority": "필수", "title": "상세 → 뒤로가기 결과 복원 확인", "detail": "마지막 검색어·결과 40건·더 찾아보기 상태가 그대로 되살아나는지 회귀 테스트한다.", "pipeline": "direct-search", "target": "algo-browse-more"},
+    {"id": "direct-result-2", "page": "direct-result", "priority": "추천", "title": "실패 배치 재분석 결과 반영", "detail": "AI 호출이 실패한 사진은 분석 장수에서 제외되므로 더 찾아보기에서 다시 볼 수 있다는 안내를 붙인다.", "pipeline": "direct-search", "target": "algo-visual-match"},
+    {"id": "common-web-1", "page": "common-web", "priority": "추천", "title": "웹 참고 실패 시 빈 값 대체 안내", "detail": "프록시·이미지 요청이 막히면 특징만으로 진행한다는 사실을 로그와 화면에 남긴다.", "pipeline": "data-collect", "target": "algo-web-reference"},
+    {"id": "common-web-2", "page": "common-web", "priority": "선택", "title": "참고 이미지 개수 상한 근거 표기", "detail": "이미지 최대 장수와 이름 설명 조회가 분리되어 있다는 점을 확인실에 적는다.", "pipeline": "data-collect", "target": "algo-web-reference"},
+    {"id": "common-base-1", "page": "common-base", "priority": "필수", "title": "요청 저장 원자성·ID 중복 회귀 유지", "detail": "UUID가 붙은 요청 ID와 임시 파일 교체 방식이 깨지지 않게 테스트를 유지한다.", "pipeline": "audit", "target": ""},
+    {"id": "common-base-2", "page": "common-base", "priority": "추천", "title": "캐시 TTL과 알고리즘 버전 관계 정리", "detail": "규칙을 바꿀 때 BROWSE_ALGO_VERSION을 올려야 캐시가 옛 결과를 계속 주지 않는다.", "pipeline": "audit", "target": ""},
+    {"id": "audit-1", "page": "audit", "priority": "필수", "title": "requests.json pending 항목 정리", "detail": "처리 끝난 요청은 상태를 바꾸거나 목록에서 정리해 다음 AI 요청이 헷갈리지 않게 한다.", "pipeline": "audit", "target": ""},
+    {"id": "audit-2", "page": "audit", "priority": "추천", "title": "요청함 필터·개수 표시 사용성 점검", "detail": "대상별 필터와 건수 표시가 실제 요청 목록과 항상 일치하는지 확인한다.", "pipeline": "audit", "target": ""},
+    {"id": "algo-map-1", "page": "algo-map", "priority": "추천", "title": "알고리즘 카드와 코드 위치 대조", "detail": "카드의 설명·임계값·코드 경로가 실제 구현과 다른 항목을 찾아 갱신한다.", "pipeline": "audit", "target": ""},
+    {"id": "algo-map-2", "page": "algo-map", "priority": "선택", "title": "관련 항목 이동 경로 점검", "detail": "'함께 보면 좋은 항목' 버튼이 자주 쓰이는 조합을 가리키는지 살펴본다.", "pipeline": "audit", "target": ""},
+    {"id": "algo-ranking-1", "page": "algo-detail", "priority": "추천", "title": "동점 정렬 기준 문구·코드 동기화", "detail": "최신 습득일 다음 ID 내림차순으로 정렬하는 규칙을 상세 설명과 실제 코드 모두에 유지한다.", "pipeline": "direct-search", "target": "algo-ranking"},
+    {"id": "algo-visual-match-1", "page": "algo-detail", "priority": "필수", "title": "40점 표시·50점 승격 경계 확인", "detail": "화면 안내와 실제 등급 승격 임계값이 같아야 한다.", "pipeline": "public-visual-match", "target": "algo-visual-match"},
+    {"id": "algo-browse-more-1", "page": "algo-detail", "priority": "추천", "title": "사전 점수가 조기 종료에 섞이지 않게 유지", "detail": "이전 탐색의 높은 점수가 있으면 더 찾아보기가 첫 배치에서 멈춘다. 현재 분리 상태를 지킨다.", "pipeline": "direct-search", "target": "algo-browse-more"},
+    {"id": "algo-web-reference-1", "page": "algo-detail", "priority": "추천", "title": "이름 설명 조회와 이미지 상한 분리 유지", "detail": "참고 사진이 꽉 차도 낯선 이름의 설명은 계속 가져와야 한다.", "pipeline": "data-collect", "target": "algo-web-reference"},
+    {"id": "algo-text-tiers-1", "page": "algo-detail", "priority": "추천", "title": "가려진 이름 와일드카드 과확장 검토", "detail": "*?●○×를 1~3글자로 치환하면 엉뚱한 이름까지 맞을 수 있다. 오탐을 줄일 방법을 찾는다.", "pipeline": "direct-search", "target": "algo-text-tiers"},
+    {"id": "algo-code-filter-1", "page": "algo-detail", "priority": "필수", "title": "날짜 필드 검증 유지", "detail": "AI가 날짜가 아닌 말을 넣어도 YYYY-MM-DD만 남기고 역전된 기간은 바로잡는다.", "pipeline": "direct-search", "target": "algo-code-filter"},
+    {"id": "model-multimodal-1", "page": "algo-detail", "priority": "선택", "title": "모델 버전 고정 여부 검토", "detail": "외부 모델 버전이 바뀌면 점수 기준도 달라진다. 고정·기록 방식을 정한다.", "pipeline": "search-prepare", "target": "model-multimodal"},
+]
+PIPELINE_ISSUE_IDS = {item["id"] for item in PIPELINE_ISSUES}
+
 
 class PipelineRequestPayload(BaseModel):
     pipeline: str = Field(min_length=1, max_length=60)
     scope: str = Field(default="전체", max_length=120)
     message: str = Field(min_length=1, max_length=4000)
     target: str = Field(default="", max_length=60)
+    issueId: str = Field(default="", max_length=80)
 
 
 def utc_now() -> str:
@@ -597,6 +640,32 @@ def pipeline_requests() -> dict:
     return {"items": _read_pipeline_requests()}
 
 
+@app.get("/api/pipeline/issues", include_in_schema=False)
+def pipeline_issues() -> dict:
+    """화면별 수정 필요 항목 + 요청함과 대조한 실시간 상태."""
+    rows = _read_pipeline_requests()
+    counts: dict[str, int] = {}
+    done_ids: set[str] = set()
+    for row in rows:
+        issue_id = row.get("issueId")
+        if not issue_id:
+            continue
+        counts[issue_id] = counts.get(issue_id, 0) + 1
+        if str(row.get("status") or "").lower() in {"done", "resolved", "completed"}:
+            done_ids.add(issue_id)
+    items = [
+        {
+            **issue,
+            "requested": issue["id"] in counts,
+            "requestCount": counts.get(issue["id"], 0),
+            # AI가 요청을 처리 완료로 바꾸면 화면도 바로 '완료'로 바뀐다.
+            "state": "done" if issue["id"] in done_ids else ("requested" if issue["id"] in counts else "open"),
+        }
+        for issue in PIPELINE_ISSUES
+    ]
+    return {"items": items, "updatedAt": utc_now()}
+
+
 @app.post("/api/pipeline/request", include_in_schema=False)
 def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
     """파이프라인 화면의 수정 요청을 로컬 파일에 적는다. 비밀값은 받지 않는다."""
@@ -606,6 +675,9 @@ def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
     target = payload.target.strip()
     if target and target not in PIPELINE_TARGETS:
         raise api_error(400, "invalid_target", "알 수 없는 알고리즘이에요.")
+    issue_id = payload.issueId.strip()
+    if issue_id and issue_id not in PIPELINE_ISSUE_IDS:
+        raise api_error(400, "invalid_issue", "알 수 없는 수정 항목이에요.")
     item = {
         "id": f"req-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}",
         "createdAt": utc_now(),
@@ -613,6 +685,7 @@ def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
         "pipeline": pipeline,
         "target": target,
         "scope": payload.scope.strip() or "전체",
+        "issueId": issue_id,
         "message": payload.message.strip(),
     }
     with PIPELINE_REQUEST_LOCK:

@@ -94,6 +94,35 @@
   .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
   .toolbar select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;font:inherit;font-size:12px}
   .toolbar button{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px}
+  /* 화면 하단 '수정해야 할 것들' — 요청함과 대조해 실시간으로 갱신한다. */
+  .todo{background:var(--panel);border:1px solid #7a5a13;border-radius:12px;padding:15px;margin-top:20px}
+  .todo__top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .todo__top h3{margin:0;font-size:15px;color:var(--warn)}
+  .todo__counts{display:flex;gap:6px;flex-wrap:wrap}
+  .todo__count{border-radius:999px;padding:2px 9px;font-size:11px;border:1px solid var(--line);color:var(--sub)}
+  .todo__count.must{color:var(--bad);border-color:#7a2d3e}
+  .todo__count.rec{color:var(--warn);border-color:#7a5a13}
+  .todo__count.opt{color:var(--acc2);border-color:#245b7a}
+  .todo__actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .todo__actions button{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px}
+  .todo__actions button.primary{background:var(--acc2);color:#061018;font-weight:800;border-color:var(--acc2)}
+  .todo__actions button:disabled{opacity:.45;cursor:default}
+  .todo__stamp{color:var(--sub);font-size:11px}
+  .todo__list{list-style:none;margin:0;padding:0}
+  .todo__item{display:grid;grid-template-columns:auto auto 1fr auto;gap:9px;align-items:start;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:7px}
+  .todo__item.requested{border-color:#1d6b57}
+  .todo__item input{margin-top:4px;accent-color:var(--acc)}
+  .todo__prio{font-size:10.5px;border-radius:999px;padding:2px 8px;border:1px solid var(--line);white-space:nowrap}
+  .todo__prio.must{color:var(--bad);border-color:#7a2d3e}
+  .todo__prio.rec{color:var(--warn);border-color:#7a5a13}
+  .todo__prio.opt{color:var(--acc2);border-color:#245b7a}
+  .todo__title{font-size:12.5px;font-weight:700}
+  .todo__detail{font-size:11.5px;color:var(--sub);margin-top:2px}
+  .todo__state{font-size:10.5px;color:var(--acc);margin-top:3px}
+  .todo__ask{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:7px;padding:5px 9px;font-size:11px;cursor:pointer;white-space:nowrap}
+  .todo__ask:hover{background:#173452;color:#fff}
+  .todo__empty{color:var(--sub);font-size:12px;padding:8px 0}
+  .todo__msg{font-size:11.5px;color:var(--acc);min-height:17px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -506,6 +535,7 @@ function go(id, algo){
   const target = id==='algo-detail' ? '#'+id+':'+currentAlgo : '#'+id;
   if(location.hash.slice(1)!==target.slice(1)) history.replaceState(null,'',target);
   if(id==='algo-detail') renderDetail(currentAlgo);
+  renderTodo(id);
   window.scrollTo(0,0);
 }
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go,b.dataset.algo||'')));
@@ -658,7 +688,7 @@ function bindRequest(box){
       msg.textContent='저장됨 · '+data.id+' — 오픈코드 피클이 읽고 작업할게요.';
       msg.style.color='var(--acc)';
       textarea.value='';
-      await loadRequests();
+      await Promise.all([loadRequests(), loadIssues()]);
     }catch(e){
       msg.textContent='저장 실패: '+e.message; msg.style.color='var(--bad)';
     }finally{button.disabled=false;}
@@ -672,7 +702,7 @@ async function loadRequests(){
   const filter=document.getElementById('request-filter');
   const previous=filter.value;
   try{
-    const res=await fetch('/api/pipeline/requests');
+    const res=await fetch('/api/pipeline/requests',{cache:'no-store'});
     if(!res.ok) throw new Error('요청함을 읽지 못했어요.');
     const items=(await res.json()).items||[];
     const targets=new Set([...algoById.keys(), ...items.map(i=>i.target||'')].filter(Boolean));
@@ -704,6 +734,150 @@ async function loadRequests(){
 document.getElementById('request-filter').addEventListener('change',loadRequests);
 document.getElementById('request-refresh').addEventListener('click',loadRequests);
 
+// ---- 화면 하단 '수정해야 할 것들' (요청함과 대조해 실시간 갱신) ----
+const issueById = new Map();
+const selectedIssues = new Set();
+let issuesUpdatedAt = '';
+let issuesSignature = '';
+const PRIO_CLASS = {'필수':'must','추천':'rec','선택':'opt'};
+
+function ensureTodoHosts(){
+  document.querySelectorAll('.page').forEach(page=>{
+    const exists=Array.from(page.children).some(child=>child.classList?.contains('todo'));
+    if(!exists) page.appendChild(el('section','todo'));
+  });
+}
+function todoHost(pageId){
+  const page=document.getElementById(pageId);
+  return page ? (Array.from(page.children).find(c=>c.classList?.contains('todo'))||null) : null;
+}
+function issuesForPage(pageId){
+  const all=[...issueById.values()];
+  if(pageId==='home') return all;
+  if(pageId==='algo-detail') return all.filter(i=>i.page==='algo-detail' && (!i.target || i.target===currentAlgo));
+  return all.filter(i=>i.page===pageId);
+}
+function renderTodo(pageId){
+  const host=todoHost(pageId);
+  if(!host) return;
+  host.replaceChildren();
+  const issues=issuesForPage(pageId).sort((a,b)=>
+    ['필수','추천','선택'].indexOf(a.priority)-['필수','추천','선택'].indexOf(b.priority));
+  const top=el('div','todo__top');
+  top.appendChild(el('h3','',pageId==='home'?'전체 화면에서 수정하면 좋은 것들':'이 화면에서 수정하면 좋은 것들'));
+  const counts=el('div','todo__counts');
+  ['필수','추천','선택'].forEach(prio=>{
+    counts.appendChild(el('span','todo__count '+(PRIO_CLASS[prio]||''),prio+' '+issues.filter(i=>i.priority===prio).length));
+  });
+  top.appendChild(counts);
+  const actions=el('div','todo__actions');
+  const refresh=el('button','','새로고침');
+  refresh.type='button';
+  refresh.addEventListener('click',()=>loadIssues());
+  const ask=el('button','primary','선택 항목 AI에 요청');
+  ask.type='button';
+  actions.appendChild(refresh);
+  actions.appendChild(ask);
+  top.appendChild(actions);
+  host.appendChild(top);
+  host.appendChild(el('div','todo__stamp',issuesUpdatedAt?'요청함 기준 '+issuesUpdatedAt:'요청함을 불러오는 중…'));
+
+  const list=el('ul','todo__list');
+  issues.forEach(issue=>{
+    const closed=issue.state==='done'||issue.state==='requested';
+    const li=el('li','todo__item'+(closed?' requested':''));
+    const check=el('input');
+    check.type='checkbox';
+    check.checked=selectedIssues.has(issue.id);
+    check.disabled=closed;
+    check.setAttribute('aria-label',issue.title);
+    check.addEventListener('change',()=>{
+      if(check.checked) selectedIssues.add(issue.id); else selectedIssues.delete(issue.id);
+      updateAsk();
+    });
+    li.appendChild(check);
+    li.appendChild(el('span','todo__prio '+(PRIO_CLASS[issue.priority]||''),issue.priority));
+    const body=el('div');
+    body.appendChild(el('div','todo__title',issue.title));
+    body.appendChild(el('div','todo__detail',issue.detail));
+    if(closed) body.appendChild(el('div','todo__state',(issue.state==='done'?'완료':'요청됨')+' · '+issue.requestCount+'건'));
+    li.appendChild(body);
+    const one=el('button','todo__ask',closed?'다시 요청':'이 항목 요청');
+    one.type='button';
+    one.addEventListener('click',()=>requestIssues([issue],host));
+    li.appendChild(one);
+    list.appendChild(li);
+  });
+  if(!issues.length) list.appendChild(el('li','todo__empty','이 화면에 등록된 수정 항목이 없어요.'));
+  host.appendChild(list);
+  host.appendChild(el('div','todo__msg'));
+  function updateAsk(){
+    const picked=issues.filter(i=>selectedIssues.has(i.id)).length;
+    ask.textContent=picked?'선택 '+picked+'건 AI에 요청':'선택 항목 AI에 요청';
+    ask.disabled=picked===0;
+  }
+  ask.addEventListener('click',()=>requestIssues(issues.filter(i=>selectedIssues.has(i.id)),host));
+  updateAsk();
+}
+async function loadIssues(){
+  try{
+    const res=await fetch('/api/pipeline/issues',{cache:'no-store'});
+    if(!res.ok) throw new Error('수정 목록을 읽지 못했어요.');
+    const data=await res.json();
+    issueById.clear();
+    (data.items||[]).forEach(i=>issueById.set(i.id,i));
+    issuesUpdatedAt=(data.updatedAt||'').replace('T',' ').replace('Z','');
+    [...selectedIssues].forEach(id=>{if(!issueById.has(id)) selectedIssues.delete(id);});
+    const signature=JSON.stringify([...issueById.values()].map(i=>[i.id,i.state,i.requestCount]));
+    const host=todoHost(hashParts().id);
+    if(signature!==issuesSignature){
+      issuesSignature=signature;
+      renderTodo(hashParts().id);
+    }else if(host){
+      const stamp=host.querySelector('.todo__stamp');
+      if(stamp) stamp.textContent='요청함 기준 '+issuesUpdatedAt;
+    }
+  }catch(e){
+    const host=todoHost(hashParts().id);
+    if(host) host.replaceChildren(el('div','todo__empty','수정 목록을 불러오지 못했어요: '+e.message));
+  }
+}
+async function requestIssues(issues,host){
+  if(!issues.length) return;
+  const msg=host.querySelector('.todo__msg');
+  if(msg){msg.style.color='var(--acc2)';msg.textContent=issues.length+'건을 요청함에 저장하는 중…';}
+  const settled=await Promise.allSettled(issues.map(issue=>fetch('/api/pipeline/request',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      pipeline:issue.pipeline,
+      target:issue.target||'',
+      scope:issue.priority,
+      issueId:issue.id,
+      message:'['+issue.page+' · '+issue.priority+'] '+issue.title+'\n'+issue.detail,
+    }),
+  }).then(async res=>{
+    if(!res.ok){
+      const data=await res.json().catch(()=>({}));
+      throw new Error(data.detail?.message||data.message||('HTTP '+res.status));
+    }
+    return res.json();
+  })));
+  const ok=settled.filter(r=>r.status==='fulfilled').length;
+  const failed=settled.filter(r=>r.status==='rejected');
+  issues.forEach(i=>selectedIssues.delete(i.id));
+  await Promise.all([loadIssues(),loadRequests()]);
+  const out=todoHost(hashParts().id)?.querySelector('.todo__msg');
+  if(out){
+    out.style.color=failed.length?'var(--warn)':'var(--acc)';
+    out.textContent=ok+'/'+issues.length+'건 저장됨'+(failed.length
+      ?' · 실패: '+failed.map(r=>r.reason?.message||'알 수 없음').join(', ')
+      :' — 오픈코드 피클이 읽고 작업할게요.');
+  }
+}
+function refreshLive(){if(!document.hidden){loadIssues();loadRequests();}}
+setInterval(refreshLive,5000);
+document.addEventListener('visibilitychange',refreshLive);
+
 async function loadAlgorithms(){
   try{
     const res=await fetch('/api/pipeline/algorithms');
@@ -718,8 +892,10 @@ async function loadAlgorithms(){
     grid.replaceChildren(el('div','card','알고리즘 목록을 불러오지 못했어요: '+e.message));
   }
 }
+ensureTodoHosts();
 loadAlgorithms();
 loadRequests();
+loadIssues();
 const initial=hashParts();
 go(initial.id,initial.algo);
 </script>

@@ -27,6 +27,55 @@ def test_pipeline_algorithms_are_public_and_complete():
     assert not re.search(pattern, payload, flags=re.IGNORECASE)
 
 
+def test_pipeline_issues_reflect_requests_in_real_time(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "PIPELINE_DIR", tmp_path)
+    client = TestClient(main.app)
+    before = client.get("/api/pipeline/issues")
+    assert before.status_code == 200
+    issues = before.json()["items"]
+    assert len({issue["id"] for issue in issues}) == len(issues)
+    assert {issue["priority"] for issue in issues} >= {"필수", "추천", "선택"}
+    assert {issue["page"] for issue in issues} >= {"home", "algo-detail", "audit"}
+    for issue in issues:
+        assert issue["pipeline"] in main.PIPELINE_IDS
+        assert not issue["target"] or issue["target"] in main.PIPELINE_TARGETS
+        assert issue["requested"] is False
+        assert issue["requestCount"] == 0
+
+    selected = next(issue for issue in issues if issue["priority"] == "필수")
+    saved = client.post("/api/pipeline/request", json={
+        "pipeline": selected["pipeline"],
+        "target": selected["target"],
+        "scope": selected["priority"],
+        "issueId": selected["id"],
+        "message": selected["title"] + " — " + selected["detail"],
+    })
+    assert saved.status_code == 200
+    rows = json.loads((tmp_path / "requests.json").read_text(encoding="utf-8"))
+    assert rows[0]["issueId"] == selected["id"]
+
+    after = client.get("/api/pipeline/issues").json()["items"]
+    updated = next(issue for issue in after if issue["id"] == selected["id"])
+    assert updated["requested"] is True
+    assert updated["state"] == "requested"
+    assert updated["requestCount"] == 1
+    assert sum(issue["requested"] for issue in after) == 1
+
+    # AI가 요청을 완료로 바꾸면 다음 폴링에서 목록도 '완료'로 바뀐다.
+    rows[0]["status"] = "done"
+    (tmp_path / "requests.json").write_text(
+        json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+    )
+    done = next(i for i in client.get("/api/pipeline/issues").json()["items"] if i["id"] == selected["id"])
+    assert done["state"] == "done"
+
+    bad = client.post("/api/pipeline/request", json={
+        "pipeline": "direct-search", "issueId": "없는항목", "message": "검증용",
+    })
+    assert bad.status_code == 400
+    assert bad.json()["code"] == "invalid_issue"
+
+
 def test_pipeline_request_keeps_target_and_rejects_unknown_ids(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "PIPELINE_DIR", tmp_path)
     client = TestClient(main.app)
