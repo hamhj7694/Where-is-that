@@ -31,8 +31,8 @@ export interface LostSearchActions {
   onCommitSearch: (draft: SearchDraft, autoRankConsent?: boolean) => void
 }
 interface Props extends LostSearchActions { draft: SearchDraft; channel?: LostResultChannel; fromHistory?: boolean }
-const titles = { combined: '종합', image: '사진 특징이 비슷한 후보', context: '설명·조건이 비슷한 후보' }
-const descriptions = { combined: '사진과 설명·조건 기준의 후보를 모아 봐요.', image: '색상·모양 등 사진의 특징을 살펴보세요.', context: '물건 설명과 습득 정보를 살펴보세요.' }
+const titles = { combined: '추천 후보', image: '사진이 닮은 후보', context: '설명이 잘 맞는 후보' }
+const descriptions = { combined: '적어둔 내용과 사진 특징을 함께 살펴봤어요.', image: '색상·모양 등 사진의 특징을 살펴보세요.', context: '물건 설명과 습득 정보를 살펴보세요.' }
 const scrollPositions = new Map<string, number>()
 const API_ROWS = 40
 
@@ -495,7 +495,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     void withMinimumVisible(startedAt, rankLostContextCandidates(request)).then(results => {
       if (requestId === rankRequestSequence.current) setContextRank({ scope, results })
     }).catch(cause => {
-      if (requestId === rankRequestSequence.current) setRankError(cause instanceof Error ? cause.message : 'AI가 설명·장소 후보를 비교하지 못했어요.')
+      if (requestId === rankRequestSequence.current) setRankError(cause instanceof Error ? cause.message : '설명·장소 후보를 비교하지 못했어요.')
     }).finally(() => {
       if (requestId === rankRequestSequence.current) setRankBusy(false)
     })
@@ -529,7 +529,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       if (requestId === visualRequestSequence.current) setVisualMatch({ scope, results, source })
     } catch (cause) {
       if (requestId === visualRequestSequence.current) {
-        setVisualError(cause instanceof Error ? cause.message : 'AI가 공개 사진·설명을 비교하지 못했어요.')
+        setVisualError(cause instanceof Error ? cause.message : '공개 사진·설명을 비교하지 못했어요.')
       }
     } finally {
       await minimumWait(startedAt)
@@ -563,22 +563,22 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       {status === 'partial' && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요. <button type="button" onClick={() => retry()}>다시 시도</button></p>}
       {full && which === 'context' && available && contextPageCandidates.length > 0 && <div className="lost-context-ranker">
         <button type="button" className="button button--secondary" disabled={rankBusy} onClick={rankCurrentContext}><Sparkles aria-hidden="true" />{activeRank ? '다시 비교' : '비슷한 물건 찾기'}</button>
-        <span>현재 페이지 공개 후보 {contextPageCandidates.length}개 · 원할 때만 분석</span>
+        <span>이 페이지 후보 {contextPageCandidates.length}개 · 원할 때만 비교</span>
       </div>}
       {full && which === 'image' && available && visualCandidates.length > 0 && <div className="lost-context-ranker">
         <button type="button" className="button button--secondary" disabled={visualBusy} onClick={() => startVisualRanking(visualRankScope)}><Sparkles aria-hidden="true" />{activeVisual ? '다시 비교' : '사진 특징으로 비교'}</button>
         <span>현재 공개 후보 {visualCandidates.length}건 · 참고 사진이 없으면 설명으로 비교해요</span>
       </div>}
-      {status === 'loading' || waitingForMore || busy ? <AiSearching compact label={'AI가 ' + titles[which] + (status === 'loading' ? ' 후보를 뒤지고 있어요' : ' 순서를 정리하고 있어요')} />
+      {status === 'loading' || waitingForMore || busy ? <AiSearching compact label={status === 'loading' ? '공개 후보를 살펴보고 있어요' : '후보 순서를 정리하고 있어요'} />
         : status === 'error' ? <EmptyState title="이 기준의 후보를 불러오지 못했어요" description="다른 검색 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry()} /></EmptyState>
           : status === 'confirmation' ? <EmptyState title="검색 내용을 확인해 주세요" description="입력 확인이 필요한 상태의 화면 예시예요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><RetryButton onClick={() => retry()} /></EmptyState>
             : status === 'empty' || !shown.length ? <EmptyState title="이 조건에 맞는 후보가 없어요" description="공개 정보가 없거나 부족할 수 있어요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><a className="button button--secondary" href={OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">공식 검색 안내</a></EmptyState>
               : <>{full && (pages > 1 || hasMore) && <Pagination page={page} pages={pages} onChange={changePage} inputId={'lost-' + which + '-page-top'} position="top" allowBeyond={hasMore} />}
                 <div className="gallery-result-grid lost-result-grid">{shown.map(item => <FoundCard key={item.id} item={item} to={'/lost-found/item/' + (item.source ?? 'police') + '/' + encodeURIComponent((item.atcId ?? item.id) + ':' + (item.fdSn ?? '1')) + '?back=' + encodeURIComponent(pageKey)} />)}</div>
-                {sectionRank && <details className="lost-context-rank-details"><summary>AI 비교 근거와 장소 맥락 보기</summary><ol>{sectionRank.map(result => {
+                {sectionRank && <details className="lost-context-rank-details"><summary>비교 근거와 장소 정보 보기</summary><ol>{sectionRank.map(result => {
                   const item = shown.find(candidate => candidate.id === result.id)
-                  return <li key={result.id}><strong>{item?.title ?? '공개 후보'} · 참고 점수 {result.score}/100</strong><ul>{result.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul><p><strong>{locationRelationLabels[result.locationRelation]}</strong>{result.locationEvidence ? ` · ${result.locationEvidence}` : ''}</p><p>{result.uncertainty}</p></li>
-                })}</ol><p className="lost-context-rank-details__note">참고 점수는 일치 확률이 아니며, 같은 물건·소유권·회수를 확인하지 않습니다. 장소 추정은 공개 문구에 따른 가능성일 뿐이에요.</p></details>}
+                  return <li key={result.id}><strong>{item?.title ?? '공개 후보'}</strong><ul>{result.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul><p><strong>{locationRelationLabels[result.locationRelation]}</strong>{result.locationEvidence ? ` · ${result.locationEvidence}` : ''}</p><p>{result.uncertainty}</p></li>
+                })}</ol><p className="lost-context-rank-details__note">이 근거는 같은 물건임을 확인하지 않아요. 장소 정보는 공개 문구에 따른 가능성일 뿐이에요.</p></details>}
                 {full && (pages > 1 || hasMore) && <Pagination page={page} pages={pages} onChange={changePage} inputId={'lost-' + which + '-page-bottom'} allowBeyond={hasMore} />}</>}
     </section>
   }
@@ -595,17 +595,17 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       {!wide && assistantToggle}
     </div>
     {hasSearchCriteria(criteria) && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
-      <p className="lost-ai-criteria__title">AI가 공개 정보에서 읽은 맞춤 조건</p>
+      <p className="lost-ai-criteria__title">공개 정보에서 찾은 맞춤 조건</p>
       <div className="lost-ai-criteria__chips">{(['apiKeywords', 'include', 'any', 'exclude', 'imageFeatures'] as const).filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}</div>
-      <p className="lost-ai-criteria__note">물품명·설명·특이사항·색상·습득 장소 같은 공개 정보를 기준으로 적용했어요. {criteriaResult.dropped > 0 && `NOT 조건에 걸린 ${criteriaResult.dropped}건을 제외하고, `}{criteriaResult.matched > 0 ? `${criteriaResult.matched}건이 조건과 일치해 먼저 보여드려요.` : '조건과 직접 일치하는 후보가 없어 넓은 검색 결과를 보여드려요.'}</p>
+      <p className="lost-ai-criteria__note">물품명·설명·특이사항·색상·습득 장소 같은 공개 정보를 기준으로 적용했어요. {criteriaResult.dropped > 0 && `빼기로 한 특징이 있는 ${criteriaResult.dropped}건을 제외하고, `}{criteriaResult.matched > 0 ? `${criteriaResult.matched}건이 조건과 일치해 먼저 보여드려요.` : '조건과 직접 일치하는 후보가 없어 넓은 검색 결과를 보여드려요.'}</p>
     </div>}
     <LostResultFilters />
-    {rankBusy && <p className="lost-context-rank-status" role="status">AI가 공개 후보의 설명과 장소 정보를 비교해 관련도 순으로 정리하고 있어요.</p>}
+    {rankBusy && <p className="lost-context-rank-status" role="status">공개 후보의 설명과 장소 정보를 비교해 순서를 정하고 있어요.</p>}
     {rankError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{rankError}{contextPageCandidates.length > 0 && <> <button type="button" onClick={retryContextRanking}>다시 시도</button></>}</p>}
-    {activeRank && !rankBusy && <p className="lost-context-rank-status" role="status">현재 페이지의 공개 후보 {activeRank.length}개를 AI 관련도 참고 순으로 정리했어요.</p>}
-    {visualBusy && <p className="lost-context-rank-status" role="status">AI가 공개 후보의 사진과 설명을 시각 특징과 비교하고 있어요.</p>}
+    {activeRank && !rankBusy && <p className="lost-context-rank-status" role="status">이 페이지 후보 {activeRank.length}개의 설명과 장소 정보를 바탕으로 정리했어요.</p>}
+    {visualBusy && <p className="lost-context-rank-status" role="status">공개 후보의 사진과 설명을 비교하고 있어요.</p>}
     {visualError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{visualError}{visualCandidates.length > 0 && <> <button type="button" onClick={() => startVisualRanking(visualRankScope)}>다시 시도</button></>}</p>}
-    {activeVisual && !visualBusy && <p className="lost-context-rank-status" role="status">공개 후보 {activeVisual.length}건의 사진·설명을 시각 특징과 비교해 정리했어요. 이미지 유사도는 {visualMatch?.source === 'vision-model' ? '전용 비전' : '멀티모달'} 분석 기준이에요.</p>}
+    {activeVisual && !visualBusy && <p className="lost-context-rank-status" role="status">공개 후보 {activeVisual.length}건의 사진·설명을 비교해 정리했어요.</p>}
     {params.get('state') === 'stale' && <p className="inline-error">공식 기록이 변경된 상태 예시예요.</p>}
     {newItems.length > 0 && <section className="gallery-result-section lost-result-section" aria-labelledby={id + '-new'}>
       <div className="gallery-result-section__heading"><div><h2 id={id + '-new'}>신규</h2><p>마지막 검색·새로고침 이후 새로 확인된 공개 후보예요.</p></div>
@@ -617,7 +617,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     </section>}
     {/* 채널별로 결과가 준비되는 대로 각 섹션에서 로봇을 보여주고 결과를 교체한다. */}
     <div className="gallery-results__sections">{channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
-    <p className="field__help result-disclaimer">같은 물건인지와 보관 여부는 보관기관에 확인해 주세요. AI가 잘못 찾거나 놓칠 수 있고, 공개 정보가 부족하면 검색이 제한될 수 있어요.</p>
+    <p className="field__help result-disclaimer">결과는 참고용이에요. 같은 물건인지와 보관 여부는 보관기관에 확인해 주세요.</p>
   </main>{wide ? open && <div className="gallery-assistant-dock">{assistantPanel}</div> : <Modal open={open} title="검색 도우미" focusKey={id} className="gallery-assistant-modal" initialFocus={input} onClose={() => showAssistant(false)}>{assistantPanel}</Modal>}
   </div>
 }

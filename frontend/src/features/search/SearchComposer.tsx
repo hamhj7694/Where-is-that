@@ -182,7 +182,7 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
     </div>
     <div className="composer__toolbar">
       <button type="button" className="attachment-button" onClick={openAttachment} aria-haspopup="dialog" disabled={reading}>
-        {reading ? <LoaderCircle aria-hidden="true" /> : <ImagePlus aria-hidden="true" />}<span>{reading ? '사진 확인 중' : draft.photo ? '사진 바꾸기' : '참고 사진 추가'}</span>
+        {reading ? <LoaderCircle aria-hidden="true" /> : <ImagePlus aria-hidden="true" />}<span>{reading ? '사진 확인 중' : draft.photo ? '사진 바꾸기' : '사진 첨부'}</span>
       </button>
       <span className="keyboard-hint" aria-hidden="true">줄바꿈 <kbd>Shift</kbd> <kbd>↵</kbd> · 이미지 붙여넣기</span>
       {secondaryAction}

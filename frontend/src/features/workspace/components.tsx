@@ -90,7 +90,7 @@ export function NoPhoto({ message = '등록된 사진 없음', category }: { mes
 const AI_SEARCH_ITEMS = [ImageIcon, CreditCard, Smartphone, Wallet, Watch, KeyRound]
 
 /** 검색 중 빈칸 대신: 로봇이 선반의 물건을 돋보기로 훑으며 뒤지는 장면. */
-export function AiSearching({ label = 'AI가 물건을 뒤지고 있어요', compact = false }: { label?: string; compact?: boolean }) {
+export function AiSearching({ label = '물건을 찾고 있어요', compact = false }: { label?: string; compact?: boolean }) {
   return <div className={compact ? 'ai-search ai-search--compact' : 'ai-search'} role="status" aria-live="polite">
     <div className="ai-search__scene" aria-hidden="true">
       <div className="ai-search__shelf">
@@ -102,12 +102,28 @@ export function AiSearching({ label = 'AI가 물건을 뒤지고 있어요', com
   </div>
 }
 
+const friendlyMatchLabels: Record<string, string> = {
+  'AI+검색어+필터 일치': '내용·사진·조건이 모두 맞아요',
+  'AI+검색어 일치': '내용과 검색어가 맞아요',
+  'AI+필터 일치': '내용과 조건이 맞아요',
+  '검색어+필터 일치': '검색어와 조건이 맞아요',
+  'AI 사진 일치': '사진이 닮았어요',
+  'AI 조건 일치': '적어둔 특징이 맞아요',
+  '검색어 일치': '적어둔 말이 맞아요',
+  '조건 필터 일치': '조건이 맞아요',
+  '부분 일치': '일부 내용이 맞아요',
+  '공개 원문': '공개 정보에서 찾았어요',
+}
+
+const tierFallbackLabels = ['내용·사진·조건이 모두 맞아요', '적어둔 특징이 맞아요', '적어둔 말이 맞아요', '조건이 맞아요', '일부 내용이 맞아요', '공개 정보에서 찾았어요']
+
 export function FoundCard({ item, to, context = false }: { item: Candidate; to: string; context?: boolean }) {
   const [failed, setFailed] = useState(false)
   const photo = item.photoStatus === 'verified_photo' && item.image && !failed
+  const matchLabel = item.matchLabel ? friendlyMatchLabels[item.matchLabel] ?? tierFallbackLabels[item.matchTier ?? 5] ?? '공개 정보에서 찾았어요' : ''
   return <Link to={to} className={context ? 'context-card' : 'found-card'}>
     <div className={context ? 'context-card__image' : 'found-card__image'}>{photo ? <img src={item.image!} alt={item.title + ' 사진'} loading="lazy" onError={() => setFailed(true)} /> : <NoPhoto message={failed ? '사진 표시 오류' : undefined} category={item.category} />}</div>
-    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && item.matchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{item.matchLabel}</span>}{!context && typeof item.visualScore === 'number' && <span className="found-card__visual">사진 특징 {item.visualScore}점</span>}{!context && <p>{item.color} · {item.category}</p>}
+    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && matchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{matchLabel}</span>}{!context && typeof item.visualScore === 'number' && <span className="found-card__visual">사진 특징 반영</span>}{!context && <p>{item.color} · {item.category}</p>}
       {context && <><div className="match-reasons">{item.matchReasons.map(reason => <span key={reason}>{reason}</span>)}</div><p>{item.foundPlace}</p></>}
       <small>{item.foundAt}</small></div>
     {context && <ArrowRight className="context-card__actions" aria-label="상세 보기" />}

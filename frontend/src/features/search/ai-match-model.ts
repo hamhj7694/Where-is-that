@@ -62,7 +62,8 @@ function cleanTerms(value: readonly unknown[] | undefined, limit: number): strin
   return result
 }
 
-function normalizeCriteria(value: unknown): AiSearchCriteria {
+/** 이전 버전에서 저장된 조건에 없는 배열이 있어도 안전하게 복원한다. */
+export function normalizeCriteria(value: unknown): AiSearchCriteria {
   if (!value || typeof value !== 'object') return EMPTY_SEARCH_CRITERIA
   const raw = value as Partial<AiSearchCriteria>
   return {
@@ -170,8 +171,9 @@ export function resolveApiKeyword(criteria: AiSearchCriteria, fallback: string):
 }
 
 export function hasSearchCriteria(criteria: AiSearchCriteria): boolean {
-  return criteria.apiKeywords.length + criteria.include.length + criteria.any.length
-    + criteria.exclude.length + criteria.prefer.length + criteria.imageFeatures.length > 0
+  const normalized = normalizeCriteria(criteria)
+  return normalized.apiKeywords.length + normalized.include.length + normalized.any.length
+    + normalized.exclude.length + normalized.prefer.length + normalized.imageFeatures.length > 0
 }
 
 export function criteriaToHints(criteria: AiSearchCriteria): Record<string, string[]> {

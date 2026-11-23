@@ -7,7 +7,7 @@ import {
   REGIONS, type BrowsePayload, type FoundItem, type LostBrowseFilters, type LostSearchHints,
 } from '../search/lostfound-api'
 import { prepareAiSearch } from '../search/ai-search-api'
-import { criteriaFromPlan, criteriaLabels, criteriaToHints, EMPTY_SEARCH_CRITERIA, hasSearchCriteria, type AiSearchCriteria } from '../search/ai-match-model'
+import { criteriaFromPlan, criteriaLabels, criteriaToHints, EMPTY_SEARCH_CRITERIA, hasSearchCriteria, normalizeCriteria, type AiSearchCriteria } from '../search/ai-match-model'
 import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
 import LostResultFilters from './LostResultFilters'
 import '../../styles/gallery-search.css'
@@ -155,15 +155,6 @@ function clearStoredSearch() {
   try { window.sessionStorage.removeItem(LAST_SEARCH_KEY) } catch { /* 무시 */ }
 }
 
-const TIER_LEGEND = [
-  { label: 'AI+검색어+필터', className: 'tier0' },
-  { label: 'AI 조건', className: 'tier1' },
-  { label: '검색어', className: 'tier2' },
-  { label: '조건 필터', className: 'tier3' },
-  { label: '부분 일치', className: 'tier4' },
-  { label: '공개 원문', className: 'tier5' },
-]
-
 export default function DirectSearchPage() {
   const restoredRef = useRef<StoredSearch | null>(readStoredSearch())
   const restored = restoredRef.current
@@ -189,7 +180,7 @@ export default function DirectSearchPage() {
   const [answeredQuestions, setAnsweredQuestions] = useState<string[]>(restored?.answeredQuestions ?? [])
   const answeredRef = useRef<string[]>(restored?.answeredQuestions ?? [])
   const [questionDraft, setQuestionDraft] = useState('')
-  const [criteria, setCriteria] = useState<AiSearchCriteria>(restored?.criteria ?? EMPTY_SEARCH_CRITERIA)
+  const [criteria, setCriteria] = useState<AiSearchCriteria>(normalizeCriteria(restored?.criteria))
   const [aiBusy, setAiBusy] = useState(false)
   // 분석이 끝난 검색어만 조회한다. AI 응답 전 원문 검색이 먼저 실행돼 깜빡이는 것을 막는다.
   const [analyzedKeyword, setAnalyzedKeyword] = useState(restored?.analyzedKeyword ?? '')
@@ -429,7 +420,6 @@ export default function DirectSearchPage() {
   const pages = Math.max(1, Math.ceil(live.total / API_ROWS))
   const appliedFilters = Object.values(filters).filter(Boolean).length
   const criteriaGroups = ['apiKeywords', 'include', 'any', 'prefer', 'exclude'] as const
-  const showTiers = Boolean(keyword) && !live.loading && !live.error && items.length > 0
 
   function goToPage(next: number) {
     const updated = new URLSearchParams(params)
@@ -517,29 +507,29 @@ export default function DirectSearchPage() {
             maxLength={100}
           />
           <div className="direct-search__form-actions">
-            <button type="button" className="button button--secondary" disabled={aiBusy} onClick={event => submitSearch(event, 'basic')}>일반 검색</button>
-            <button type="submit" className="button button--primary" disabled={aiBusy}><Search aria-hidden="true" />{aiBusy ? '분석 중…' : 'AI 검색'}</button>
+            <button type="button" className="button button--secondary" disabled={aiBusy} onClick={event => submitSearch(event, 'basic')}>빠른 검색</button>
+            <button type="submit" className="button button--primary" disabled={aiBusy}><Search aria-hidden="true" />{aiBusy ? '정리 중…' : '자세히 찾기'}</button>
             {keyword && <button type="button" className="button button--secondary" onClick={showAll}>전체 보기</button>}
           </div>
         </div>
         <p className="direct-search__ai-hint">{mode === 'ai'
-          ? 'AI가 적어둔 내용에서 중요한 말과 사진 특징을 뽑아 공개 사진까지 살펴봐요. 잘 맞는 물건부터 보여드려요.'
-          : '적어둔 말로 공개 습득물을 바로 찾아요. 사진 분석 없이 빠르게 결과를 볼 수 있어요.'}</p>
+          ? '적어둔 내용에서 중요한 말과 사진 특징을 찾아 공개 정보를 넓게 살펴봐요. 잘 맞는 물건부터 보여드려요.'
+          : '적어둔 말로 공개 습득물을 바로 찾아요. 사진을 살펴보지 않아 빠르게 결과를 볼 수 있어요.'}</p>
       </form>
       <div className="direct-search__filters"><LostResultFilters compact colorOptions={colorOptions} showDirection={false} customDropdowns /></div>
     </div>
     {mode === 'ai' && (aiBusy || live.loading) && <div className="direct-search__progress" role="status" aria-live="polite">
       <span className="direct-search__spinner" aria-hidden="true" />
       <span>{aiBusy
-        ? 'AI가 검색어를 정리하고 있어요'
+        ? '검색어를 정리하고 있어요'
         : visualProgress.total > 0
-            ? `AI가 공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 보고 있어요`
-            : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
+            ? `공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 살펴보고 있어요`
+            : keyword ? '공개 정보를 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
       {mode === 'ai' && !aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
       {mode === 'ai' && !aiBusy && <small>다른 페이지로 가도 검색은 계속돼요.</small>}
     </div>}
     {mode === 'ai' && (hasSearchCriteria(criteria) || aiDates.from || aiDates.to || aiRegion) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
-      <p className="lost-ai-criteria__title">AI가 적어둔 내용에서 알아챈 조건</p>
+      <p className="lost-ai-criteria__title">적어둔 내용에서 찾은 조건</p>
       <div className="lost-ai-criteria__chips">
         {criteriaGroups.filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}
         {aiRegion && <span className="lost-ai-criteria__chip"><strong>지역</strong>{aiRegion}</span>}
@@ -557,14 +547,10 @@ export default function DirectSearchPage() {
         <small>대략적인 장소만 알려주셔도 괜찮아요. 그 지역 전체에서 다시 찾아봐요.</small>
       </form>)}
     </div>}
-    {showTiers && mode === 'ai' && <div className="direct-search__tiers" role="note">
-      <strong>표시 순서</strong>
-      {TIER_LEGEND.map(tier => <span key={tier.label} className={'direct-search__tier direct-search__tier--' + tier.className}>{tier.label}</span>)}
-    </div>}
     {live.partial && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요.</p>}
     {live.loading ? (mode === 'basic'
       ? <div className="direct-search__basic-loading" role="status" aria-live="polite" aria-label="공개 습득물을 찾고 있어요"><span className="direct-search__spinner" aria-hidden="true" /></div>
-      : <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" />) : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={reload} /></EmptyState>
+      : <AiSearching label="공개 습득물에서 물건을 찾고 있어요" />) : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={reload} /></EmptyState>
       : <>
         <div className="direct-search__pagination-top">
           {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-top" position="top" />}

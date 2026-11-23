@@ -25,17 +25,17 @@ export default function AiQueryOptimizer({ mode, baseQuery, state, onChange, onA
       onChange(await prepareOptimizedAssistant(mode, state, baseQuery))
     } catch {
       onChange(localAssistantUpdate(state))
-      setError('AI가 문구를 만들지 못했어요. 적어 둔 조건으로 그대로 다시 검색할 수 있어요.')
+      setError('문구를 만들지 못했어요. 적어 둔 조건으로 그대로 다시 검색할 수 있어요.')
     } finally {
       setBusy(false)
     }
   }
 
-  return <section className="query-optimizer" aria-label="AI 검색어 최적화">
+  return <section className="query-optimizer" aria-label="검색어 다듬기">
     <div className="query-optimizer__head">
-      <div><strong>AI 검색어 최적화</strong><p>현재 검색어와 도우미 조건을 검색용 AI가 한 문장으로 다시 써 줘요.</p></div>
+      <div><strong>검색어 다듬기</strong><p>기억나는 특징을 적어둔 내용과 함께 자연스럽게 정리해 줘요.</p></div>
       <button type="button" className="button button--secondary" disabled={busy || disabled} onClick={() => void optimize()}>
-        <Sparkles aria-hidden="true" />{busy ? '다듬는 중…' : '검색어 다듬기'}
+        <Sparkles aria-hidden="true" />{busy ? '다듬는 중…' : '다듬어 보기'}
       </button>
     </div>
     {state.optimizedQuery && <div className="query-optimizer__result" role="status">

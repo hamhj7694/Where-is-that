@@ -112,7 +112,7 @@ export async function prepareAiSearch(
   }
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new Error(apiErrorMessage(body, 'AI 검색 조건을 정리하지 못했어요.'))
+    throw new Error(apiErrorMessage(body, '검색어를 정리하지 못했어요.'))
   }
   return body as AiSearchPlan
 }

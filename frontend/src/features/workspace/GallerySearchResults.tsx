@@ -47,10 +47,23 @@ function requestRanking(key: string, input: Parameters<typeof compareCandidates>
 }
 
 const channelCopy = {
-  combined: { title: '종합 검색', description: 'AI가 매긴 종합 관련성 순서', more: '종합 검색 더보기' },
-  image: { title: '이미지 검색', description: 'AI가 매긴 이미지 유사도 순서', more: '이미지 검색 더보기' },
-  context: { title: '맥락 검색', description: 'AI가 매긴 맥락 관련성 순서', more: '맥락 검색 더보기' },
+  combined: { title: '추천 사진', description: '적어둔 내용과 사진 특징을 함께 살펴봤어요.', more: '추천 사진 더보기' },
+  image: { title: '닮은 사진', description: '참고 사진과 닮은 특징을 먼저 보여줘요.', more: '닮은 사진 더보기' },
+  context: { title: '설명이 잘 맞는 사진', description: '적어둔 내용과 잘 맞는 사진을 먼저 보여줘요.', more: '잘 맞는 사진 더보기' },
 } as const
+
+function textForChannel(which: GallerySearchChannel, hasReference: boolean) {
+  if (which === 'image' && !hasReference) return {
+    title: '사진 속 특징', description: '색상·모양 같은 사진 속 특징을 살펴봤어요.', more: '사진 특징 결과 더보기',
+    reason: '사진 속 특징을 살펴봤어요',
+  }
+  const reason: Record<GallerySearchChannel, string> = {
+    combined: '내용과 사진 특징이 함께 맞아요',
+    image: '참고 사진과 닮은 특징이 있어요',
+    context: '적어둔 내용과 잘 맞아요',
+  }
+  return { ...channelCopy[which], reason: reason[which] }
+}
 
 type ChannelState = 'preview' | 'loading' | 'empty' | 'error'
 const scrollPositions = new Map<string, number>()
@@ -82,10 +95,10 @@ function stateFor(params: URLSearchParams, channel: GallerySearchChannel): Chann
   return 'preview'
 }
 
-function GalleryResultCard({ photo, to }: { photo: AppPhoto; to: string }) {
+function GalleryResultCard({ photo, to, reason }: { photo: AppPhoto; to: string; reason?: string }) {
   return <Link className="gallery-result-card" to={to} aria-label={photo.name + ' 이미지 보기'}>
     <div className="gallery-result-card__image"><PhotoImage photo={photo} /></div>
-    <div className="gallery-result-card__caption"><strong title={photo.name}>{photo.name}</strong><span>{photo.kind === 'screenshot' ? '스크린샷' : '사진'}</span></div>
+    <div className="gallery-result-card__caption"><strong title={photo.name}>{photo.name}</strong><span>{photo.kind === 'screenshot' ? '스크린샷' : '사진'}</span>{reason && <span className="gallery-result-card__reason">{reason}</span>}</div>
   </Link>
 }
 
@@ -108,7 +121,6 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   const photos = useMemo(() => uniqueGalleryItems((gallery?.files ?? []).map(file => photoFromFile(file, localPhotoId(file)))), [gallery])
   const [ranking, setRanking] = useState<GalleryRankMap | null>(null)
   const [referenceDescriptions, setReferenceDescriptions] = useState<string[]>([])
-  const [similaritySource, setSimilaritySource] = useState<'vision-model' | 'multimodal'>('multimodal')
   const [rankBusy, setRankBusy] = useState(false)
   const [rankStatus, setRankStatus] = useState('')
   const [rankError, setRankError] = useState('')
@@ -118,7 +130,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   // 페인트 전에 로딩을 켜서 결과 화면이 먼저 번쩍이지 않게 한다.
   useLayoutEffect(() => {
     if (!gallery || (!draft.query.trim() && !draft.photo)) {
-      setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError(''); setRankBusy(false)
+      setRanking(null); setReferenceDescriptions([]); setRankStatus(''); setRankError(''); setRankBusy(false)
       return
     }
     const candidates = uniqueGalleryItems(gallery.files.map(file => photoFromFile(file, localPhotoId(file))))
@@ -127,26 +139,22 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     if (!candidates.length) return
     let cancelled = false
     const startedAt = Date.now()
-    setRankBusy(true); setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError('')
+    setRankBusy(true); setRanking(null); setReferenceDescriptions([]); setRankStatus(''); setRankError('')
     void withMinimumVisible(startedAt, requestRanking(rankKey, {
       mode: 'gallery',
       query: draft.query,
       references: draft.photo ? [draft.photo] : [],
       candidates: candidates.map(item => ({ id: item.id, file: item.file })),
-    })).then(({ results, referenceDescriptions, imageSimilaritySource }) => {
+    })).then(({ results, referenceDescriptions }) => {
       if (cancelled) return
       setRanking(toGalleryRankMap(results))
       setReferenceDescriptions(referenceDescriptions)
-      setSimilaritySource(imageSimilaritySource)
-      const similarityNote = imageSimilaritySource === 'vision-model'
-        ? '이미지 유사도는 전용 비전이 계산했어요.'
-        : '이미지 유사도는 멀티모달이 함께 추정했어요.'
-      setRankStatus(`${referenceDescriptions.length
-        ? `AI가 참고 사진을 분석하고 검색어와 함께 반영해 연결된 사진 ${results.length}장의 종합·이미지·맥락 순서를 정했어요.`
-        : `AI가 검색어를 반영해 연결된 사진 ${results.length}장의 종합·이미지·맥락 순서를 정했어요.`} ${similarityNote}`)
+      setRankStatus(referenceDescriptions.length
+        ? `참고 사진의 특징까지 반영해 연결된 사진 ${results.length}장의 순서를 정했어요.`
+        : `적어둔 내용을 반영해 연결된 사진 ${results.length}장의 순서를 정했어요.`)
     }).catch(cause => {
       if (cancelled) return
-      setRankError(cause instanceof Error ? cause.message : 'AI 사진 분석에 실패했어요.')
+      setRankError(cause instanceof Error ? cause.message : '사진을 비교하지 못했어요.')
     }).finally(() => { if (!cancelled) setRankBusy(false) })
     return () => { cancelled = true }
   }, [rankKey])
@@ -221,7 +229,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   if (!draft.query.trim() && !draft.photo) return <main id="main-content" className="content-workspace"><PageHeading title="찾은 이미지" /><EmptyState title="찾고 싶은 사진을 알려 주세요"><Link className="button button--primary" to="/gallery">갤러리에서 사진 찾기</Link></EmptyState></main>
 
   function renderChannel(which: GallerySearchChannel, full = false) {
-    const text = channelCopy[which]
+    const text = textForChannel(which, !!draft.photo)
     const state = stateFor(params, which)
     const ranked = sortGalleryByRank(photos, ranking, which)
     const totalPages = Math.max(1, Math.ceil(ranked.length / 12))
@@ -231,11 +239,11 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
       <div className="gallery-result-section__heading"><div><h2 id={panelId + '-' + which}>{text.title}</h2><p>{text.description}</p></div>
         {!full && state === 'preview' && photos.length > GALLERY_PREVIEW_LIMIT && <Link className="gallery-result-section__more" to={linkTo(which)}>{text.more}<ArrowRight aria-hidden="true" /></Link>}
       </div>
-      {state === 'error' ? <EmptyState title="이 검색 기준을 불러오지 못했어요" description="다른 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry(which)} /></EmptyState>
-        : state === 'loading' ? <AiSearching compact label={'AI가 ' + text.title + ' 결과를 뒤지고 있어요'} />
-        : state === 'empty' || !shown.length ? <EmptyState title="미리볼 이미지가 없어요" description="검색 조건이나 연결한 갤러리를 확인해 주세요." />
+      {state === 'error' ? <EmptyState title="결과를 불러오지 못했어요" description="다른 결과를 살펴보거나 다시 시도해 주세요." error><RetryButton onClick={() => retry(which)} /></EmptyState>
+        : state === 'loading' ? <AiSearching compact label="사진을 골라보고 있어요" />
+        : state === 'empty' || !shown.length ? <EmptyState title="여기서는 찾은 사진이 없어요" description="검색 내용을 바꾸거나 다른 결과를 살펴보세요." />
         : <>{full && totalPages > 1 && <Pagination page={page} pages={totalPages} onChange={changePage} inputId={'gallery-' + which + '-page-top'} position="top" />}
-          <div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} />)}</div>
+          <div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} reason={ranking?.[photo.id] ? text.reason : undefined} />)}</div>
           {full && totalPages > 1 && <Pagination page={page} pages={totalPages} onChange={changePage} inputId={'gallery-' + which + '-page-bottom'} />}
         </>}
     </section>
@@ -243,8 +251,8 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
 
   const assistantToggle = <button type="button" className="button button--secondary" ref={toggle} aria-controls={panelId} aria-expanded={open} disabled={!!editor} onClick={() => showAssistant(!open)}><MessageSquare aria-hidden="true" />{open ? '도우미 접기' : '검색 도우미'}</button>
   return <div className={'gallery-search-shell' + (wide && open ? ' gallery-search-shell--open' : '')}><main id="main-content" className="content-workspace gallery-results" onClickCapture={event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey && event.button === 0 && event.target instanceof Element && event.target.closest('a')) rememberScroll() }}>
-    <PageHeading title={channel ? channelCopy[channel].title + ' 결과' : '찾은 이미지'} back={channel ? { to: linkTo(), label: '찾은 이미지로' } : fromHistory ? { to: '/history', label: '찾은 기록으로' } : undefined} action={wide ? assistantToggle : undefined} />
-    <DemoNotice>{rankBusy ? 'AI가 연결된 사진을 분석하고 있어요…' : rankStatus || '연결된 사진을 기준으로 검색 결과를 보여줘요.'}</DemoNotice>
+    <PageHeading title={channel ? textForChannel(channel, !!draft.photo).title : '찾은 이미지'} back={channel ? { to: linkTo(), label: '찾은 이미지로' } : fromHistory ? { to: '/history', label: '찾은 기록으로' } : undefined} action={wide ? assistantToggle : undefined} />
+    <DemoNotice>{rankBusy ? '연결된 사진을 살펴보고 있어요…' : rankStatus || '연결된 사진을 기준으로 결과를 보여줘요.'}</DemoNotice>
     {editor ? <div className="gallery-query-editor"><SearchComposer mode="gallery" draft={editor.draft} error={editorError} textareaRef={editorInput} initialAttachmentOpen={editor.photoEdit} submitLabel="다시 검색"
       onDraft={patch => { setEditor(previous => previous ? { ...previous, draft: { ...previous.draft, ...patch } } : previous); setEditorError('') }} onSubmit={commitEditing} onError={setEditorError}
       secondaryAction={<button type="button" className="button button--secondary gallery-query-editor__cancel" onClick={cancelEditing}>취소</button>} />
@@ -252,17 +260,17 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     </div> : <GalleryQuerySummary key={draft.query + ':' + (draft.photo ? localPhotoId(draft.photo) : 'text')} draft={draft} editButtonRef={editButton} onEdit={startEditing} />}
     {!editor && onRefine && <AiQueryOptimizer mode="gallery" baseQuery={draft.query} state={assistant} onChange={changeAssistant} onApply={onRefine} />}
     {referenceDescriptions.length > 0 && <div className="ai-plan gallery-reference-analysis">
-      <p className="ai-plan__original"><strong>참고 사진 분석</strong> · AI가 읽은 대상과 요소를 작성한 검색어와 함께 반영했어요.</p>
+      <p className="ai-plan__original"><strong>참고 사진에서 본 특징</strong> · 적어둔 내용과 함께 반영했어요.</p>
       <div className="ai-plan__images"><ul>{referenceDescriptions.map((description, index) => <li key={index}>{description}</li>)}</ul></div>
     </div>}
     <p role="status" className="gallery-query-status">{editNotice}</p>
     {rankError && <p className="form-error" role="alert">{rankError}</p>}
     {rankError && <button type="button" className="button button--secondary" onClick={() => setRankRetry(count => count + 1)}>사진 분석 다시 시도</button>}
-    <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장 · 이미지 유사도 {similaritySource === 'vision-model' ? '전용 비전 계산' : '멀티모달 추정'}</p>
+    <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</p>
       {!wide && assistantToggle}
     </div>
     <div className="gallery-results__sections">{rankBusy
-      ? <AiSearching label="AI가 연결된 사진을 골라보고 정리하고 있어요" />
+      ? <AiSearching label="연결된 사진을 골라 정리하고 있어요" />
       : channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>
   </main>
     {wide ? open && <div className="gallery-assistant-dock"><GallerySearchAssistant id={panelId} wide state={assistant} baseQuery={draft.query} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} /></div>

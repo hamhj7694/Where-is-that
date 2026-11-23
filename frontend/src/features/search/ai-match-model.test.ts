@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AiSearchPlan } from './ai-search-api'
 import {
-  criteriaFromPlan, hasSearchCriteria, matchPublicItem, resolveApiKeyword,
+  criteriaFromPlan, hasSearchCriteria, matchPublicItem, normalizeCriteria, resolveApiKeyword,
   type AiSearchCriteria,
 } from './ai-match-model'
 
@@ -54,6 +54,15 @@ describe('AI 맞춤 검색 조건', () => {
     expect(result.apiKeywords).toEqual(['검은 가죽 지갑', '어두운 지갑', '가죽'])
     expect(result.include).toEqual(['가죽', '지갑'])
     expect(result.any).toEqual([])
+  })
+
+  it('이전 버전에서 저장된 조건에 없는 배열이 있어도 복원한다', () => {
+    const saved = { apiKeywords: ['지갑'], include: ['가죽'], any: [], exclude: [], imageFeatures: [] }
+    expect(normalizeCriteria(saved)).toEqual({
+      apiKeywords: ['지갑'], include: ['가죽'], any: [], exclude: [], prefer: [], imageFeatures: [],
+    })
+    expect(hasSearchCriteria(saved as unknown as AiSearchCriteria)).toBe(true)
+    expect(hasSearchCriteria(undefined as unknown as AiSearchCriteria)).toBe(false)
   })
 
   it('조건이 없으면 빈 조건으로 원문 검색을 유지한다', () => {

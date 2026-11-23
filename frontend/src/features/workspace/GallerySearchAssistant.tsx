@@ -49,12 +49,12 @@ export default function GallerySearchAssistant({ id, wide, hideHeading = false, 
       const next = await prepareOptimizedAssistant(mode, state, baseQuery)
       onChange(next)
       onApply(next)
-      setFeedback('AI가 검색 문구를 한 문장으로 다듬어 검색어에 담았어요.')
+      setFeedback('검색 문구를 한 문장으로 다듬어 검색어에 담았어요.')
     } catch {
       const next = localAssistantUpdate(state)
       onChange(next)
       onApply(next)
-      setFeedback('AI 문구를 만들지 못해 적어 둔 조건을 그대로 반영했어요.')
+      setFeedback('새 문구를 만들지 못해 적어 둔 조건을 그대로 반영했어요.')
     } finally {
       setOptimizing(false)
     }
@@ -78,7 +78,7 @@ export default function GallerySearchAssistant({ id, wide, hideHeading = false, 
   return <aside id={id} className="gallery-assistant" role={wide ? 'complementary' : 'region'} aria-labelledby={hideHeading ? undefined : id + '-title'} aria-label={hideHeading ? '검색 조건 도우미' : undefined}
     onKeyDown={event => { if (event.key === 'Escape' && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) { event.preventDefault(); event.stopPropagation(); onClose() } }}>
     {!hideHeading && <header className="gallery-assistant__heading"><h2 id={id + '-title'}>검색 도우미</h2><button type="button" className="icon-button" aria-label="검색 도우미 닫기" onClick={onClose}><X aria-hidden="true" /></button></header>}
-    <p className="gallery-assistant__notice">기억나는 조건을 더하면 AI가 원문과 함께 한 문장으로 다듬어 검색어에 담아요.</p>
+    <p className="gallery-assistant__notice">기억나는 특징을 더하면 적어둔 내용과 함께 검색어에 반영해요.</p>
     <div className="gallery-assistant__body" ref={log} role="log" tabIndex={0} aria-label="현재 검색의 추가 조건" aria-live="polite" aria-relevant="additions">
       {!state.conditions.length && <p className="gallery-assistant__intro">{state.appliedConditions?.length ? '추가 조건을 모두 뺐어요.' : mode === 'lost' ? '기억나는 특징·분실 시기·장소를 더해 보세요.' : '기억나는 색상·시기·글자를 더해 보세요.'}</p>}
       {state.conditions.map((condition, index) => <div className="gallery-assistant__condition" key={condition}>
@@ -106,7 +106,7 @@ export default function GallerySearchAssistant({ id, wide, hideHeading = false, 
         <button type="submit" className="button button--secondary" aria-label="조건 추가" title="조건 추가" disabled={!!editing || !state.draft.trim()}><ArrowUp aria-hidden="true" /></button>
       </form>
       {(galleryConditionsChanged(state) || !!state.optimizedQuery) && <button type="button" className="button button--primary gallery-assistant__apply" disabled={!!editing || optimizing} onClick={() => void applyConditions()}>
-        {optimizing ? 'AI가 검색 문구를 다듬고 있어요…' : 'AI 문구로 다시 검색'}
+        {optimizing ? '검색 문구를 다듬고 있어요…' : '새 문구로 다시 검색'}
       </button>}
     </> : <Link className="button button--secondary" to={mode === 'lost' ? '/lost-found' : '/gallery'}>검색 입력으로</Link>}
     <p className="gallery-assistant__feedback" role="status">{feedback}</p>
