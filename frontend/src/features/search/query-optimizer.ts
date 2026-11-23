@@ -1,7 +1,7 @@
 import { prepareAiSearch, type AiPipelineMode, type AiSearchPlan } from './ai-search-api'
 import { combineGalleryQuery, type GalleryAssistantState } from './gallery-search-model'
 
-export interface OptimizedQueryResult {
+interface OptimizedQueryResult {
   plan: AiSearchPlan
   query: string
 }
@@ -22,7 +22,7 @@ export function optimizedQueryFromPlan(plan: AiSearchPlan, fallback: string): st
   return toNaturalQuery(combined || fallback)
 }
 
-export async function prepareOptimizedQuery(
+async function prepareOptimizedQuery(
   mode: AiPipelineMode,
   query: string,
   images: readonly File[] = [],

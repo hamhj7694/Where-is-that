@@ -34,7 +34,7 @@ export interface FlowNodeDetail extends Record<string, unknown> {
   laneLabel: string
 }
 
-export const FLOW_LANES = [
+const FLOW_LANES = [
   {
     id: 'gallery',
     label: 'A · 갤러리에서 찾기',
@@ -73,7 +73,7 @@ export const FLOW_LANES = [
 ] as const
 
 /** 공통 단계(D0)가 사진 분석 단계로 들어가는 보조 경로. */
-export const COMMON_LINKS: [string, string][] = [['d0', 'b2'], ['d0', 'c2']]
+const COMMON_LINKS: [string, string][] = [['d0', 'b2'], ['d0', 'c2']]
 
 const NODE_WIDTH = 208
 const NODE_HEIGHT = 104
@@ -90,7 +90,7 @@ const STEP_HANDLES: NodeHandle[] = [
   { type: 'source', position: Position.Right, x: NODE_WIDTH - 1, y: NODE_HEIGHT / 2, width: 1, height: 1 },
 ]
 
-export function algorithmNodes(algorithms: PipelineAlgorithm[]) {
+function algorithmNodes(algorithms: PipelineAlgorithm[]) {
   return algorithms.map(algo => ({
     id: 'algo-' + algo.id,
     step: algo.kind,
@@ -185,5 +185,3 @@ export function buildFlowGraph(algorithms: PipelineAlgorithm[]): {
 
   return { nodes, edges }
 }
-
-export const FLOW_NODE_SIZE = { width: NODE_WIDTH, height: NODE_HEIGHT }

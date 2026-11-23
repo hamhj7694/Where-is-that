@@ -2,7 +2,7 @@ import type { AiSearchCriteria } from './ai-match-model'
 
 export type AiPipelineMode = 'gallery' | 'lost' | 'direct'
 
-export interface AiSearchChannelPlan {
+interface AiSearchChannelPlan {
   query: string
   keywords: string[]
 }

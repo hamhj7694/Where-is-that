@@ -59,7 +59,7 @@ export function Pagination({ page, pages, onChange, inputId, position = 'bottom'
   </div>
 }
 
-export function SampleScreenshot({ name = '이번 주 일정' }: { name?: string }) {
+function SampleScreenshot({ name = '이번 주 일정' }: { name?: string }) {
   return <div className="schedule-preview" role="img" aria-label={name + ' 샘플 스크린샷'}><div className="schedule-preview__title"><span>{name}</span><span>주간</span></div>
     <div className="schedule-preview__days">{['월', '화', '수', '목', '금'].map(day => <span key={day}>{day}</span>)}</div>
     <div className="schedule-preview__grid"><span>기획 검토</span><span>자료 공유</span><span>화면 정리</span></div></div>

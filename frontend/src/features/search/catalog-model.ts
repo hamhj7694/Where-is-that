@@ -1,8 +1,7 @@
 import { MAX_LOST_REFERENCE_PHOTOS, type ReferencePhotoView } from './model'
 
-export type ResultChannel = 'image' | 'context'
-export type PhotoStatus = 'verified_photo' | 'no_photo' | 'invalid'
-export type LocationStatus = 'verified' | 'address_only' | 'ambiguous' | 'missing' | 'provider_error'
+type PhotoStatus = 'verified_photo' | 'no_photo' | 'invalid'
+type LocationStatus = 'verified' | 'address_only' | 'ambiguous' | 'missing' | 'provider_error'
 
 export interface CandidateLocation {
   status: LocationStatus

@@ -47,7 +47,7 @@ function LaneLabelNode({ data }: NodeProps) {
 const nodeTypes = { flowStep: FlowStepNode, laneLabel: LaneLabelNode }
 
 /** 상세 패널이 선택 상태를 다시 그릴 때 쓰는 이벤트 이름. */
-export const FLOW_NODE_SELECT = 'pipeline-node-select'
+const FLOW_NODE_SELECT = 'pipeline-node-select'
 
 export function PipelineFlowMap() {
   const [algorithms, setAlgorithms] = useState<PipelineAlgorithm[]>([])

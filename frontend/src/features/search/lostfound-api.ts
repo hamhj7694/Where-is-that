@@ -185,7 +185,7 @@ interface ErrorPayload {
   message?: string
 }
 
-export class LostFoundApiError extends Error {
+class LostFoundApiError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) {
     super(message)
     this.name = 'LostFoundApiError'

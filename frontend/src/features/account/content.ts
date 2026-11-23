@@ -5,12 +5,12 @@ import { initialValuables, type AppPhoto, type Valuable } from '../workspace/dat
 
 export const ACCOUNT_DELETE_CONFIRMATION = '계정을 탈퇴합니다'
 
-export interface WireImage {
+interface WireImage {
   name: string
   dataUrl: string
 }
 
-export interface WirePhoto {
+interface WirePhoto {
   id: string
   name: string
   dataUrl: string | null
@@ -33,7 +33,7 @@ export interface WireValuable {
   updatedAt: number
 }
 
-export interface WireDraft {
+interface WireDraft {
   query: string
   photoDataUrl: string | null
   photoName: string
@@ -41,7 +41,7 @@ export interface WireDraft {
   photoViews: ReferencePhotoView[]
 }
 
-export interface WireRecord {
+interface WireRecord {
   id: string
   mode: SearchRecord['mode']
   createdAt: number
@@ -137,15 +137,15 @@ function draftFromWire(wire: WireDraft): SearchRecord['draft'] {
   }
 }
 
-export async function serializeValuable(item: Valuable): Promise<WireValuable> {
+async function serializeValuable(item: Valuable): Promise<WireValuable> {
   return { ...item, photos: await Promise.all(item.photos.map(photoToWire)) }
 }
 
-export function deserializeValuable(wire: WireValuable): Valuable {
+function deserializeValuable(wire: WireValuable): Valuable {
   return { ...wire, photos: (wire.photos ?? []).map(photoFromWire) }
 }
 
-export async function serializeRecord(record: SearchRecord): Promise<WireRecord> {
+async function serializeRecord(record: SearchRecord): Promise<WireRecord> {
   return {
     id: record.id,
     mode: record.mode,
@@ -163,7 +163,7 @@ export async function serializeRecord(record: SearchRecord): Promise<WireRecord>
   }
 }
 
-export function deserializeRecord(wire: WireRecord): SearchRecord {
+function deserializeRecord(wire: WireRecord): SearchRecord {
   return {
     id: wire.id,
     mode: wire.mode,

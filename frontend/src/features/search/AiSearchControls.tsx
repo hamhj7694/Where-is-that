@@ -1,6 +1,4 @@
-import { useState } from 'react'
-import { Sparkles } from 'lucide-react'
-import { prepareAiSearch, type AiPipelineMode, type AiSearchPlan } from './ai-search-api'
+import type { AiSearchPlan } from './ai-search-api'
 import { criteriaFromPlan, criteriaLabels, hasSearchCriteria } from './ai-match-model'
 
 const channelLabels = { combined: '종합', image: '이미지 특징', context: '문맥·조건' } as const
@@ -28,44 +26,4 @@ export function AiSearchPlanView({ plan, originalQuery }: { plan: AiSearchPlan; 
     {!!plan.clarificationQuestions.length && <p className="ai-plan__questions">더 정확히 찾으려면: {plan.clarificationQuestions.join(' · ')}</p>}
     <p className="ai-plan__notice">AI가 정리한 검색 초안이에요. 결과는 공개 정보와 입력된 사진에 따라 달라질 수 있어요.</p>
   </section>
-}
-
-interface Props {
-  mode: AiPipelineMode
-  query: string
-  images?: readonly File[]
-  filters?: Record<string, string>
-  plan?: AiSearchPlan
-  onPlan: (plan: AiSearchPlan) => void
-  onApply?: (plan: AiSearchPlan) => void
-  buttonLabel?: string
-  applyLabel?: string
-}
-
-export default function AiSearchControls({ mode, query, images = [], filters, plan, onPlan, onApply, buttonLabel = 'AI로 조건 정리', applyLabel = '이 조건으로 검색' }: Props) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  async function analyze() {
-    setBusy(true)
-    setError('')
-    try {
-      onPlan(await prepareAiSearch(mode, query, images, filters))
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'AI 검색 조건을 정리하지 못했어요.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return <div className="ai-search-controls">
-    <div className="ai-search-controls__actions">
-      <button type="button" className="button button--secondary" onClick={() => void analyze()} disabled={busy}>
-        <Sparkles aria-hidden="true" />{buttonLabel}
-      </button>
-      {plan && onApply && <button type="button" className="button button--primary" onClick={() => onApply(plan)}>{applyLabel}</button>}
-    </div>
-    {plan && <AiSearchPlanView plan={plan} originalQuery={query} />}
-    {error && <p className="form-error" role="alert">{error}</p>}
-  </div>
 }

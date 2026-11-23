@@ -1,5 +1,5 @@
 /** AI 분석이 캐시 등으로 너무 빨리 끝나도 로봇 장면이 충분히 보이게 하는 최소 노출 시간. */
-export const MIN_AI_SEARCH_VISIBLE_MS = 900
+const MIN_AI_SEARCH_VISIBLE_MS = 900
 
 export function minimumWait(startedAt: number, minimumMs = MIN_AI_SEARCH_VISIBLE_MS): Promise<void> {
   const remaining = minimumMs - (Date.now() - startedAt)

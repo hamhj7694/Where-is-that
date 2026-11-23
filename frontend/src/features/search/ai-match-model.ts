@@ -89,7 +89,7 @@ function isPlaceTerm(term: string): boolean {
 }
 
 /** 문장에서 역·지하철 같은 장소 단서를 뽑는다. 지역 전체(서울 등)는 별도 지역 필터가 맡는다. */
-export function placeTermsFromQuery(query: string): string[] {
+function placeTermsFromQuery(query: string): string[] {
   const text = query.trim()
   const found: string[] = []
   for (const match of text.matchAll(/[가-힣A-Za-z0-9]{1,8}(?:지하철역|전철역|역)/g)) {
@@ -203,7 +203,7 @@ const TEXT_KEYS: (keyof TextSource)[] = [
   'storagePlace', 'orgName', 'address', 'status',
 ]
 
-export function publicItemText(item: TextSource): string {
+function publicItemText(item: TextSource): string {
   return TEXT_KEYS
     .map(key => item[key] ?? '')
     .join(' ')

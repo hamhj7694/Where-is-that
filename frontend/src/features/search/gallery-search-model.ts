@@ -4,7 +4,7 @@ export const GALLERY_CHANNELS = ['combined', 'image', 'context'] as const
 export type GallerySearchChannel = typeof GALLERY_CHANNELS[number]
 export const GALLERY_PREVIEW_LIMIT = 4
 
-export interface GalleryAssistantMessage {
+interface GalleryAssistantMessage {
   id: string
   role: 'user' | 'guide'
   text: string
@@ -88,7 +88,7 @@ export function galleryPreviewItems<T extends { id: string }>(items: readonly T[
 // AI 사진 비교는 한 요청당 최대 12후보다. 연결 갤러리에서 분석할 후보 수다.
 export const AI_GALLERY_RANK_LIMIT = 12
 
-export interface GalleryRankScore {
+interface GalleryRankScore {
   score: number
   imageSimilarity: number
   contextRelevance: number
