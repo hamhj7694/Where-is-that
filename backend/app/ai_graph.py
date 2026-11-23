@@ -280,6 +280,10 @@ def _visual_route_after_embed(state: VisualState) -> str:
         return "fallback"
     if state["request"].references:
         return "fallback" if _low_confidence_reference_scores(state["computed"]) else "describe"
+    # 색상을 직접 말했으면 색상 게이트가 걸린 로컬 점수를 신뢰한다.
+    # 멀티모달은 브랜드·물건 종류만 보고도 점수를 올려 파란 카드를 흰 카드로 판단한다.
+    if local_vision.requested_colors(state["request"].imageFeatures, state["target_hints"]):
+        return "describe"
     # 텍스트만 있는 비교는 점수가 평평하면 멀티모달이 사진을 직접 보게 한다.
     if _low_confidence_text_scores(state["computed"]):
         return "fallback"

@@ -167,6 +167,15 @@
   .direct-search__filters .filter-date-range { gap: 6px; }
 }
 
+/* 일반 검색은 AI 해석이 없으므로 원형 스피너만 보여준다. */
+.direct-search__basic-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+.direct-search__basic-loading .direct-search__spinner { width: 22px; height: 22px; }
+
 /* 오래 걸리는 검색:_progress 문구와 움직이는 모션 */
 .direct-search__progress {
   display: flex;

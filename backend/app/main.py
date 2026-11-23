@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ai_api, config, db, geo, kakao, name_terms, police_api, recovery, security
+from . import ai_api, config, db, geo, kakao, local_vision, name_terms, police_api, recovery, security
 from .schemas import (
     ACCOUNT_DELETE_CONFIRMATION,
     BrowseJobStart,
@@ -62,7 +62,7 @@ VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
 VISUAL_EARLY_STOP_HIT_MIN = 70
 # 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
-BROWSE_ALGO_VERSION = 11
+BROWSE_ALGO_VERSION = 16
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
@@ -81,13 +81,33 @@ def _normalize_prior_scores(payload: "LostFoundBrowseRequest") -> dict[str, int]
     }
 
 
-def _restore_visual_scores(result: dict, scores: dict[str, int]) -> None:
+def _color_mismatched_ids(pool: list[dict], requested: tuple[str, ...]) -> set[str]:
+    """색상을 직접 말했을 때 공식 색상이 정면으로 어긋난 후보 ID를 모은다.
+
+    사진 모델이 브랜드·물건 종류만 보고 점수를 올려도, 공식 기록에 흰색이 아닌
+    카드로 등록된 항목은 '하얀 카드' 결과에서 사진 일치로 올라오지 않게 한다.
+    색상 정보가 없는 항목은 사진 판단에 맡긴다.
+    """
+    if not requested:
+        return set()
+    wanted = set(requested)
+    return {
+        item["id"]
+        for item in pool
+        if (colors := set(local_vision.colors_from_label(item.get("color"))))
+        if colors.isdisjoint(wanted)
+    }
+
+
+def _restore_visual_scores(
+    result: dict, scores: dict[str, int], mismatched: set[str] | None = None
+) -> None:
     """사전 점수를 전체 후보에 다시 붙인다. 같은 문구가 중복 쌓이지 않게 정리한다."""
     if not scores:
         return
     for item in (result.get("allItems") or result.get("items") or []):
         score = scores.get(item["id"])
-        if not score:
+        if not score or (mismatched and item["id"] in mismatched):
             continue
         ai = item.get("aiMatch") or {"hits": [], "allInclude": False}
         hits = [hit for hit in (ai.get("hits") or []) if not str(hit).startswith("사진 특징 ")]
@@ -963,13 +983,15 @@ def _apply_visual_hints(
         term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()
     ])
     visual_query = name_terms.strip_person_names(payload.keyword)
+    requested = local_vision.requested_colors([*features, visual_query])
     prior = _normalize_prior_scores(payload)
     if not visual_query:
         # 이름만 검색한 경우 예전 작업에 남은 사진 점수도 되살리지 않는다.
         prior = {}
     pool = result.get("allItems") or result.get("items") or []
+    mismatched = _color_mismatched_ids(pool, requested)
     # AI 조건이 비었거나 후보가 없어도 이전에 찾은 점수는 되살리고 정렬은 한다.
-    _restore_visual_scores(result, prior)
+    _restore_visual_scores(result, prior, mismatched)
 
     def ranked() -> dict:
         # 현재 페이지에 없어도 '더 찾아보기'가 점수를 이어받을 수 있도록 전체 맵을 돌려준다.
@@ -1054,6 +1076,8 @@ def _apply_visual_hints(
         for row in matched.results:
             if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
                 for item_id in [row.id, *aliases.get(row.id, [])]:
+                    if item_id in mismatched:
+                        continue
                     scores[item_id] = max(scores.get(item_id, 0), row.imageSimilarity)
         # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
         if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
@@ -1068,7 +1092,7 @@ def _apply_visual_hints(
     # 이번에 새로 찾은 점수와 이전 탐색에서 이어받은 점수를 합쳐 화면에 되살린다.
     combined = dict(prior)
     combined.update(scores)
-    _restore_visual_scores(result, combined)
+    _restore_visual_scores(result, combined, mismatched)
     return ranked()
 
 

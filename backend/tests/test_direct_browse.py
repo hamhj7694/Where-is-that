@@ -82,6 +82,43 @@ def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
     assert updated["visualAnalyzed"] is True
 
 
+def test_officially_mismatched_color_does_not_get_photo_boost(monkeypatch):
+    """'하얀 신한카드'에서 공식 색상이 검정·청록인 카드는 사진 일치로 올라오지 않는다."""
+    payload = SimpleNamespace(
+        keyword="하얀 신한카드", hints={"imageFeatures": ["하얀색"]}, page=1, rows=3,
+    )
+    black = row(
+        "police:black", "2026-11-23", name="신한카드", color="블랙(검정)",
+        imageUrl="https://www.lost112.go.kr/a.jpg", matchTier=5,
+    )
+    teal = row(
+        "police:teal", "2026-11-22", name="신한카드", color="시안(청록)",
+        imageUrl="https://www.lost112.go.kr/b.jpg", matchTier=5,
+    )
+    white = row(
+        "police:white", "2026-11-21", name="신한카드", color="화이트(흰)",
+        imageUrl="https://www.lost112.go.kr/c.jpg", matchTier=5,
+    )
+    result = {"items": [black, teal, white], "allItems": [black, teal, white], "total": 3}
+
+    def fake_match(request):
+        return SimpleNamespace(results=[
+            SimpleNamespace(id="police:black", imageSimilarity=88, basis="photo"),
+            SimpleNamespace(id="police:teal", imageSimilarity=80, basis="photo"),
+            SimpleNamespace(id="police:white", imageSimilarity=60, basis="photo"),
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    updated = main._apply_visual_hints(result, payload)
+
+    assert updated["visualScores"] == {"police:white": 60}
+    assert black.get("visualScore") is None
+    assert teal.get("visualScore") is None
+    assert white["visualScore"] == 60
+    assert white["matchTier"] == 1
+    assert white["matchLabel"] == "AI 사진 일치"
+
+
 def test_person_name_query_never_scores_an_unrelated_photo(monkeypatch):
     """이름은 공개 원문 텍스트 단서일 뿐, 사진 특징 점수 근거가 될 수 없다."""
     payload = SimpleNamespace(

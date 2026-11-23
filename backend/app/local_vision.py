@@ -65,20 +65,28 @@ _CLIP_IMAGE_SCORE_SPAN = 0.55
 # YOLOE 타깃 라벨에 색상을 넣으면 오탐이 늘므로 target_labels에는 영향이 없다.
 _VISUAL_FEATURE_MAP = {
     "검정": "black", "검은": "black", "블랙": "black",
-    "하양": "white", "흰": "white", "화이트": "white",
+    "하양": "white", "하얀": "white", "흰": "white", "화이트": "white",
     "빨강": "red", "빨간": "red", "레드": "red",
     "파랑": "blue", "파란": "blue", "블루": "blue",
     "노랑": "yellow", "노란": "yellow", "옐로": "yellow",
     "초록": "green", "녹색": "green", "그린": "green",
     "갈색": "brown", "브라운": "brown", "회색": "gray", "그레이": "gray",
     "실버": "silver", "은색": "silver", "퓨시아": "fuchsia", "자홍": "fuchsia",
-    "베이지": "beige", "피치": "peach", "오렌지색": "orange", "핑크": "pink",
+    "베이지": "beige", "피치": "peach", "오렌지": "orange", "오렌지색": "orange", "핑크": "pink",
+    "라임": "green", "에메랄드": "green", "샤르트뢰즈": "green", "역녹": "green",
+    "바이올렛": "purple", "보라": "purple", "알리자린": "red",
+    "코럴": "pink", "산호": "pink", "터키오이스": "teal",
     "코발트": "teal", "청록": "teal", "철제": "metal", "토끼": "rabbit",
     "가죽": "leather", "천": "fabric", "금속": "metal", "체인": "chain",
     "지퍼": "zipper", "무늬": "pattern", "그림": "print", "패턴": "pattern",
     "로고": "logo", "글씨": "text", "스트랩": "strap", "손잡이": "handle",
     "작은": "small", "큰": "large",
 }
+# 요청한 색상이 사진에 보이지 않으면 객체 종류만 맞은 점수로 등급이 오르지 않게 한다.
+_COLOR_WORDS = frozenset({
+    "black", "white", "red", "blue", "yellow", "green", "brown", "gray",
+    "silver", "fuchsia", "beige", "peach", "orange", "pink", "purple", "teal", "metal",
+})
 
 # YOLOE는 텍스트 프롬프트로 열린 어휘 탐지를 한다. 타깃 라벨만 주면 사진 속 다른
 # 물건을 보지 못하므로, 흔한 습득물·배경 사물 목록을 함께 넣어 객체 수와 종류를
@@ -140,6 +148,28 @@ def text_prompts(texts: tuple[str, ...], targets: str) -> tuple[str, ...]:
             prompts.append(text.strip()[:120])
     unique = list(dict.fromkeys(prompt for prompt in prompts if prompt.strip()))
     return tuple(unique[:8]) or labels or texts[:8]
+
+
+def requested_colors(texts: tuple[str, ...] | list[str], targets: str = "") -> tuple[str, ...]:
+    """검색어·시각 특징에서 명시적으로 요청한 색상만 뽑는다."""
+    combined = " ".join([*texts, targets])
+    colors: list[str] = []
+    for korean, english in _VISUAL_FEATURE_MAP.items():
+        if english in _COLOR_WORDS and korean in combined and english not in colors:
+            colors.append(english)
+    return tuple(colors)
+
+
+def colors_from_label(label: object) -> tuple[str, ...]:
+    """공식 색상 표시명('화이트(흰)', '시안(청록)')을 표준 색상어로 바꾼다."""
+    text = str(label or "")
+    if not text:
+        return ()
+    colors: list[str] = []
+    for korean, english in _VISUAL_FEATURE_MAP.items():
+        if english in _COLOR_WORDS and korean in text and english not in colors:
+            colors.append(english)
+    return tuple(colors)
 
 
 @lru_cache(maxsize=256)
@@ -388,14 +418,22 @@ def score_text_image_similarity(
     labels = target_labels(" ".join(clean_texts) + " " + targets)
     prompts = text_prompts(clean_texts, targets)
     flags = vlm_multi or {}
+    color_vectors = [
+        index for index, prompt in enumerate(prompts)
+        if " with " in prompt and prompt.split(" with ", 1)[1] in _COLOR_WORDS
+    ]
     try:
         text_vectors = [embed_text(prompt) for prompt in prompts]
-        return {
-            candidate_id: _score(
-                embed_image(crop_target(image, labels, flags.get(image, False))[0]), text_vectors
-            )
-            for candidate_id, image in candidates.items()
-        }
+        scores: dict[str, int] = {}
+        for candidate_id, image in candidates.items():
+            vector = embed_image(crop_target(image, labels, flags.get(image, False))[0])
+            score = _score(vector, text_vectors)
+            # 색상을 직접 말했으면 색상 프롬프트도 맞아야 높은 점수를 받는다.
+            # 파란 카드에 '하얀 카드'라고 한 경우 객체 프롬프트만으로 90점이 나오지 않게 한다.
+            if color_vectors:
+                score = min(score, _score(vector, [text_vectors[index] for index in color_vectors]))
+            scores[candidate_id] = score
+        return scores
     except (ValueError, OSError, RuntimeError, ImportError) as error:
         logger.warning("local vision text similarity failed: %s", error)
         return {}

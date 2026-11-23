@@ -204,6 +204,36 @@ def test_text_prompts_translate_korean_visual_features():
     assert "a photo of wallet with leather" in prompts
 
 
+def test_text_prompts_translate_hayan_as_white():
+    prompts = local_vision.text_prompts(("하얀색",), "하얀 신한카드 하얀색")
+
+    assert "a photo of card with white" in prompts
+
+
+def test_official_color_labels_map_to_standard_words():
+    assert local_vision.colors_from_label("화이트(흰)") == ("white",)
+    assert local_vision.colors_from_label("블랙(검정)") == ("black",)
+    assert "teal" in local_vision.colors_from_label("시안(청록)")
+    assert "blue" in local_vision.colors_from_label("딥스카이블루(새파란하늘)")
+    assert local_vision.colors_from_label("") == ()
+
+
+def test_requested_color_caps_generic_object_score(monkeypatch):
+    """파란 카드에 '하얀 카드'라고 하면 카드 종류 점수만으로 1등급이 되지 않는다."""
+    monkeypatch.setattr(local_vision, "yoloe_available", lambda: False)
+    monkeypatch.setattr(local_vision, "embed_image", lambda _image: (1.0, 0.0))
+
+    def fake_embed_text(prompt):
+        return (0.0, 1.0) if " with white" in prompt else (1.0, 0.0)
+
+    monkeypatch.setattr(local_vision, "embed_text", fake_embed_text)
+    scores = local_vision.score_text_image_similarity(
+        ["하얀색"], {"card": _data_url()}, "하얀 신한카드 하얀색"
+    )
+
+    assert scores == {"card": 0}
+
+
 def test_local_status_reports_crop_without_exposing_keys(monkeypatch):
     monkeypatch.setattr(config, "AI_SIMILARITY_PROVIDER", "local-clip")
     monkeypatch.setattr(config, "AI_SIMILARITY_API_KEY", "secret")

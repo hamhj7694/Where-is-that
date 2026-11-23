@@ -17,6 +17,14 @@ def test_characters_brands_and_objects_are_not_person_names():
     assert not name_terms.is_person_name("하트")
 
 
+def test_color_words_starting_with_a_surname_are_not_person_names():
+    assert not name_terms.is_person_name("하얀색")
+    assert not name_terms.is_person_name("하얀")
+    assert not name_terms.is_person_name("노란색")
+    assert not name_terms.is_person_name("하늘색")
+    assert name_terms.without_person_names(["하얀색", "류진"]) == ["하얀색"]
+
+
 def test_person_names_are_removed_from_visual_features_and_query():
     assert name_terms.without_person_names(["류진", "카드", "검정색"]) == ["카드", "검정색"]
     assert name_terms.strip_person_names("류진") == ""

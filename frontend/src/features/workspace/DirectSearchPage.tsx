@@ -528,13 +528,11 @@ export default function DirectSearchPage() {
       </form>
       <div className="direct-search__filters"><LostResultFilters compact colorOptions={colorOptions} showDirection={false} customDropdowns /></div>
     </div>
-    {(aiBusy || live.loading) && <div className="direct-search__progress" role="status" aria-live="polite">
+    {mode === 'ai' && (aiBusy || live.loading) && <div className="direct-search__progress" role="status" aria-live="polite">
       <span className="direct-search__spinner" aria-hidden="true" />
       <span>{aiBusy
         ? 'AI가 검색어를 정리하고 있어요'
-        : mode === 'basic'
-          ? '공개 습득물을 찾고 있어요'
-          : visualProgress.total > 0
+        : visualProgress.total > 0
             ? `AI가 공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 보고 있어요`
             : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
       {mode === 'ai' && !aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
@@ -564,7 +562,9 @@ export default function DirectSearchPage() {
       {TIER_LEGEND.map(tier => <span key={tier.label} className={'direct-search__tier direct-search__tier--' + tier.className}>{tier.label}</span>)}
     </div>}
     {live.partial && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요.</p>}
-    {live.loading ? <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" /> : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={reload} /></EmptyState>
+    {live.loading ? (mode === 'basic'
+      ? <div className="direct-search__basic-loading" role="status" aria-live="polite" aria-label="공개 습득물을 찾고 있어요"><span className="direct-search__spinner" aria-hidden="true" /></div>
+      : <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" />) : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={reload} /></EmptyState>
       : <>
         <div className="direct-search__pagination-top">
           {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-top" position="top" />}

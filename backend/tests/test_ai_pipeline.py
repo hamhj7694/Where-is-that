@@ -408,6 +408,18 @@ def test_interpret_prompt_reads_visual_traits_from_words_without_photo():
     # 사람 이름은 사진 특징이 아니라 공개 원문 텍스트 단서로 다룬다.
     assert "A bare personal name such as 류진 or 히영 is a TEXT clue, not a photo trait" in prompt
     assert "return imageFeatures []" in prompt
+    # 예시로 준 특정 브랜드·이름을 다시 예시로 박아 넣으면 실제 검색어에도 끼어든다.
+    assert "신한카드" not in prompt
+    assert "치이카와" not in prompt
+    assert "A bare product category word such as 카드, 지갑, 가방 is an identity clue" in prompt
+    assert "A brand, card type or character name is a visual trait only when" in prompt
+
+
+def test_visual_prompt_does_not_score_brand_or_wrong_color():
+    prompt = (config.AI_PROMPT_DIR / "match_visual_features.txt").read_text(encoding="utf-8")
+
+    assert "Do not raise the score because the object type or brand matches" in prompt
+    assert "MUST be below 50" in prompt
 
 
 def test_match_public_images_scores_photos_and_descriptions_together(client, monkeypatch):

@@ -113,6 +113,16 @@ def test_text_only_scores_fall_back_when_clip_cannot_discriminate():
     assert ai_graph._visual_route_after_embed(state) == "describe"
 
 
+def test_color_request_keeps_gated_local_score_without_multimodal():
+    state = _state()
+    state["request"].references = []
+    state["request"].imageFeatures = ["하얀색"]
+    state["target_hints"] = "하얀 신한카드 하얀색"
+    state["computed"] = {"one": 40, "two": 38}
+
+    assert ai_graph._visual_route_after_embed(state) == "describe"
+
+
 def test_photo_query_keeps_local_score_without_fallback():
     state = _state()
     state["computed"] = {"one": 90, "two": 88}
