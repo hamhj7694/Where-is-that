@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { browseLostFound, formatDescription, formatFoundDateTime, searchLostFound, startBrowseJob, toCandidate, type FoundItem } from './lostfound-api'
+import { browseLostFound, dedupeLostFound, formatDescription, formatFoundDateTime, searchLostFound, startBrowseJob, toCandidate, type FoundItem } from './lostfound-api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -127,6 +127,20 @@ describe('직접 찾기 서버 필터 조회', () => {
       keyword: '치이카와', page: 1, rows: 40, maxPages: 200, skipVisual: 60,
       priorVisualScores: { 'police:card': 96 },
     })
+  })
+})
+
+describe('화면 중복 제거', () => {
+  it('제목과 사진 경로가 같으면 색상·습득일이 달라도 한 건만 남긴다', () => {
+    const first = foundItem({ id: 'police:A:1', atcId: 'A', imageUrl: 'https://www.lost112.go.kr/img/banana.jpg', color: '노랑', foundDate: '2026-11-20' })
+    const second = foundItem({ id: 'police:B:1', atcId: 'B', imageUrl: 'https://www.lost112.go.kr/img/banana.jpg?utm_source=test', color: '초록', foundDate: '2026-11-19' })
+    expect(dedupeLostFound([first, second]).map(item => item.id)).toEqual(['police:A:1'])
+  })
+
+  it('사진이 없으면 기존 내용 키를 유지해 서로 다른 물건을 합치지 않는다', () => {
+    const first = foundItem({ id: 'police:A:1', atcId: 'A', imageUrl: null, name: '바나나', color: '노랑' })
+    const second = foundItem({ id: 'police:B:1', atcId: 'B', imageUrl: null, name: '바나나', color: '초록' })
+    expect(dedupeLostFound([first, second]).map(item => item.id)).toEqual(['police:A:1', 'police:B:1'])
   })
 })
 

@@ -1,5 +1,7 @@
 import { snapshotSearchDraft, validateSearch, type GallerySource, type SearchDraft, type SearchMode } from './model'
 import { combineGalleryQuery, createGalleryAssistantState, type GalleryAssistantState } from './gallery-search-model'
+import type { AiContextRankedCandidate, AiVisualMatchResult } from './ai-search-api'
+import type { FoundItem } from './lostfound-api'
 
 // Session memory only. Keep the submitted input/source separate from later edits.
 export interface SearchRecord {
@@ -11,6 +13,66 @@ export interface SearchRecord {
   assistant?: GalleryAssistantState
   parentRecordId?: string
   assistantBaseQuery?: string
+}
+
+/**
+ * 같은 조건으로 다시 검색해도 결과가 달라지지 않도록 검색 시점의 공개 응답과
+ * AI 점수를 기록 id에 붙여 둔다. 사진 File은 담지 않고 공개 URL만 문자열로 저장한다.
+ */
+export interface LostResultsSnapshot {
+  version: 1
+  savedAt: number
+  keyword: string
+  hintsKey: string
+  params: string
+  raw: FoundItem[]
+  fetched: number
+  total: number
+  apiPage: number
+  partial: boolean
+  rank?: { scope: string; results: AiContextRankedCandidate[] }
+  visual?: { scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' }
+  textScores?: [string, number][]
+  /** 새로고침에서 신규 여부를 판단할 기준 id 목록. */
+  baselineIds: string[]
+  newRaw: FoundItem[]
+  lastRefreshAt?: number
+}
+
+const LOST_RESULTS_KEY = 'geugeo-eodi:lost-results:'
+
+export function saveLostResultsSnapshot(key: string, snapshot: LostResultsSnapshot): void {
+  if (typeof window === 'undefined') return
+  const payload = JSON.stringify(snapshot)
+  try {
+    window.localStorage.setItem(LOST_RESULTS_KEY + key, payload)
+  } catch {
+    // 저장 공간이 부족하면 카드에 필요한 최근 후보만 남긴다.
+    try {
+      window.localStorage.setItem(LOST_RESULTS_KEY + key, JSON.stringify({
+        ...snapshot,
+        raw: snapshot.raw.slice(0, 120),
+        newRaw: snapshot.newRaw.slice(0, 40),
+      }))
+    } catch { /* 저장 불가면 스냅샷 없이 조건만 남긴다. */ }
+  }
+}
+
+export function readLostResultsSnapshot(key: string): LostResultsSnapshot | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(LOST_RESULTS_KEY + key)
+    if (!raw) return null
+    const value = JSON.parse(raw) as LostResultsSnapshot
+    return value.version === 1 && typeof value.keyword === 'string' && Array.isArray(value.raw) ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function clearLostResultsSnapshot(key: string): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.removeItem(LOST_RESULTS_KEY + key) } catch { /* 무시 */ }
 }
 
 export function createSearchRecord(mode: SearchMode, draft: SearchDraft, gallery: GallerySource | null): SearchRecord {

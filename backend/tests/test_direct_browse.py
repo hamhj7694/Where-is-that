@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app import ai_pipeline, main, police_api
+from app.schemas import LostFoundBrowseRequest
 
 
 def row(identifier: str, date: str, **overrides) -> dict:
@@ -276,6 +277,54 @@ def test_browse_counts_same_item_once_before_pagination(monkeypatch):
 
     assert result["total"] == 1
     assert [item["id"] for item in result["items"]] == ["police:first"]
+
+
+def test_browse_cache_key_ignores_page():
+    first = main._lostfound_browse_key(LostFoundBrowseRequest(keyword="바나나", page=1))
+    second = main._lostfound_browse_key(LostFoundBrowseRequest(keyword="바나나", page=2))
+    assert first == second
+
+
+def test_rank_browse_result_returns_full_pool_for_instant_pagination():
+    items = [row(f"police:{index}", f"2026-01-0{index}") for index in range(1, 4)]
+    result = {"items": items[:1], "allItems": items, "total": len(items)}
+
+    ranked = main._rank_browse_result(result, {}, "", 2, 1)
+
+    assert ranked["total"] == 3
+    assert len(ranked["allItems"]) == 3
+    assert [item["id"] for item in ranked["items"]] == ["police:2"]
+
+
+def test_browse_dedupes_same_title_and_image_even_when_details_differ(monkeypatch):
+    first = row("police:first", "2026-02-10", imageUrl="https://www.lost112.go.kr/img/banana.jpg")
+    duplicate = row(
+        "portal:second", "2026-02-11", id="portal:second",
+        imageUrl="https://www.lost112.go.kr/img/banana.jpg?utm_source=test",
+        color="초록", storagePlace="다른지구대", orgName="다른지구대",
+    )
+
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {"items": [first, duplicate], "totalCount": 2}
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all("", 1, 10, max_pages=1)
+
+    assert result["total"] == 1
+    assert [item["id"] for item in result["items"]] == ["police:first"]
+
+
+def test_browse_keeps_same_title_without_photos_as_separate_items(monkeypatch):
+    first = row("police:first", "2026-02-10", name="바나나", color="노랑")
+    second = row("police:second", "2026-02-11", name="바나나", color="초록")
+
+    def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
+        return {"items": [first, second], "totalCount": 2}
+
+    monkeypatch.setattr(police_api, "search", fake_search)
+    result = police_api.browse_all("", 1, 10, max_pages=1)
+
+    assert result["total"] == 2
 
 
 def test_browse_applies_ai_criteria_across_pages_and_dedupes(monkeypatch):

@@ -4,8 +4,10 @@ import html
 import logging
 import math
 import re
+import unicodedata
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -424,16 +426,48 @@ def metadata_pass(item: dict, filters: dict | None, *, skip_region: bool = False
     return True
 
 
-def _browse_dedupe_key(item: dict) -> str:
-    """프론트 dedupeLostFound와 같은 기준으로 같은 물건 후보를 한 번만 센다."""
-    def clean(value: object) -> str:
-        return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+def _image_key(value: object) -> str:
+    """사진 경로의 추적용 쿼리만 빼고 비교한다. 사진이 없으면 빈 문자열."""
+    raw = str(value or "").strip()
+    if not raw or "no_img" in raw.lower():
+        return ""
+    if raw.startswith("//"):
+        raw = "https:" + raw
+    elif raw.startswith("/"):
+        raw = IMAGE_BASE + raw
+    elif not re.match(r"^https?://", raw):
+        return ""
+    try:
+        parsed = urlsplit(raw)
+        host = parsed.netloc.lower()
+        if parsed.scheme == "https" and host.endswith(":443"):
+            host = host[:-4]
+        if parsed.scheme == "http" and host.endswith(":80"):
+            host = host[:-3]
+        query = urlencode([
+            (key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not re.match(r"^(utm_|fbclid$|gclid$|msclkid$)", key, re.I)
+        ])
+        return urlunsplit((parsed.scheme.lower(), host, parsed.path, query, ""))
+    except ValueError:
+        return raw.lower()
 
+
+def _browse_dedupe_key(item: dict) -> str:
+    """제목·사진 경로가 같으면 한 건으로 본다. 사진이 없으면 기존 내용 키로 폴백한다."""
+    def clean(value: object) -> str:
+        text = unicodedata.normalize("NFKC", str(value or ""))
+        text = re.sub(r"[\u200b-\u200d\ufeff]", "", text)
+        return re.sub(r"\s+", " ", text.strip()).lower()
+
+    image = _image_key(item.get("imageUrl"))
+    if image:
+        return "title-image:" + clean(item.get("name")) + "|" + image
     fields = (
         item.get("name"), item.get("color"), item.get("category"), item.get("foundDate"),
         item.get("storagePlace") or item.get("orgName"),
     )
-    return "|".join(clean(value) for value in fields)
+    return "content:" + "|".join(clean(value) for value in fields)
 
 
 def _browse_filtered(
@@ -450,7 +484,8 @@ def _browse_filtered(
     total_reported = 0
     pages_scanned = 0
     limit_reached = False
-    needed = max(page * rows, visual_need)
+    # 페이지와 무관하게 같은 풀을 읽어야 page만 바꿀 때 재조회·재분석하지 않는다.
+    needed = visual_need or rows
     cap = config.LOSTFOUND_MAX_PAGES if max_pages is None else max_pages
 
     for params in param_sets:

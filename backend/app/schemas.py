@@ -344,6 +344,8 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     visualMore: bool = False
     # 현재 페이지 밖 항목의 사진 점수도 '더 찾아보기'로 이어가기 위해 함께 돌려준다.
     visualScores: dict[str, int] = Field(default_factory=dict)
+    # 화면에서 페이지만 잘라 바로 넘길 수 있도록 필터·정렬을 마친 전체 후보다.
+    allItems: list[FoundItem] = Field(default_factory=list)
 
 
 class BrowseJobStart(BaseModel):

@@ -62,7 +62,7 @@ VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
 VISUAL_EARLY_STOP_HIT_MIN = 70
 # 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
-BROWSE_ALGO_VERSION = 6
+BROWSE_ALGO_VERSION = 7
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
@@ -871,7 +871,7 @@ def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
         {
             "v": BROWSE_ALGO_VERSION,
             "keyword": payload.keyword.strip(),
-            "page": payload.page,
+            # 페이지는 화면에서 자른다. 페이지별로 다시 스캔·AI 분석하지 않도록 키에서 제외한다.
             "rows": payload.rows,
             # 실제 스캔에 쓰이는 값이어야 같은 결과끼리 캐시를 공유한다.
             "effectiveMaxPages": _browse_page_cap(payload),
@@ -936,6 +936,8 @@ def _rank_browse_result(result: dict, hints: dict, keyword: str, page: int, rows
         -(text_signals.get(row["id"], 0) * 10 + (row.get("visualScore") or 0)),
     ))
     result["total"] = len(pool)
+    # 전체 후보를 한 번에 돌려주면 화면에서 페이지만 잘라 바로 바꿀 수 있다.
+    result["allItems"] = pool
     start = max(0, (page - 1) * rows)
     result["items"] = pool[start:start + rows]
     return result

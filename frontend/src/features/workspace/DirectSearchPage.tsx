@@ -3,7 +3,7 @@ import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { readLostResultFilters, resolveAiDateFilters } from '../search/lost-result-model'
 import {
-  dedupeLostFound, getBrowseJob, startBrowseJob, toCandidate,
+  compactFoundItems, dedupeLostFound, getBrowseJob, startBrowseJob, toCandidate,
   type BrowsePayload, type FoundItem, type LostBrowseFilters,
 } from '../search/lostfound-api'
 import { prepareAiSearch } from '../search/ai-search-api'
@@ -22,7 +22,6 @@ const LAST_SEARCH_KEY = 'geugeo-eodi:direct-last-search'
 interface StoredJob {
   jobId: string
   keyword: string
-  page: number
   reloadToken: number
   /** 더 찾아보기로 건너뛴 사진 수. 새로고침 후에도 이어볼 위치를 기억한다. */
   skipVisual: number
@@ -132,9 +131,19 @@ export default function DirectSearchPage() {
   const [aiBusy, setAiBusy] = useState(false)
   // 분석이 끝난 검색어만 조회한다. AI 응답 전 원문 검색이 먼저 실행돼 깜빡이는 것을 막는다.
   const [analyzedKeyword, setAnalyzedKeyword] = useState(restored?.analyzedKeyword ?? '')
-  // 복원한 결과가 있으면 AI 분석과 재조회를 한 번 건너뛰어 결과가 사라지지 않게 한다.
-  const skipRestoreAi = useRef(Boolean(restored && restored.analyzedKeyword === restored.keyword && restored.keyword))
-  const skipRestoreBrowse = useRef(Boolean(restored && !restored.live.loading && restored.keyword))
+  // 복원한 결과가 있으면 분석·조회를 건너뛴다. effect 안에서 플래그를 소비하면
+  // StrictMode의 두 번째 실행에서 재검색되므로 사용자 액션에서만 지운다.
+  const restoreAiRef = useRef<string | null>(
+    restored && restored.keyword && restored.analyzedKeyword === restored.keyword ? restored.keyword : null,
+  )
+  // 페이지는 표시용이므로 상세에서 돌아와 다른 페이지여도 같은 결과로 본다.
+  const restoredSearchSignature = (() => {
+    if (!restored || restored.live.loading || !restored.keyword) return null
+    const saved = new URLSearchParams(restored.params)
+    saved.delete('page')
+    return `${restored.keyword}|${saved.toString()}`
+  })()
+  const restoreSearchRef = useRef<string | null>(restoredSearchSignature)
   const page = Math.max(1, Number(params.get('page')) || 1)
   const back = '/direct-search' + (params.size ? '?' + params.toString() : '')
 
@@ -151,8 +160,7 @@ export default function DirectSearchPage() {
       setAnalyzedKeyword('')
       return
     }
-    if (skipRestoreAi.current && restored?.keyword === keyword) {
-      skipRestoreAi.current = false
+    if (restoreAiRef.current === keyword) {
       setAiBusy(false)
       return
     }
@@ -190,23 +198,27 @@ export default function DirectSearchPage() {
   }, [params, aiDates])
 
   const hints = useMemo(() => criteriaToHints(criteria), [criteria])
+  // 페이지는 화면 표시용이다. 필터 객체가 페이지 때문에 바뀌면 다시 조회하므로 key에서 뺀다.
+  const filterKey = useMemo(() => {
+    const next = new URLSearchParams(params)
+    next.delete('page')
+    return next.toString()
+  }, [params])
   const filters = useMemo<LostBrowseFilters>(() => {
-    const raw = readLostResultFilters(params)
-    const dates = resolveAiDateFilters(params, aiDates, aiPeriodOff)
+    const query = new URLSearchParams(filterKey)
+    const raw = readLostResultFilters(query)
+    const dates = resolveAiDateFilters(query, aiDates, aiPeriodOff)
     return {
       category: raw.category, color: raw.color, region: raw.region,
       from: dates.from, to: dates.to,
     }
-  }, [params, aiDates, aiPeriodOff])
+  }, [filterKey, aiDates, aiPeriodOff])
 
   // 검색은 서버 작업으로 넘긴다. 페이지를 옮기거나 탭을 닫아도 서버는 계속 진행하고,
   // 돌아오면 저장해 둔 jobId로 결과를 이어받는다.
   useEffect(() => {
     // 상세 페이지에서 돌아온 경우 이미 받아 둔 결과를 그대로 보여준다.
-    if (skipRestoreBrowse.current && restored?.keyword === keyword && restored.page === page) {
-      skipRestoreBrowse.current = false
-      return
-    }
+    if (restoreSearchRef.current === `${keyword}|${filterKey}`) return
     if (keyword && analyzedKeyword !== keyword) return
     let cancelled = false
     let timer: number | undefined
@@ -216,15 +228,21 @@ export default function DirectSearchPage() {
 
     const remember = (value: LiveState) => {
       writeStoredSearch({
-        keyword, input, page, params: params.toString(), live: value,
+        keyword, input, page, params: params.toString(),
+        live: { ...value, raw: compactFoundItems(value.raw) },
         criteria, aiDates, aiPeriodOff, analyzedKeyword: keyword, skipVisual, visualProgress,
       })
     }
-    const finish = (payload: BrowsePayload) => {
-      clearStoredJob()
+    const clearIfCurrent = (jobId: string) => {
+      if (readStoredJob()?.jobId === jobId) clearStoredJob()
+    }
+    const finish = (payload: BrowsePayload, jobId: string) => {
+      clearIfCurrent(jobId)
       if (cancelled) return
+      // 서버가 필터·AI 분석을 마친 전체 후보를 한 번에 준다. 페이지는 화면에서 자른다.
+      const allRaw = payload.allItems?.length ? payload.allItems : payload.items
       const value: LiveState = {
-        raw: payload.items,
+        raw: allRaw,
         total: payload.total,
         scanned: payload.scanned,
         scanLimitReached: payload.scanLimitReached,
@@ -239,8 +257,8 @@ export default function DirectSearchPage() {
       setLive(value)
       remember(value)
     }
-    const fail = (message: string) => {
-      clearStoredJob()
+    const fail = (message: string, jobId?: string) => {
+      if (jobId) clearIfCurrent(jobId)
       if (cancelled) return
       const value = { ...initialLive(false), error: message }
       setLive(value)
@@ -253,17 +271,17 @@ export default function DirectSearchPage() {
         if (status.visualTotal) {
           setVisualProgress({ scanned: status.visualScanned ?? 0, total: status.visualTotal })
         }
-        if (status.status === 'done' && status.result) return finish(status.result)
-        if (status.status === 'error') return fail(status.error ?? '검색 중 문제가 생겼어요.')
+        if (status.status === 'done' && status.result) return finish(status.result, jobId)
+        if (status.status === 'error') return fail(status.error ?? '검색 중 문제가 생겼어요.', jobId)
         timer = window.setTimeout(() => { void poll(jobId) }, 900)
       } catch (cause) {
-        if (!cancelled) fail(cause instanceof Error && cause.message ? cause.message : '검색 결과를 확인하지 못했어요.')
+        if (!cancelled) fail(cause instanceof Error && cause.message ? cause.message : '검색 결과를 확인하지 못했어요.', jobId)
       }
     }
     const begin = async () => {
       try {
         const stored = readStoredJob()
-        const resumable = stored && stored.keyword === keyword && stored.page === page
+        const resumable = stored && stored.keyword === keyword
           && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
         // 더 찾아보기로 넘어가도 앞서 찾은 사진 점수는 서버에 되돌려 준다.
         // 서버가 돌려준 전체 맵을 우선 쓰고, 이전 응답에만 있던 점수도 합친다.
@@ -274,18 +292,18 @@ export default function DirectSearchPage() {
         for (const item of live.raw) {
           if (item.visualScore && item.visualScore > 0) priorVisualScores[item.id] = item.visualScore
         }
+        // page는 캐시 키와 무관하다. 처음 한 번만 전체를 조회한다.
         const job = resumable
           ? { jobId: stored.jobId, status: 'pending' }
-          : await startBrowseJob(keyword, page, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
+          : await startBrowseJob(keyword, 1, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
         if (cancelled) return
         writeStoredJob({
-          jobId: job.jobId, keyword, page, reloadToken, skipVisual,
+          jobId: job.jobId, keyword, reloadToken, skipVisual,
           priorVisualScores: {
             ...(stored?.priorVisualScores ?? {}),
             ...live.visualScores,
           },
         })
-        remember(initialLive(true))
         await poll(job.jobId)
       } catch (cause) {
         if (!cancelled) fail(cause instanceof Error && cause.message ? cause.message : '검색을 시작하지 못했어요.')
@@ -296,7 +314,7 @@ export default function DirectSearchPage() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [keyword, page, reloadToken, skipVisual, hints, filters, analyzedKeyword])
+  }, [keyword, reloadToken, skipVisual, hints, filters, analyzedKeyword])
 
   // 로딩이 길어지면 경과 초를 보여준다.
   useEffect(() => {
@@ -306,8 +324,11 @@ export default function DirectSearchPage() {
     return () => window.clearInterval(id)
   }, [live.loading, keyword, reloadToken])
 
-  // 서버가 필터와 중복 제거를 이미 적용했다. 화면에서는 표시용 후보만 만든다.
-  const items = useMemo(() => dedupeLostFound(live.raw).map(item => toCandidate(item)), [live.raw])
+  // 서버가 필터·정렬·중복 제거를 이미 적용했다. 화면에서는 현재 페이지만 잘라 보여준다.
+  const items = useMemo(
+    () => dedupeLostFound(live.raw).slice((page - 1) * API_ROWS, page * API_ROWS).map(item => toCandidate(item)),
+    [live.raw, page],
+  )
   const colorOptions = useMemo(
     () => Array.from(new Set(items.map(item => item.color.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ko')),
     [items],
@@ -325,11 +346,18 @@ export default function DirectSearchPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function reload() {
+    restoreSearchRef.current = null
+    setReloadToken(token => token + 1)
+  }
+
   function submitSearch(event: FormEvent) {
     event.preventDefault()
     const next = input.trim().replace(/\s+/g, ' ')
     const updated = new URLSearchParams(params)
     updated.delete('page')
+    restoreAiRef.current = null
+    restoreSearchRef.current = null
     setParams(updated, { replace: true })
     if (next !== keyword) setKeyword(next)
     else setReloadToken(token => token + 1)
@@ -338,6 +366,7 @@ export default function DirectSearchPage() {
   // 이미 본 사진만큼 건너뛰고 더 오래된 사진을 이어서 분석한다.
   function lookDeeper() {
     if (live.loading) return
+    restoreSearchRef.current = null
     // 서버가 실제로 본 사진 수만큼만 건너뛴다. 0장이면 최소 1장만 더 진행해 같은 배치를 다시 본다.
     setSkipVisual(current => current + Math.max(live.visualScanned, 1))
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -346,6 +375,8 @@ export default function DirectSearchPage() {
   function showAll() {
     clearStoredJob()
     clearStoredSearch()
+    restoreAiRef.current = null
+    restoreSearchRef.current = null
     setInput('')
     setKeyword('')
     const updated = new URLSearchParams(params)
@@ -399,7 +430,7 @@ export default function DirectSearchPage() {
       {TIER_LEGEND.map(tier => <span key={tier.label} className={'direct-search__tier direct-search__tier--' + tier.className}>{tier.label}</span>)}
     </div>}
     {live.partial && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요.</p>}
-    {live.loading ? <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" /> : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={() => setReloadToken(token => token + 1)} /></EmptyState>
+    {live.loading ? <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" /> : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={reload} /></EmptyState>
       : <>
         <div className="direct-search__pagination-top">
           {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-top" position="top" />}

@@ -6,9 +6,10 @@ import SearchComposer from '../search/SearchComposer'
 import { copy } from '../search/copy'
 import { createGalleryAssistantState, GALLERY_PREVIEW_LIMIT, uniqueGalleryItems, type GalleryAssistantState } from '../search/gallery-search-model'
 import { getReferencePhotos, snapshotSearchDraft, validateSearch, MAX_LOST_REFERENCE_PHOTOS, type SearchDraft } from '../search/model'
-import { LOST_RESULT_CHANNELS, filterCandidateRecords, lostResultChannelState, readLostResultFilters, type LostResultChannel } from '../search/lost-result-model'
+import { LOST_RESULT_CHANNELS, filterCandidateRecords, lostResultChannelState, readLostResultFilters, sortByRankTier, type LostResultChannel } from '../search/lost-result-model'
 import type { Candidate } from '../search/catalog-model'
-import { dedupeLostFound, REGIONS, searchLostFound, toCandidate, type FoundItem, type LostSearchHints } from '../search/lostfound-api'
+import { compactFoundItems, dedupeLostFound, REGIONS, searchLostFound, toCandidate, type FoundItem, type LostSearchHints } from '../search/lostfound-api'
+import { readLostResultsSnapshot, saveLostResultsSnapshot, type LostResultsSnapshot } from '../search/history'
 import { matchPublicItemImages, rankLostContextCandidates, type AiContextRankCandidate, type AiContextRankedCandidate, type AiLocationRelation, type AiVisualMatchResult } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaToHints, criteriaLabels, hasSearchCriteria, matchPublicItem, resolveApiKeyword, type AiSearchCriteria } from '../search/ai-match-model'
 import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
@@ -113,18 +114,6 @@ function applyCriteria(raw: readonly FoundItem[], criteria: AiSearchCriteria): C
   }
 }
 
-function sortByRank<T extends Candidate>(items: readonly T[], scores: ReadonlyMap<string, number>, fallback?: ReadonlyMap<string, number>): T[] {
-  const positions = new Map(items.map((item, index) => [item.id, index]))
-  return [...items].sort((left, right) => {
-    const leftScore = scores.get(left.id) ?? fallback?.get(left.id)
-    const rightScore = scores.get(right.id) ?? fallback?.get(right.id)
-    if (leftScore === undefined && rightScore === undefined) return (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0)
-    if (leftScore === undefined) return 1
-    if (rightScore === undefined) return -1
-    return rightScore - leftScore || (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0)
-  })
-}
-
 function useWideResults() {
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1100px)').matches)
   useEffect(() => { const media = window.matchMedia('(min-width: 1100px)'); const change = () => setWide(media.matches); media.addEventListener('change', change); return () => media.removeEventListener('change', change) }, [])
@@ -134,14 +123,22 @@ function useWideResults() {
 export default function LostSearchResults({ draft, channel, fromHistory, autoRankContext, onConsumeAutoRankConsent, assistant: savedAssistant, onAssistantChange, onRefine, onCommitSearch }: Props) {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
+  const criteria = useMemo(() => criteriaFromPlan(draft.aiPlan, draft.query), [draft.aiPlan, draft.query])
+  const hints = useMemo<LostSearchHints>(() => criteriaToHints(criteria), [criteria])
+  const hintsKey = useMemo(() => JSON.stringify(hints), [hints])
+  const keyword = resolveApiKeyword(criteria, draft.aiPlan?.channels.combined.query || draft.aiPlan?.channels.image.query || draft.query)
+  const recordId = new URLSearchParams(location.search).get('record')
+  // 기록은 id 기준, 아직 저장되지 않은 검색은 조건 기준으로 스냅샷을 찾는다.
+  const snapshotKey = recordId ? 'record:' + recordId : 'query:' + keyword + ':' + hintsKey
+  const restoredSnapshot = useMemo(() => readLostResultsSnapshot(snapshotKey), [snapshotKey])
   const [localAssistant, setLocalAssistant] = useState(createGalleryAssistantState)
   const [editor, setEditor] = useState<{ draft: SearchDraft; photoEdit: boolean } | null>(null)
   const [editorError, setEditorError] = useState('')
   const [editNotice, setEditNotice] = useState('')
   const [rankBusy, setRankBusy] = useState(false)
   const [rankError, setRankError] = useState('')
-  const [contextRank, setContextRank] = useState<{ scope: string; results: AiContextRankedCandidate[] } | null>(null)
-  const [visualMatch, setVisualMatch] = useState<{ scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' } | null>(null)
+  const [contextRank, setContextRank] = useState<{ scope: string; results: AiContextRankedCandidate[] } | null>(restoredSnapshot?.rank ?? null)
+  const [visualMatch, setVisualMatch] = useState<{ scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' } | null>(restoredSnapshot?.visual ?? null)
   const [visualBusy, setVisualBusy] = useState(false)
   const [visualError, setVisualError] = useState('')
   const wide = useWideResults()
@@ -170,16 +167,26 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     return () => { cancelAnimationFrame(frame); cancelAnimationFrame(second); window.removeEventListener('scroll', remember) }
   }, [pageKey])
 
-  // 샘플 후보 대신 경찰청 공개 API 결과를 사용한다.
-  const [live, setLive] = useState<LiveState>(() => initialLive(true))
+  // 샘플 후보 대신 경찰청 공개 API 결과를 사용한다. 기록이 있으면 검색 시점 결과를 그대로 복원한다.
+  const [live, setLive] = useState<LiveState>(() => restoredSnapshot ? {
+    raw: restoredSnapshot.raw,
+    fetched: restoredSnapshot.fetched,
+    total: restoredSnapshot.total,
+    apiPage: restoredSnapshot.apiPage,
+    loading: false,
+    loadingMore: false,
+    error: null,
+    partial: restoredSnapshot.partial,
+  } : initialLive(true))
   const [reloadToken, setReloadToken] = useState(0)
-  const criteria = useMemo(() => criteriaFromPlan(draft.aiPlan, draft.query), [draft.aiPlan, draft.query])
-  const hints = useMemo<LostSearchHints>(() => criteriaToHints(criteria), [criteria])
-  const hintsKey = useMemo(() => JSON.stringify(hints), [hints])
-  const keyword = resolveApiKeyword(criteria, draft.aiPlan?.channels.combined.query || draft.aiPlan?.channels.image.query || draft.query)
+  const [newItems, setNewItems] = useState<FoundItem[]>(() => restoredSnapshot?.newRaw ?? [])
+  const [baselineIds, setBaselineIds] = useState<string[]>(() => restoredSnapshot?.baselineIds ?? [])
+  const [lastRefreshAt, setLastRefreshAt] = useState<number | undefined>(() => restoredSnapshot?.lastRefreshAt)
+  const [refreshing, setRefreshing] = useState(false)
   const pageParam = params.get('page')
   const loadingMoreRef = useRef(false)
   const aiPlanQueryRef = useRef<string | null>(null)
+  const restoredSnapshotRef = useRef(restoredSnapshot)
 
   useEffect(() => {
     const plan = draft.aiPlan
@@ -209,6 +216,9 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   }, [draft.aiPlan, params, setParams])
 
   useEffect(() => {
+    // 기록을 열었으면 저장된 응답을 그대로 쓴다. 다시 공개 API를 호출하지 않는다.
+    const snapshot = restoredSnapshotRef.current
+    if (snapshot && snapshot.keyword === keyword && snapshot.hintsKey === hintsKey) return
     if (!keyword) { setLive(initialLive(false)); return }
     let cancelled = false
     setLive(initialLive(true))
@@ -238,6 +248,33 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   const liveItems = useMemo(() => dedupeLostFound(live.raw).map(item => toCandidate(item)), [live.raw])
   const criteriaResult = useMemo(() => applyCriteria(live.raw, criteria), [live.raw, criteria])
   const hasMore = live.fetched < live.total
+
+  // 검색이 확정되면 그 시점의 결과를 기록에 붙여 둔다. 이후 같은 기록을 열어도 재조회하지 않는다.
+  useEffect(() => {
+    if (!keyword || live.loading || live.loadingMore || live.error || !live.raw.length) return
+    const baseline = baselineIds.length
+      ? baselineIds
+      : dedupeLostFound(live.raw).map(item => toCandidate(item).id)
+    const snapshot: LostResultsSnapshot = {
+      version: 1,
+      savedAt: Date.now(),
+      keyword,
+      hintsKey,
+      params: params.toString(),
+      raw: compactFoundItems(live.raw),
+      fetched: live.fetched,
+      total: live.total,
+      apiPage: live.apiPage,
+      partial: live.partial,
+      ...(contextRank ? { rank: { scope: contextRank.scope, results: contextRank.results } } : {}),
+      ...(visualMatch ? { visual: { scope: visualMatch.scope, results: visualMatch.results, source: visualMatch.source } } : {}),
+      textScores: [...criteriaResult.scores],
+      baselineIds: baseline,
+      newRaw: compactFoundItems(newItems),
+      lastRefreshAt,
+    }
+    saveLostResultsSnapshot(snapshotKey, snapshot)
+  }, [snapshotKey, keyword, hintsKey, params, live, baselineIds, contextRank, visualMatch, criteriaResult.scores, newItems, lastRefreshAt])
 
   // 다음 페이지가 현재 받은 결과를 넘으면 API에서 다음 묶음을 이어 받는다.
   useEffect(() => {
@@ -298,15 +335,26 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     contextPageCandidates.map(candidate => candidate.id),
   ])
   const rankScopeRef = useRef(contextRankScope)
+  const rankRequestedScopeRef = useRef('')
+  const visualRequestedScopeRef = useRef('')
+  // 새 scope 분석을 기다리는 동안에도 이미 찾은 AI 점수는 정렬에 이어 쓴다.
+  const lastRankRef = useRef<{ scope: string; results: AiContextRankedCandidate[] } | null>(contextRank)
+  const lastVisualRef = useRef<{ scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' } | null>(visualMatch)
+  if (contextRank) lastRankRef.current = contextRank
+  if (visualMatch) lastVisualRef.current = visualMatch
   const activeRank = contextRank?.scope === contextRankScope ? contextRank.results : null
-  const rankScores = new Map(activeRank?.map(result => [result.id, result.score]) ?? [])
   const activeVisual = visualMatch?.scope === visualRankScope ? visualMatch.results : null
-  const visualScores = new Map(activeVisual?.map(result => [result.id, result.imageSimilarity]) ?? [])
-  const imageSource = sortByRank(imageSourceBase, visualScores, rankScores.size ? rankScores : criteriaResult.scores)
-  const contextSource = sortByRank(contextSourceBase, rankScores, criteriaResult.scores)
-  // 종합 채널도 이미지·문맥 채널과 동일하게 URL 필터와 JSON 조건을 적용한다.
-  const combinedScores = new Map([...rankScores, ...visualScores])
-  const combinedSource = sortByRank(filterCandidateRecords(uniqueGalleryItems(criteriaResult.items), params), combinedScores, criteriaResult.scores)
+  const rankScores = new Map((activeRank ?? lastRankRef.current?.results ?? []).map(result => [result.id, result.score]))
+  const visualScores = new Map((activeVisual ?? lastVisualRef.current?.results ?? []).map(result => [result.id, result.imageSimilarity]))
+  // 부분 문자열 텍스트 점수는 AI 점수와 같은 눈금으로 경쟁하지 않게 상한을 둔다.
+  const textScores = new Map([...criteriaResult.scores].map(([itemId, score]) => [itemId, Math.min(score, 39)]))
+  const imageSource = sortByRankTier(imageSourceBase, visualScores, rankScores, textScores)
+  const contextSource = sortByRankTier(contextSourceBase, rankScores, visualScores, textScores)
+  // 종합은 사진 판단을 가장 먼저 보고, 그다음 설명·장소 판단을 본다.
+  const combinedSource = sortByRankTier(
+    filterCandidateRecords(uniqueGalleryItems(criteriaResult.items), params),
+    visualScores, rankScores, textScores,
+  )
   const suggestedFilters: [string, string][] = draft.aiPlan ? [
     ['category', draft.aiPlan.filters.category],
     ['region', draft.aiPlan.filters.region],
@@ -318,6 +366,11 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   useEffect(() => {
     consumeAutoRankRef.current = onConsumeAutoRankConsent
   }, [onConsumeAutoRankConsent])
+  // 다른 검색으로 바뀌면 이전 검색의 AI 점수를 새 후보에 적용하지 않는다.
+  useEffect(() => {
+    lastRankRef.current = null
+    lastVisualRef.current = null
+  }, [keyword, reloadToken])
   useEffect(() => {
     if (rankScopeRef.current === contextRankScope) return
     rankScopeRef.current = contextRankScope
@@ -327,6 +380,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     setRankBusy(false)
   }, [contextRankScope])
   useEffect(() => {
+    if (contextRank?.scope === contextRankScope) return
     if (!autoRankContext || autoRankConsumed.current || live.loading || live.loadingMore || live.error || !contextPageLoaded || !planFiltersReady) return
     autoRankConsumed.current = true
     consumeAutoRankRef.current?.()
@@ -342,6 +396,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     setVisualBusy(false)
   }, [visualRankScope])
   useEffect(() => {
+    if (visualMatch?.scope === visualRankScope) return
     if (!autoRankContext || visualAutoConsumed.current || live.loading || live.loadingMore || live.error || !contextPageLoaded || !planFiltersReady) return
     if (!visualCandidates.length || (!criteria.imageFeatures.length && !draft.photo)) return
     visualAutoConsumed.current = true
@@ -356,6 +411,14 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     if (live.partial) return 'partial'
     return lostResultChannelState(params, which, counts)
   }
+  // 채널마다 자기 AI 작업이 끝나는 대로 결과를 보여준다. 다른 채널을 기다리지 않는다.
+  const rankRunning = rankRequestedScopeRef.current === contextRankScope && rankBusy
+  const visualRunning = visualRequestedScopeRef.current === visualRankScope && visualBusy
+  const channelBusy: Record<LostResultChannel, boolean> = {
+    combined: live.loading || rankRunning || visualRunning,
+    context: live.loading || rankRunning,
+    image: live.loading || visualRunning,
+  }
 
   function changeAssistant(patch: Partial<GalleryAssistantState>) { if (onAssistantChange) onAssistantChange(patch); else setLocalAssistant(previous => ({ ...previous, ...patch })) }
   function showAssistant(next: boolean) { changeAssistant({ open: next }); requestAnimationFrame(() => next ? input.current?.focus() : toggle.current?.focus()) }
@@ -366,6 +429,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     const nextDraft = submittedDraft ?? editor.draft
     const problem = validateSearch('lost', nextDraft, null)
     if (problem) { setEditorError(problem === 'too-many-photos' ? `참고 사진은 ${MAX_LOST_REFERENCE_PHOTOS}장까지 추가할 수 있어요.` : copy.emptyInput); return }
+    restoredSnapshotRef.current = null
     onCommitSearch(snapshotSearchDraft('lost', nextDraft), autoRankConsent)
     const next = new URLSearchParams(params)
     for (const key of ['page', 'state', 'combinedState', 'imageState', 'contextState']) next.delete(key)
@@ -381,7 +445,34 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     const next = new URLSearchParams(params)
     for (const key of ['state', 'combinedState', 'imageState', 'contextState']) next.delete(key)
     if (next.toString() !== params.toString()) setParams(next, { replace: true })
+    restoredSnapshotRef.current = null
     setReloadToken(token => token + 1)
+  }
+  async function refreshResults() {
+    if (!keyword || refreshing) return
+    setRefreshing(true)
+    try {
+      // 같은 조건으로 최신 공개 목록을 다시 읽어 이전에 보지 못한 항목만 가려낸다.
+      const payload = await searchLostFound(keyword, 1, API_ROWS, hints)
+      const fresh = dedupeLostFound(payload.items)
+      const known = new Set(baselineIds.length
+        ? baselineIds
+        : dedupeLostFound(live.raw).map(item => toCandidate(item).id))
+      const additions = fresh.filter(item => !known.has(toCandidate(item).id))
+      setNewItems(additions)
+      setBaselineIds([...known, ...additions.map(item => toCandidate(item).id)])
+      setLastRefreshAt(Date.now())
+    } catch {
+      // 새로고침에 실패해도 이미 저장된 검색 결과는 그대로 유지한다.
+    } finally {
+      setRefreshing(false)
+    }
+  }
+  function includeNewItems() {
+    if (!newItems.length) return
+    setLive(previous => ({ ...previous, raw: [...newItems, ...previous.raw], fetched: previous.fetched + newItems.length }))
+    setNewItems([])
+    setBaselineIds([...baselineIds, ...newItems.map(item => toCandidate(item).id)])
   }
   function changePage(page: number) { rememberScroll(); const next = new URLSearchParams(params); next.set('page', String(page)); setParams(next) }
   function createContextRankInput(candidates: AiContextRankCandidate[]): ContextRankInput {
@@ -395,6 +486,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     }
   }
   function startContextRanking(scope: string, request: ContextRankInput) {
+    rankRequestedScopeRef.current = scope
     const requestId = ++rankRequestSequence.current
     const startedAt = Date.now()
     setRankBusy(true)
@@ -409,6 +501,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   }
   async function startVisualRanking(scope: string) {
     if (!visualCandidates.length) return
+    visualRequestedScopeRef.current = scope
     const requestId = ++visualRequestSequence.current
     const startedAt = Date.now()
     setVisualBusy(true)
@@ -462,7 +555,8 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     const shown = full ? items.slice((page - 1) * 12, page * 12) : items.slice(0, GALLERY_PREVIEW_LIMIT)
     const sectionRank = which === 'context' && full ? activeRank : null
     const waitingForMore = full && page > pages && live.loadingMore
-    const available = status === 'success' || status === 'partial'
+    const busy = channelBusy[which]
+    const available = (status === 'success' || status === 'partial') && !busy
     return <section className="gallery-result-section lost-result-section" key={which} aria-labelledby={id + '-' + which}>
       <div className="gallery-result-section__heading"><div><h2 id={id + '-' + which}>{titles[which]}</h2><p>{descriptions[which]}</p></div>{!full && available && items.length > GALLERY_PREVIEW_LIMIT && <Link className="gallery-result-section__more" to={linkTo(which)}>{titles[which]} 더보기<ArrowRight aria-hidden="true" /></Link>}</div>
       {status === 'partial' && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요. <button type="button" onClick={() => retry()}>다시 시도</button></p>}
@@ -474,7 +568,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
         <button type="button" className="button button--secondary" disabled={visualBusy} onClick={() => startVisualRanking(visualRankScope)}><Sparkles aria-hidden="true" />{activeVisual ? '다시 비교' : '사진 특징으로 비교'}</button>
         <span>현재 공개 후보 {visualCandidates.length}건 · 참고 사진이 없으면 설명으로 비교해요</span>
       </div>}
-      {status === 'loading' || waitingForMore ? <AiSearching compact label={'AI가 ' + titles[which] + ' 후보를 뒤지고 있어요'} />
+      {status === 'loading' || waitingForMore || busy ? <AiSearching compact label={'AI가 ' + titles[which] + (status === 'loading' ? ' 후보를 뒤지고 있어요' : ' 순서를 정리하고 있어요')} />
         : status === 'error' ? <EmptyState title="이 기준의 후보를 불러오지 못했어요" description="다른 검색 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry()} /></EmptyState>
           : status === 'confirmation' ? <EmptyState title="검색 내용을 확인해 주세요" description="입력 확인이 필요한 상태의 화면 예시예요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><RetryButton onClick={() => retry()} /></EmptyState>
             : status === 'empty' || !shown.length ? <EmptyState title="이 조건에 맞는 후보가 없어요" description="공개 정보가 없거나 부족할 수 있어요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><a className="button button--secondary" href={OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">공식 검색 안내</a></EmptyState>
@@ -494,7 +588,10 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     {editor ? <div className="gallery-query-editor"><SearchComposer mode="lost" draft={editor.draft} error={editorError} textareaRef={editorInput} initialAttachmentOpen={editor.photoEdit} submitLabel="다시 검색" onDraft={patch => { setEditor(previous => previous ? { ...previous, draft: { ...previous.draft, ...patch } } : previous); setEditorError('') }} onSubmit={commitEditing} onError={setEditorError} secondaryAction={<button type="button" className="button button--secondary gallery-query-editor__cancel" onClick={cancelEditing}>취소</button>} />{editorError && <p id="search-error" className="form-error" role="alert">{editorError}</p>}</div>
       : <GalleryQuerySummary mode="lost" key={draft.query + ':' + getReferencePhotos(draft).map(localPhotoId).join('|')} draft={draft} editButtonRef={editButton} onEdit={startEditing} />}
     <p className="gallery-query-status" role="status">{editNotice}</p>
-    <div className="gallery-results__toolbar"><p>검색 범위 · 경찰청 공개 습득물 정보</p>{!wide && assistantToggle}</div>
+    <div className="gallery-results__toolbar"><p>검색 범위 · 경찰청 공개 습득물 정보{lastRefreshAt ? ` · 마지막 확인 ${new Date(lastRefreshAt).toLocaleString('ko-KR')}` : ''}</p>
+      <button type="button" className="button button--secondary" onClick={() => void refreshResults()} disabled={refreshing || !keyword || live.loading}>{refreshing ? '확인 중…' : '새로고침'}</button>
+      {!wide && assistantToggle}
+    </div>
     {hasSearchCriteria(criteria) && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
       <p className="lost-ai-criteria__title">AI가 공개 정보에서 읽은 맞춤 조건</p>
       <div className="lost-ai-criteria__chips">{(['apiKeywords', 'include', 'any', 'exclude', 'imageFeatures'] as const).filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}</div>
@@ -508,9 +605,16 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     {visualError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{visualError}{visualCandidates.length > 0 && <> <button type="button" onClick={() => startVisualRanking(visualRankScope)}>다시 시도</button></>}</p>}
     {activeVisual && !visualBusy && <p className="lost-context-rank-status" role="status">공개 후보 {activeVisual.length}건의 사진·설명을 시각 특징과 비교해 정리했어요. 이미지 유사도는 {visualMatch?.source === 'vision-model' ? '전용 비전' : '멀티모달'} 분석 기준이에요.</p>}
     {params.get('state') === 'stale' && <p className="inline-error">공식 기록이 변경된 상태 예시예요.</p>}
-    <div className="gallery-results__sections">{live.loading || rankBusy || visualBusy
-      ? <AiSearching label="AI가 공개 사진과 설명을 골라보고 정리하고 있어요" />
-      : channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
+    {newItems.length > 0 && <section className="gallery-result-section lost-result-section" aria-labelledby={id + '-new'}>
+      <div className="gallery-result-section__heading"><div><h2 id={id + '-new'}>신규</h2><p>마지막 검색·새로고침 이후 새로 확인된 공개 후보예요.</p></div>
+        <button type="button" className="gallery-result-section__more" onClick={includeNewItems}>종합 결과에 포함</button></div>
+      <div className="gallery-result-grid lost-result-grid">{newItems.map(item => {
+        const candidate = toCandidate(item)
+        return <FoundCard key={candidate.id} item={candidate} to={'/lost-found/item/' + (candidate.source ?? 'police') + '/' + encodeURIComponent((candidate.atcId ?? candidate.id) + ':' + (candidate.fdSn ?? '1')) + '?back=' + encodeURIComponent(pageKey)} />
+      })}</div>
+    </section>}
+    {/* 채널별로 결과가 준비되는 대로 각 섹션에서 로봇을 보여주고 결과를 교체한다. */}
+    <div className="gallery-results__sections">{channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
     <p className="field__help result-disclaimer">같은 물건인지와 보관 여부는 보관기관에 확인해 주세요. AI가 잘못 찾거나 놓칠 수 있고, 공개 정보가 부족하면 검색이 제한될 수 있어요.</p>
   </main>{wide ? open && <div className="gallery-assistant-dock">{assistantPanel}</div> : <Modal open={open} title="검색 도우미" focusKey={id} className="gallery-assistant-modal" initialFocus={input} onClose={() => showAssistant(false)}>{assistantPanel}</Modal>}
   </div>

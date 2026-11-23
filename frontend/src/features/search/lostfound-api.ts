@@ -152,6 +152,21 @@ export interface BrowsePayload extends SearchPayload {
   visualMore?: boolean
   /** 현재 페이지 밖을 포함해 찾은 사진 점수. 다음 탐색에 되돌려 준다. */
   visualScores?: Record<string, number>
+  /** 필터·정렬을 마친 전체 후보. 화면 페이지는 이 배열을 잘라서 보여준다. */
+  allItems?: FoundItem[]
+}
+
+/** 세션·기록 저장용으로 긴 설명과 지도 정보만 줄여 카드 표시에 필요한 값은 유지한다. */
+export function compactFoundItems(items: readonly FoundItem[]): FoundItem[] {
+  return items.map(item => ({
+    ...item,
+    subject: (item.subject ?? '').slice(0, 400),
+    notes: (item.notes ?? '').slice(0, 400),
+    place: null,
+    lat: null,
+    lng: null,
+    mapUrl: null,
+  }))
 }
 
 interface ErrorPayload {
@@ -300,21 +315,45 @@ export function fetchRoute(
   })
 }
 
+function normalizeLostTitle(value: string | null): string {
+  return (value ?? '').normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** 사진 경로는 추적용 쿼리만 빼고 비교한다. 사진이 없으면 이 키를 쓰지 않는다(서로 다른 물건 과잉 병합 방지). */
+function normalizeLostImage(value: string | null): string {
+  const raw = (value ?? '').trim()
+  if (!raw || /no_img/i.test(raw)) return ''
+  try {
+    const url = new URL(raw.startsWith('//') ? 'https:' + raw : raw, 'https://www.lost112.go.kr')
+    url.hash = ''
+    url.host = url.host.toLowerCase()
+    if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80')) url.port = ''
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|msclkid$)/i.test(key)) url.searchParams.delete(key)
+    }
+    return url.toString()
+  } catch {
+    return raw.toLowerCase()
+  }
+}
+
 /**
- * 화면 표시용 중복 제거. 서로 다른 관리번호라도 물품명·색상·분류·습득일·보관기관이
- * 같으면 같은 후보로 보고 첫 건만 남긴다(사진이 여러 장 붙은 같은 물건 대응).
+ * 화면 표시용 중복 제거. 관리번호가 달라도 제목·사진 경로가 같으면 한 건만 남긴다.
+ * 사진이 없는 항목은 물품명·색상·분류·습득일·보관기관으로 비교한다(사진 없는 서로 다른 물건 병합 방지).
  * 백엔드의 (source, atcId, fdSn) 정확 일치 제거와는 별개다.
  */
 export function dedupeLostFound(items: readonly FoundItem[]): FoundItem[] {
-  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
   const seenIds = new Set<string>()
   const seen = new Set<string>()
   const result: FoundItem[] = []
   for (const item of items) {
     if (seenIds.has(item.id)) continue
     seenIds.add(item.id)
-    const key = [item.name, item.color, item.category, item.foundDate, item.storagePlace || item.orgName]
-      .map(normalize).join('|')
+    const image = normalizeLostImage(item.imageUrl)
+    const key = image
+      ? `title-image:${normalizeLostTitle(item.name)}|${image}`
+      : `content:${[item.name, item.color, item.category, item.foundDate, item.storagePlace || item.orgName]
+        .map(normalizeLostTitle).join('|')}`
     if (seen.has(key)) continue
     seen.add(key)
     result.push(item)

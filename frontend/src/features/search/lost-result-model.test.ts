@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate } from './catalog-model'
-import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, validateLostResultDates, type LostResultState } from './lost-result-model'
+import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, sortByRankTier, validateLostResultDates, type LostResultState } from './lost-result-model'
 import { REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from './model'
 
 function candidate(id: string, patch: Partial<Candidate> = {}): Candidate {
   return { id, title: id, image: '/sample.jpg', photoStatus: 'verified_photo', category: '지갑', color: '검정', description: '', foundAt: '2026-11-18', foundPlace: '서울 · 샘플 장소', custodyName: null, officialUrl: null, matchReasons: [], location: { status: 'missing', address: null }, ...patch }
 }
+
+describe('AI 점수 계층 정렬', () => {
+  const banana = candidate('banana')
+  const kick = candidate('kick')
+
+  it('사진 점수가 있는 후보는 텍스트 점수가 더 높아도 종합에서 먼저 온다', () => {
+    const visual = new Map([['banana', 90], ['kick', 20]])
+    const rank = new Map([['kick', 95]])
+    const text = new Map([['banana', 100], ['kick', 100]])
+    expect(sortByRankTier([kick, banana], visual, rank, text).map(item => item.id)).toEqual(['banana', 'kick'])
+  })
+
+  it('AI 점수가 없는 후보들 사이에서는 텍스트 점수와 원래 순서를 유지한다', () => {
+    const text = new Map([['kick', 39], ['banana', 20]])
+    expect(sortByRankTier([banana, kick], new Map(), new Map(), text).map(item => item.id)).toEqual(['kick', 'banana'])
+    expect(sortByRankTier([banana, kick], new Map(), new Map(), new Map()).map(item => item.id)).toEqual(['banana', 'kick'])
+  })
+})
 
 describe('공개 후보 필터의 데이터 경계', () => {
   const front = candidate('front', { photoView: 'front' })

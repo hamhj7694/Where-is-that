@@ -8,6 +8,27 @@ export type LostResultState = 'success' | 'partial' | 'empty' | 'error' | 'loadi
 type SourceState = Exclude<LostResultState, 'partial'>
 export interface LostResultCounts { image: number; context: number }
 
+/**
+ * AI 점수는 축마다 눈금이 다르므로 같은 맵에 섞지 않는다. primary 축에 값이 있는
+ * 후보가 먼저 오고, 그다음 secondary, 마지막에 텍스트 점수를 본다. 텍스트 점수는
+ * 호출자가 AI 점수보다 낮게 잘라 넣어 부분 문자열 히트가 AI 판단을 이기지 않게 한다.
+ */
+export function sortByRankTier<T extends Candidate>(
+  items: readonly T[],
+  primary: ReadonlyMap<string, number>,
+  secondary: ReadonlyMap<string, number>,
+  fallback?: ReadonlyMap<string, number>,
+): T[] {
+  const positions = new Map(items.map((item, index) => [item.id, index]))
+  const tier = (id: string) => primary.has(id) ? 0 : secondary.has(id) ? 1 : 2
+  const score = (id: string) => primary.get(id) ?? secondary.get(id) ?? fallback?.get(id) ?? 0
+  return [...items].sort((left, right) =>
+    tier(left.id) - tier(right.id)
+    || score(right.id) - score(left.id)
+    || (positions.get(left.id) ?? 0) - (positions.get(right.id) ?? 0),
+  )
+}
+
 export const LOST_RESULT_FILTER_NAMES = {
   category: '물품 분류', color: '색상', region: '분실 예상 지역',
   from: '시작일', to: '종료일', view: '사물 방향',

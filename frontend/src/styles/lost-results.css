@@ -13,6 +13,7 @@
 .search-section-title { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
 .lost-results__partial { margin-bottom: 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
 .lost-results__partial button { min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+button.gallery-result-section__more { border: 0; background: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .lost-context-ranker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; }
 .lost-context-ranker > span { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .lost-context-ranker > .form-error { flex-basis: 100%; margin: 0; }
