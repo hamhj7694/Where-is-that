@@ -114,10 +114,11 @@ export function updateSearchAssistant(records: SearchRecord[], id: string, patch
 
 export function refineGalleryRecord(parent: SearchRecord, assistant: GalleryAssistantState): SearchRecord | null {
   const conditions = assistant.conditions.filter(condition => condition.trim().length > 0)
-  if (parent.mode !== 'gallery' || !parent.gallery || (!conditions.length && !assistant.appliedConditions?.length)) return null
+  const optimized = assistant.optimizedQuery?.trim()
+  if (parent.mode !== 'gallery' || !parent.gallery || (!conditions.length && !assistant.appliedConditions?.length && !optimized)) return null
   const baseQuery = parent.assistantBaseQuery ?? parent.draft.query
   const draft = snapshotSearchDraft('gallery', {
-    query: combineGalleryQuery(baseQuery, conditions),
+    query: optimized || combineGalleryQuery(baseQuery, conditions),
     photo: parent.draft.photo,
     aiPlan: assistant.aiPlan ?? undefined,
   })
@@ -126,22 +127,23 @@ export function refineGalleryRecord(parent: SearchRecord, assistant: GalleryAssi
     draft,
     gallery: { name: parent.gallery.name, files: [...parent.gallery.files] },
     assistantBaseQuery: baseQuery,
-    assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions] }),
+    assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions], optimizedQuery: undefined }),
   }
 }
 
 export function refineLostRecord(parent: SearchRecord, assistant: GalleryAssistantState): SearchRecord | null {
   const conditions = assistant.conditions.filter(condition => condition.trim().length > 0)
-  if (parent.mode !== 'lost' || (!conditions.length && !assistant.appliedConditions?.length)) return null
+  const optimized = assistant.optimizedQuery?.trim()
+  if (parent.mode !== 'lost' || (!conditions.length && !assistant.appliedConditions?.length && !optimized)) return null
   const baseQuery = parent.assistantBaseQuery ?? parent.draft.query
-  const draft = { ...parent.draft, query: combineGalleryQuery(baseQuery, conditions), aiPlan: assistant.aiPlan ?? undefined }
+  const draft = { ...parent.draft, query: optimized || combineGalleryQuery(baseQuery, conditions), aiPlan: assistant.aiPlan ?? undefined }
   if (validateSearch('lost', draft, null)) return null
   return {
     ...parent,
     draft: snapshotSearchDraft('lost', draft),
     gallery: null,
     assistantBaseQuery: baseQuery,
-    assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions] }),
+    assistant: copyAssistant({ ...assistant, draft: '', conditions, appliedConditions: [...conditions], optimizedQuery: undefined }),
   }
 }
 

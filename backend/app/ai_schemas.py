@@ -166,6 +166,8 @@ class AiFilters(BaseModel):
 
 class AiSearchPlan(BaseModel):
     originalQuery: str = Field(max_length=300)
+    # 검색 도우미가 최종 검색어에 적는, 원문+추가 조건을 한 문장으로 다듬은 자연어 문구.
+    refinedQuery: str = Field(default="", max_length=200)
     imageDescriptions: list[str] = Field(default_factory=list, max_length=6)
     channels: dict[Literal["combined", "image", "context"], AiChannelPlan]
     filters: AiFilters = Field(default_factory=AiFilters)

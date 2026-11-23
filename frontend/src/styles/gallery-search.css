@@ -19,6 +19,16 @@
 .ai-search-consent { display: grid; gap: 8px; color: var(--text-secondary); line-height: 1.65; }
 .ai-search-consent p { margin: 0; }
 .ai-search-consent__actions { display: flex; justify-content: flex-end; gap: 8px; }
+/* AI 해석 버튼·결과는 도우미 패널 밖, 결과 화면 본문에 둔다. */
+.query-optimizer { display: grid; gap: 10px; margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--control-line); border-radius: 10px; background: var(--surface); }
+.query-optimizer__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.query-optimizer__head > div { min-width: 0; }
+.query-optimizer__head strong { font-size: 13px; }
+.query-optimizer__head p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.query-optimizer__result { display: grid; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--raised); }
+.query-optimizer__result strong { color: var(--text-secondary); font-size: 12px; }
+.query-optimizer__result p { margin: 0; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.query-optimizer__result .button { justify-self: start; }
 .ai-plan { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .ai-plan p { margin: 0; }
 .ai-plan__original, .ai-plan__filters, .ai-plan__criteria p { display: grid; gap: 4px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -122,6 +132,7 @@
   .gallery-query-editor .search-button { min-width: 0; width: 100%; }
   .gallery-results__toolbar { gap: 12px; margin-bottom: 24px; }
   .gallery-results__toolbar > .button { width: 100%; }
+  .query-optimizer__head .button, .query-optimizer__result .button { width: 100%; }
   .gallery-results__sections { gap: 0; }
   .gallery-result-section { padding-block: 24px; }
   .gallery-result-section__heading { gap: 4px 12px; margin-bottom: 12px; }

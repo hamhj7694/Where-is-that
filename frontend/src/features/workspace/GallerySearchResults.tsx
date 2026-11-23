@@ -10,6 +10,7 @@ import { localPhotoId, photoFromFile, type AppPhoto } from './data'
 import { withMinimumVisible } from './ai-loading'
 import { AiSearching, DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, RetryButton } from './components'
 import GallerySearchAssistant from './GallerySearchAssistant'
+import AiQueryOptimizer from './AiQueryOptimizer'
 import GalleryQuerySummary from './GalleryQuerySummary'
 import Modal from '../../components/Modal'
 import '../../styles/gallery-search.css'
@@ -249,6 +250,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
       secondaryAction={<button type="button" className="button button--secondary gallery-query-editor__cancel" onClick={cancelEditing}>취소</button>} />
       {editorError && <p id="search-error" className="form-error" role="alert">{editorError}</p>}
     </div> : <GalleryQuerySummary key={draft.query + ':' + (draft.photo ? localPhotoId(draft.photo) : 'text')} draft={draft} editButtonRef={editButton} onEdit={startEditing} />}
+    {!editor && onRefine && <AiQueryOptimizer mode="gallery" baseQuery={draft.query} state={assistant} onChange={changeAssistant} onApply={onRefine} />}
     {referenceDescriptions.length > 0 && <div className="ai-plan gallery-reference-analysis">
       <p className="ai-plan__original"><strong>참고 사진 분석</strong> · AI가 읽은 대상과 요소를 작성한 검색어와 함께 반영했어요.</p>
       <div className="ai-plan__images"><ul>{referenceDescriptions.map((description, index) => <li key={index}>{description}</li>)}</ul></div>

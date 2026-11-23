@@ -17,6 +17,8 @@ export interface GalleryAssistantState {
   open?: boolean
   appliedConditions?: string[]
   aiPlan?: AiSearchPlan | null
+  /** AI가 원문+조건을 다듬어 만든 자연어 검색어. 있으면 조건 나열 대신 이 값을 검색어로 쓴다. */
+  optimizedQuery?: string
 }
 
 export function createGalleryAssistantState(): GalleryAssistantState {

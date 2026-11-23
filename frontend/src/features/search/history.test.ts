@@ -27,6 +27,30 @@ describe('찾은 기록의 세션 스냅샷', () => {
     expect(refined?.draft.query).toBe('검정 지갑\n가죽')
   })
 
+  it('도우미가 만든 자연어 검색어는 조건 나열 대신 검색어에 적히고 계획도 함께 보존한다', () => {
+    const plan = {
+      originalQuery: '검정 지갑',
+      refinedQuery: '금색 로고가 있는 검정 가죽 지갑',
+      imageDescriptions: [],
+      channels: {
+        combined: { query: '검정 가죽 지갑', keywords: [] },
+        image: { query: '', keywords: [] },
+        context: { query: '', keywords: [] },
+      },
+      filters: { category: '', region: '', view: '', fromDate: '', toDate: '' },
+      clarificationQuestions: [],
+    }
+    const assistant = { ...addGalleryCondition(createGalleryAssistantState(), '금색 로고'), aiPlan: plan, optimizedQuery: plan.refinedQuery }
+    const lost = refineLostRecord(createSearchRecord('lost', { query: '검정 지갑', photo: null }, null), assistant)
+    expect(lost?.draft.query).toBe('금색 로고가 있는 검정 가죽 지갑')
+    expect(lost?.draft.aiPlan).toEqual(plan)
+    expect(lost?.assistant?.optimizedQuery).toBeUndefined()
+
+    const gallery = refineGalleryRecord(createSearchRecord('gallery', { query: '검정 지갑', photo: image }, { name: '갤러리', files: [image] }), assistant)
+    expect(gallery?.draft.query).toBe('금색 로고가 있는 검정 가죽 지갑')
+    expect(gallery?.assistant?.optimizedQuery).toBeUndefined()
+  })
+
   it('도우미의 여러 조건 추가·수정·삭제는 제출 질의를 유지하고 명시적 재검색에서만 묶어 반영한다', () => {
     const original = createSearchRecord('gallery', { query: '검정 지갑', photo: image }, { name: '갤러리', files: [image] })
     let records = [original]

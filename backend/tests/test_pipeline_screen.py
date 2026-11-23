@@ -118,6 +118,20 @@ def test_pipeline_request_keeps_target_and_rejects_unknown_ids(tmp_path, monkeyp
     assert first.json()["id"] != second.json()["id"]
 
 
+def test_pipeline_screen_exposes_clickable_node_flow_map():
+    client = TestClient(main.app)
+    response = client.get("/pipeline")
+    assert response.status_code == 200
+    html = response.text
+    assert 'data-go="flow-map"' in html
+    assert 'id="flow-map"' in html
+    for function in ("renderFlowMap", "drawFlowLinks", "selectFlowNode"):
+        assert "function " + function + "(" in html
+    for lane in ("A · 갤러리에서 찾기", "B · 물건 찾기", "C · 직접 찾기", "D · 공통 / 점검", "E · 개별 AI 모델"):
+        assert lane in html
+    assert "marker-end" in html and "stroke-dasharray" in html
+
+
 def test_ai_dates_are_normalized_and_never_reversed():
     filters = AiFilters(fromDate="2026/11/1", toDate="2026.11.20")
     assert (filters.fromDate, filters.toDate) == ("2026-11-01", "2026-11-20")

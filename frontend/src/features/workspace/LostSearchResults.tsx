@@ -17,6 +17,7 @@ import { localPhotoId, OFFICIAL_SEARCH_URL } from './data'
 import { minimumWait, withMinimumVisible } from './ai-loading'
 import GalleryQuerySummary from './GalleryQuerySummary'
 import GallerySearchAssistant from './GallerySearchAssistant'
+import AiQueryOptimizer from './AiQueryOptimizer'
 import LostResultFilters from './LostResultFilters'
 import '../../styles/gallery-search.css'
 import '../../styles/lost-results.css'
@@ -587,6 +588,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     <PageHeading title={channel ? titles[channel] : '비슷한 물건 후보'} back={channel ? { to: linkTo(), label: '비슷한 물건 후보로' } : fromHistory ? { to: '/history', label: '찾은 기록으로' } : undefined} action={wide ? assistantToggle : undefined} />
     {editor ? <div className="gallery-query-editor"><SearchComposer mode="lost" draft={editor.draft} error={editorError} textareaRef={editorInput} initialAttachmentOpen={editor.photoEdit} submitLabel="다시 검색" onDraft={patch => { setEditor(previous => previous ? { ...previous, draft: { ...previous.draft, ...patch } } : previous); setEditorError('') }} onSubmit={commitEditing} onError={setEditorError} secondaryAction={<button type="button" className="button button--secondary gallery-query-editor__cancel" onClick={cancelEditing}>취소</button>} />{editorError && <p id="search-error" className="form-error" role="alert">{editorError}</p>}</div>
       : <GalleryQuerySummary mode="lost" key={draft.query + ':' + getReferencePhotos(draft).map(localPhotoId).join('|')} draft={draft} editButtonRef={editButton} onEdit={startEditing} />}
+    {!editor && onRefine && <AiQueryOptimizer mode="lost" baseQuery={draft.query} state={assistant} onChange={changeAssistant} onApply={onRefine} />}
     <p className="gallery-query-status" role="status">{editNotice}</p>
     <div className="gallery-results__toolbar"><p>검색 범위 · 경찰청 공개 습득물 정보{lastRefreshAt ? ` · 마지막 확인 ${new Date(lastRefreshAt).toLocaleString('ko-KR')}` : ''}</p>
       <button type="button" className="button button--secondary" onClick={() => void refreshResults()} disabled={refreshing || !keyword || live.loading}>{refreshing ? '확인 중…' : '새로고침'}</button>

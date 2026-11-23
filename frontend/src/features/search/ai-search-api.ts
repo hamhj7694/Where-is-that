@@ -9,6 +9,8 @@ export interface AiSearchChannelPlan {
 
 export interface AiSearchPlan {
   originalQuery: string
+  /** 원문 + 추가 조건을 한 문장으로 다듬은 검색어. 검색 도우미가 검색창에 적는다. */
+  refinedQuery?: string
   imageDescriptions: string[]
   channels: {
     combined: AiSearchChannelPlan
