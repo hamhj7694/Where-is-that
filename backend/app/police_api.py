@@ -286,6 +286,27 @@ def _term_matches(term: str, text: str) -> bool:
     return _masked_name_match(term.lower(), text.lower())
 
 
+def text_signal_score(item: dict, criteria: dict[str, list[str]], keyword: str) -> int:
+    """제목에 핵심어가 들어간 정도를 점수로 만든다(사진 점수와 함께 순위에 쓴다)."""
+    terms = []
+    for key in ("include", "any", "imageFeatures"):
+        terms.extend(criteria.get(key, []))
+    terms.extend(token for token in re.split(r"\s+", keyword.lower()) if len(token) >= 2)
+    terms = list(dict.fromkeys(terms))
+    name = str(item.get("name") or "").lower()
+    subject = str(item.get("subject") or "").lower()
+    category = str(item.get("category") or "").lower()
+    score = 0
+    for term in terms:
+        if _term_matches(term, name):
+            score += 4
+        elif _term_matches(term, subject):
+            score += 2
+        elif _term_matches(term, category):
+            score += 1
+    return score
+
+
 def score_criteria(item: dict, criteria: dict[str, list[str]]) -> dict:
     """공개 API 항목의 전체 텍스트에 AND/OR/NOT과 사진 특징을 적용한다.
 
@@ -595,7 +616,11 @@ def browse_all(
             row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
             deduped[key] = row
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
-    items.sort(key=lambda row: row["matchTier"])
+    # 같은 등급 안에서도 제목·본문에 검색어와 AI 조건이 더 많이 맞은 물건부터 보여준다.
+    # 사진 점수만 높은 물건이 텍스트로 정확히 맞은 물건을 밀어내지 않게 한다.
+    items.sort(key=lambda row: (
+        row["matchTier"], -text_signal_score(row, criteria, cleaned),
+    ))
     total = len(items)
     start = max(0, (page - 1) * rows)
     return {

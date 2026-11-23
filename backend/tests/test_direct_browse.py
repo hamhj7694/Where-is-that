@@ -70,7 +70,7 @@ def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
     monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
     updated = main._apply_visual_hints(result, payload)
     assert updated["items"][0]["id"] == "police:card"
-    assert updated["items"][0]["matchTier"] == 0
+    assert updated["items"][0]["matchTier"] == 1  # 사진만 맞으면 텍스트 일치 바로 아래
     assert updated["items"][0]["visualScore"] == 90
     assert updated["visualAnalyzed"] is True
 
@@ -124,7 +124,7 @@ def test_visual_match_at_50_counts_without_stopping_older_photos(monkeypatch):
     assert len(batches) == 2  # 50점 하나로 멈추지 않고 오래된 묶음까지 본다.
     assert result["visualScanned"] == 12
     assert result["visualMore"] is False
-    assert result["items"][0]["matchTier"] == 0  # 50점도 사진 특징 일치로 인정.
+    assert result["items"][0]["matchTier"] == 1  # 50점도 사진 특징 일치로 인정.
 
 
 def test_look_deeper_skips_seen_photos_and_reports_remaining(monkeypatch):
@@ -167,7 +167,62 @@ def test_deeper_search_keeps_the_score_found_earlier(monkeypatch):
     main._apply_visual_hints(result, payload)
     assert result["items"][0]["id"] == "police:old"  # 앞서 찾은 사진이 맨 위에 남는다.
     assert result["items"][0]["visualScore"] == 96
-    assert result["items"][0]["matchTier"] == 0
+    assert result["items"][0]["matchTier"] == 1
+
+
+def test_title_match_outranks_photo_only_match(monkeypatch):
+    """사진만 맞은 카드가 제목에 '치이카와'가 적힌 물건보다 위에 오면 안 된다."""
+    payload = SimpleNamespace(
+        keyword="치이카와",
+        hints={
+            "apiKeywords": ["치이카와"], "include": ["치이카와"],
+            "any": [], "exclude": [], "imageFeatures": ["치이카와"],
+        },
+        page=1, rows=2,
+    )
+    exact = row(
+        "portal:exact", "2026-11-16", name="신한카드 치이카와",
+        matchTier=0, matchLabel="AI+검색어 일치",
+    )
+    photo = row(
+        "police:photo", "2026-11-22", name="신한카드",
+        imageUrl="https://www.lost112.go.kr/a.jpg",
+        matchTier=5, matchLabel="공개 원문",
+    )
+    result = {"items": [photo, exact], "allItems": [photo, exact], "total": 2}
+    monkeypatch.setattr(
+        ai_pipeline, "match_visual_features",
+        lambda request: SimpleNamespace(results=[
+            SimpleNamespace(id="police:photo", imageSimilarity=96, basis="photo"),
+        ]),
+    )
+    updated = main._apply_visual_hints(result, payload)
+    assert [item["id"] for item in updated["items"]] == ["portal:exact", "police:photo"]
+    assert updated["items"][0]["matchTier"] == 0
+    assert updated["items"][1]["matchTier"] == 1
+    assert updated["items"][1]["visualScore"] == 96
+
+
+def test_more_title_terms_rank_first_within_same_tier(monkeypatch):
+    """'치이카와 카드'는 두 말이 다 맞은 제목이 한 말만 맞은 제목보다 앞이다."""
+    payload = SimpleNamespace(
+        keyword="치이카와 카드",
+        hints={"include": ["치이카와", "카드"], "imageFeatures": ["치이카와", "카드"]},
+        page=1, rows=3,
+    )
+    both = row("portal:both", "2026-11-16", name="신한카드 치이카와", matchTier=0)
+    one = row("portal:one", "2026-11-20", name="치이카와 목도리", matchTier=0)
+    photo = row(
+        "police:photo", "2026-11-22", name="신한카드",
+        imageUrl="https://www.lost112.go.kr/a.jpg", matchTier=5,
+    )
+    result = {"items": [one, both, photo], "allItems": [one, both, photo], "total": 3}
+    monkeypatch.setattr(
+        ai_pipeline, "match_visual_features",
+        lambda request: SimpleNamespace(results=[]),
+    )
+    updated = main._apply_visual_hints(result, payload)
+    assert [item["id"] for item in updated["items"]] == ["portal:both", "portal:one", "police:photo"]
 
 
 def test_browse_filters_whole_pool_and_recalculates_total(monkeypatch):

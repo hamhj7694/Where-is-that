@@ -492,7 +492,7 @@ def _lostfound_list_key(payload: LostFoundListRequest) -> str:
 def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
     raw = json.dumps(
         {
-            "v": 4,  # 더 찾아보기(건너뛴 사진 수)와 앞서 찾은 점수까지 반영
+            "v": 5,  # 더 찾아보기·앞서 찾은 점수·텍스트 우선 순위 반영
             "keyword": payload.keyword.strip(),
             "page": payload.page,
             "rows": payload.rows,
@@ -543,6 +543,26 @@ def lostfound_list(payload: LostFoundListRequest) -> dict:
     return result
 
 
+def _rank_browse_result(result: dict, hints: dict, keyword: str, page: int, rows: int) -> dict:
+    """등급 → 텍스트 신호·사진 점수 → 최신순으로 전체 후보를 정렬하고 현재 페이지만 돌려준다."""
+    pool = result.get("allItems") or result.get("items") or []
+    if not pool:
+        return result
+    text_signals = {
+        row["id"]: police_api.text_signal_score(row, hints, keyword)
+        for row in pool
+    }
+    pool.sort(key=lambda row: (row.get("foundDate", ""), row.get("id", "")), reverse=True)
+    pool.sort(key=lambda row: (
+        row.get("matchTier", 5),
+        -(text_signals.get(row["id"], 0) * 10 + (row.get("visualScore") or 0)),
+    ))
+    result["total"] = len(pool)
+    start = max(0, (page - 1) * rows)
+    result["items"] = pool[start:start + rows]
+    return result
+
+
 def _apply_visual_hints(
     result: dict,
     payload: LostFoundBrowseRequest,
@@ -579,7 +599,9 @@ def _apply_visual_hints(
     photo_items = with_photos[skip:skip + VISUAL_SCAN_CAP]
     if not photo_items:
         result["visualAnalyzed"] = True
-        return result
+        result["visualScanned"] = 0
+        result["visualMore"] = False
+        return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
     if progress:
         progress(0, len(photo_items))
 
@@ -631,7 +653,7 @@ def _apply_visual_hints(
     for key, value in prior.items():
         scores[key] = max(scores.get(key, 0), value)
     if not scores:
-        return result
+        return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
     for item in pool:
         score = scores.get(item["id"])
         if score is None:
@@ -641,16 +663,12 @@ def _apply_visual_hints(
         hits.append(f"사진 특징 {score}점")
         item["aiMatch"] = {**ai, "hits": hits}
         item["visualScore"] = score
-        item["matchTier"] = 0 if score >= VISUAL_STRONG_MIN else 1
-        item["matchLabel"] = "AI 사진 일치"
-    # 전체 후보를 다시 정렬한 뒤 현재 페이지만 되돌린다.
-    pool.sort(key=lambda row: row.get("foundDate", ""), reverse=True)
-    pool.sort(key=lambda row: row.get("visualScore") or 0, reverse=True)
-    pool.sort(key=lambda row: row.get("matchTier", 5))
-    result["total"] = len(pool)
-    start = max(0, (payload.page - 1) * payload.rows)
-    result["items"] = pool[start:start + payload.rows]
-    return result
+        # 텍스트 신호가 이미 맞은 물건의 등급은 유지한다. 사진만 맞은 물건은
+        # 텍스트로 맞은 물건 바로 아래 등급에 두고 점수로 순위를 정한다.
+        if score >= VISUAL_STRONG_MIN and item.get("matchTier", 5) > 1:
+            item["matchTier"] = 1
+            item["matchLabel"] = "AI 사진 일치"
+    return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
 
 
 @app.post("/api/lostfound/browse", response_model=LostFoundBrowseResponse)

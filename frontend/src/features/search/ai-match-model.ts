@@ -62,6 +62,13 @@ export function criteriaFromPlan(plan: AiSearchPlan | null | undefined, fallback
     if (!provided.apiKeywords.length) {
       const fallback = [plan.channels.combined.query, plan.channels.image.query, ...plan.channels.combined.keywords, fallbackQuery]
       provided.apiKeywords = cleanTerms(fallback, MAX_API_KEYWORDS)
+    } else if (provided.apiKeywords.length < MAX_API_KEYWORDS) {
+      // "치이카와 카드"처럼 AI가 카드만 탐색어로 고르면 제목에 치이카와가 있는 물건을 놓친다.
+      // include에 있는 짧은 고유어를 탐색어에도 되돌려 넣어 정확 일치부터 스캔하게 한다.
+      const missing = [...provided.include, ...provided.imageFeatures].filter(
+        term => term.length >= 2 && !term.includes(' ') && !provided.apiKeywords.includes(term),
+      )
+      provided.apiKeywords = cleanTerms([...missing, ...provided.apiKeywords], MAX_API_KEYWORDS)
     }
     return provided
   }

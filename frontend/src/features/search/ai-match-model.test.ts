@@ -75,6 +75,20 @@ describe('AI 맞춤 검색 조건', () => {
     expect(result.include).toEqual(['가죽', 'x'.repeat(40)])
   })
 
+  it('AI가 고유 명사를 탐색어에서 빼먹으면 다시 넣는다', () => {
+    const plan = {
+      ...basePlan,
+      criteria: {
+        ...criteria,
+        apiKeywords: ['카드'],
+        include: ['치이카와', '카드'],
+        imageFeatures: ['치이카와', '카드'],
+      },
+    }
+    const result = criteriaFromPlan(plan, '치이카와 카드')
+    expect(result.apiKeywords).toEqual(['치이카와', '카드'])
+  })
+
   it('AND 조건을 모두 만족하면 만점 근거를 만든다', () => {
     const match = matchPublicItem(item, criteria)
     expect(match.excludedBy).toBeNull()
