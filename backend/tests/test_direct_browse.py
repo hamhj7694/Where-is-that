@@ -138,7 +138,7 @@ def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):
         keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
     )
     items = [
-        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl=f"https://www.lost112.go.kr/{index}.jpg")
         for index in range(1, 11)
     ]
     items[9]["foundDate"] = "2026-11-22"  # 가장 최신 항목을 맨 뒤에 둔다.
@@ -568,6 +568,35 @@ def test_same_result_is_not_scanned_twice(monkeypatch):
     main._apply_visual_hints(result, payload)
     main._apply_visual_hints(result, payload)
     assert len(batches) == 1
+
+
+def test_duplicate_public_photo_is_sent_once_and_score_is_copied(monkeypatch):
+    items = [
+        row("police:first", "2026-01-01", imageUrl="https://www.lost112.go.kr/a.jpg?utm_source=test"),
+        row("police:alias", "2026-01-02", imageUrl="https://www.lost112.go.kr/a.jpg"),
+        row("police:other", "2026-01-03", imageUrl="https://www.lost112.go.kr/b.jpg"),
+    ]
+    result = {"items": items, "allItems": items, "total": 3}
+    payload = SimpleNamespace(
+        keyword="지갑", hints={"imageFeatures": ["지갑"]}, page=1, rows=3,
+        skipVisual=0, priorVisualScores={},
+    )
+    batches: list[list[str]] = []
+
+    def fake_match(request):
+        batches.append([candidate.id for candidate in request.candidates])
+        return SimpleNamespace(results=[
+            SimpleNamespace(id=candidate.id, imageSimilarity=80, basis="photo")
+            for candidate in request.candidates
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    updated = main._apply_visual_hints(result, payload)
+
+    # 같은 사진은 최신 기록 한 건만 모델에 보낸다.
+    assert batches == [["police:other", "police:alias"]]
+    scores = {item["id"]: item.get("visualScore") for item in updated["allItems"]}
+    assert scores == {"police:first": 80, "police:alias": 80, "police:other": 80}
 
 
 def test_failed_visual_batch_is_not_counted_as_scanned(monkeypatch):

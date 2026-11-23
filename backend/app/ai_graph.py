@@ -111,11 +111,19 @@ def _build_search_graph():
 def _visual_fetch(state: VisualState) -> dict:
     from . import ai_pipeline
 
+    from .police_api import _image_key
+
     request = state["request"]
     photo_images: dict[str, str] = {}
     description_texts: dict[str, str] = {}
+    # 같은 사진 경로를 가진 후보는 한 번만 내려받는다. 점수 대상 ID는 그대로 남겨
+    # 표시 결과가 줄어들거나 순위가 달라지지 않게 한다.
+    fetched: dict[str, str | None] = {}
     for candidate in request.candidates:
-        photo = ai_pipeline._fetch_public_image(candidate.imageUrl) if candidate.imageUrl else None
+        image_key = _image_key(candidate.imageUrl)
+        if image_key and image_key not in fetched:
+            fetched[image_key] = ai_pipeline._fetch_public_image(candidate.imageUrl)
+        photo = fetched.get(image_key) if image_key else None
         if photo:
             photo_images[candidate.id] = photo
         elif candidate.text.strip():

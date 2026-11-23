@@ -1019,11 +1019,22 @@ def _apply_visual_hints(
     for start in range(0, len(photo_items), VISUAL_BATCH_SIZE):
         batch = photo_items[start:start + VISUAL_BATCH_SIZE]
         candidates = []
+        # 같은 사진 경로는 대표 한 장만 모델에 보여준다. 다른 공식 기록의 ID는
+        # aliases에 남겨 뒤에서 같은 점수를 복사하므로 결과 카드는 그대로 노출된다.
+        image_owners: dict[str, str] = {}
+        aliases: dict[str, list[str]] = {}
         for item in batch:
+            image_key = police_api._image_key(item.get("imageUrl"))
+            owner = image_owners.get(image_key) if image_key else None
+            if owner:
+                aliases.setdefault(owner, []).append(item["id"])
+                continue
             text = " ".join(str(item.get(field) or "") for field in ("name", "subject", "notes", "category", "color"))
             candidates.append(AiVisualMatchCandidate(
                 id=item["id"], imageUrl=item["imageUrl"], text=text[:2000],
             ))
+            if image_key:
+                image_owners[image_key] = item["id"]
         try:
             matched = match_visual_features(AiVisualMatchRequest(
                 query=visual_query,
@@ -1042,7 +1053,8 @@ def _apply_visual_hints(
             progress(analyzed, len(photo_items))
         for row in matched.results:
             if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
-                scores[row.id] = max(scores.get(row.id, 0), row.imageSimilarity)
+                for item_id in [row.id, *aliases.get(row.id, [])]:
+                    scores[item_id] = max(scores.get(item_id, 0), row.imageSimilarity)
         # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
         if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
             break

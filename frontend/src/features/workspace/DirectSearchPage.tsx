@@ -19,6 +19,9 @@ const JOB_STORAGE_KEY = 'geugeo-eodi:direct-browse-job'
 // 상세 페이지 갔다가 돌아오면 마지막으로 본 검색 결과를 그대로 되살린다.
 const LAST_SEARCH_KEY = 'geugeo-eodi:direct-last-search'
 
+/** 일반 검색은 공개 원문만, AI 검색은 조건 해석과 사진 분석까지 진행한다. */
+type SearchMode = 'basic' | 'ai'
+
 interface StoredJob {
   jobId: string
   keyword: string
@@ -27,6 +30,7 @@ interface StoredJob {
   skipVisual: number
   /** 현재 페이지 밖에서 찾은 사진 점수까지 이어받는다. */
   priorVisualScores?: Record<string, number>
+  mode?: SearchMode
 }
 
 function readStoredJob(): StoredJob | null {
@@ -93,6 +97,7 @@ interface StoredSearch {
   input: string
   page: number
   params: string
+  mode?: SearchMode
   live: LiveState
   criteria: AiSearchCriteria
   aiDates: { from: string; to: string }
@@ -137,6 +142,7 @@ export default function DirectSearchPage() {
   const [params, setParams] = useSearchParams(restored?.params ?? '')
   const [input, setInput] = useState(restored?.input ?? '')
   const [keyword, setKeyword] = useState(restored?.keyword ?? '')
+  const [mode, setMode] = useState<SearchMode>(restored?.mode ?? 'ai')
   const [live, setLive] = useState<LiveState>(() =>
     restored && !restored.live.loading ? restored.live : initialLive(Boolean(restored?.keyword)),
   )
@@ -162,7 +168,7 @@ export default function DirectSearchPage() {
     if (!restored || restored.live.loading || !restored.keyword) return null
     const saved = new URLSearchParams(restored.params)
     saved.delete('page')
-    return `${restored.keyword}|${saved.toString()}`
+    return `${restored.keyword}|${saved.toString()}|${restored.mode ?? 'ai'}`
   })()
   const restoreSearchRef = useRef<string | null>(restoredSearchSignature)
   const page = Math.max(1, Number(params.get('page')) || 1)
@@ -182,6 +188,16 @@ export default function DirectSearchPage() {
       return
     }
     if (restoreAiRef.current === keyword) {
+      setAiBusy(false)
+      return
+    }
+    // 일반 검색은 조건 해석·사진 분석 없이 입력한 말로 공개 목록만 조회한다.
+    if (mode === 'basic') {
+      setCriteria(EMPTY_SEARCH_CRITERIA)
+      setAiDates({ from: '', to: '' })
+      setAiPeriodOff(false)
+      setSkipVisual(0)
+      setAnalyzedKeyword(keyword)
       setAiBusy(false)
       return
     }
@@ -208,7 +224,7 @@ export default function DirectSearchPage() {
       })
       .finally(() => { if (!cancelled) setAiBusy(false) })
     return () => { cancelled = true }
-  }, [keyword])
+  }, [keyword, mode])
 
   // 필터 UI에서 기간을 지워 URL 키가 사라졌으면 AI 추정 기간을 다시 넣지 않는다.
   useEffect(() => {
@@ -239,7 +255,7 @@ export default function DirectSearchPage() {
   // 돌아오면 저장해 둔 jobId로 결과를 이어받는다.
   useEffect(() => {
     // 상세 페이지에서 돌아온 경우 이미 받아 둔 결과를 그대로 보여준다.
-    if (restoreSearchRef.current === `${keyword}|${filterKey}`) return
+    if (restoreSearchRef.current === `${keyword}|${filterKey}|${mode}`) return
     if (keyword && analyzedKeyword !== keyword) return
     let cancelled = false
     let timer: number | undefined
@@ -249,7 +265,7 @@ export default function DirectSearchPage() {
 
     const remember = (value: LiveState) => {
       writeStoredSearch({
-        keyword, input, page, params: params.toString(),
+        keyword, input, page, params: params.toString(), mode,
         live: { ...value, raw: compactFoundItems(value.raw) },
         criteria, aiDates, aiPeriodOff, analyzedKeyword: keyword, skipVisual, visualProgress,
       })
@@ -303,6 +319,7 @@ export default function DirectSearchPage() {
       try {
         const stored = readStoredJob()
         const resumable = stored && stored.keyword === keyword
+          && (stored.mode ?? 'ai') === mode
           && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
         // 더 찾아보기·작업 이어받기·새로고침처럼 같은 검색을 계속할 때만 점수를 되살린다.
         // 새 검색어에서는 이전 결과가 화면에 남아 있어도 점수를 절대 넘기지 않는다.
@@ -314,7 +331,7 @@ export default function DirectSearchPage() {
           : await startBrowseJob(keyword, 1, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
         if (cancelled) return
         writeStoredJob({
-          jobId: job.jobId, keyword, reloadToken, skipVisual,
+          jobId: job.jobId, keyword, reloadToken, skipVisual, mode,
           priorVisualScores,
         })
         await poll(job.jobId)
@@ -327,7 +344,7 @@ export default function DirectSearchPage() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [keyword, reloadToken, skipVisual, hints, filters, analyzedKeyword])
+  }, [keyword, reloadToken, skipVisual, hints, filters, analyzedKeyword, mode])
 
   // 로딩이 길어지면 경과 초를 보여준다.
   useEffect(() => {
@@ -364,17 +381,20 @@ export default function DirectSearchPage() {
     setReloadToken(token => token + 1)
   }
 
-  function submitSearch(event: FormEvent) {
+  function submitSearch(event: FormEvent, nextMode: SearchMode) {
     event.preventDefault()
     const next = input.trim().replace(/\s+/g, ' ')
+    const keywordChanged = next !== keyword
+    const modeChanged = nextMode !== mode
     const updated = new URLSearchParams(params)
     updated.delete('page')
     restoreAiRef.current = null
     restoreSearchRef.current = null
-    if (next !== keyword) clearStoredJob()
+    if (keywordChanged || modeChanged) clearStoredJob()
     setParams(updated, { replace: true })
-    if (next !== keyword) setKeyword(next)
-    else setReloadToken(token => token + 1)
+    if (keywordChanged) setKeyword(next)
+    setMode(nextMode)
+    if (!keywordChanged) setReloadToken(token => token + 1)
   }
 
   // 이미 본 사진만큼 건너뛰고 더 오래된 사진을 이어서 분석한다.
@@ -401,7 +421,7 @@ export default function DirectSearchPage() {
   return <main id="main-content" className="content-workspace direct-search">
     <PageHeading title="직접 찾기" />
     <div className="direct-search__controls">
-      <form className="direct-search__form" onSubmit={submitSearch}>
+      <form className="direct-search__form" onSubmit={event => submitSearch(event, 'ai')}>
         <label className="search-section-title" htmlFor="direct-keyword">물건 검색</label>
         <div className="direct-search__form-row">
           <input
@@ -409,15 +429,18 @@ export default function DirectSearchPage() {
             type="search"
             value={input}
             onChange={event => setInput(event.target.value)}
-            placeholder="물건명 · 자연어 검색 · 비우면 전체 목록"
+            placeholder="예: 검정 가죽 지갑 (비우면 전체 목록)"
             maxLength={100}
           />
           <div className="direct-search__form-actions">
-            <button type="submit" className="button button--primary" disabled={aiBusy}><Search aria-hidden="true" />{aiBusy ? '분석 중…' : '검색'}</button>
+            <button type="button" className="button button--secondary" disabled={aiBusy} onClick={event => submitSearch(event, 'basic')}>일반 검색</button>
+            <button type="submit" className="button button--primary" disabled={aiBusy}><Search aria-hidden="true" />{aiBusy ? '분석 중…' : 'AI 검색'}</button>
             {keyword && <button type="button" className="button button--secondary" onClick={showAll}>전체 보기</button>}
           </div>
         </div>
-        <p className="direct-search__ai-hint">AI가 검색어의 핵심 명사·시각 특징·AND/OR/NOT를 정리하고 공개 API 사진까지 직접 봐요. 일치 등급과 사진 특징 점수로 줄 세웁니다.</p>
+        <p className="direct-search__ai-hint">{mode === 'ai'
+          ? 'AI가 적어둔 내용에서 중요한 말과 사진 특징을 뽑아 공개 사진까지 살펴봐요. 잘 맞는 물건부터 보여드려요.'
+          : '적어둔 말로 공개 습득물을 바로 찾아요. 사진 분석 없이 빠르게 결과를 볼 수 있어요.'}</p>
       </form>
       <div className="direct-search__filters"><LostResultFilters compact colorOptions={colorOptions} showDirection={false} customDropdowns /></div>
     </div>
@@ -425,21 +448,23 @@ export default function DirectSearchPage() {
       <span className="direct-search__spinner" aria-hidden="true" />
       <span>{aiBusy
         ? 'AI가 검색어를 정리하고 있어요'
-        : visualProgress.total > 0
-          ? `AI가 공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 보고 있어요`
-          : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
-      {!aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
-      {!aiBusy && <small>다른 페이지로 가도 검색은 계속돼요.</small>}
+        : mode === 'basic'
+          ? '공개 습득물을 찾고 있어요'
+          : visualProgress.total > 0
+            ? `AI가 공개 사진 ${Math.min(visualProgress.scanned, visualProgress.total)}/${visualProgress.total}장을 보고 있어요`
+            : keyword ? 'AI가 찾아보고 있어요' : '공개 목록을 불러오고 있어요'}<span className="direct-search__dots" aria-hidden="true"><i /><i /><i /></span></span>
+      {mode === 'ai' && !aiBusy && elapsed > 2 && <small>사진이 없어도 놓치지 않도록 넓게 살펴보는 중 · {elapsed}초</small>}
+      {mode === 'ai' && !aiBusy && <small>다른 페이지로 가도 검색은 계속돼요.</small>}
     </div>}
-    {(hasSearchCriteria(criteria) || aiDates.from || aiDates.to) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
-      <p className="lost-ai-criteria__title">AI가 자연어에서 읽은 검색 조건</p>
+    {mode === 'ai' && (hasSearchCriteria(criteria) || aiDates.from || aiDates.to) && !aiBusy && !live.loading && !live.error && <div className="lost-ai-criteria" role="status">
+      <p className="lost-ai-criteria__title">AI가 적어둔 내용에서 알아챈 조건</p>
       <div className="lost-ai-criteria__chips">
         {criteriaGroups.filter(key => criteria[key].length > 0).map(key => <span key={key} className={'lost-ai-criteria__chip lost-ai-criteria__chip--' + key}><strong>{criteriaLabels[key]}</strong>{criteria[key].join(' · ')}</span>)}
         {(aiDates.from || aiDates.to) && <span className="lost-ai-criteria__chip"><strong>기간</strong>{[aiDates.from, aiDates.to].filter(Boolean).join(' ~ ')}</span>}
       </div>
-      <p className="direct-search__ai-note">핵심 명사로 공개 정보를 넓게 조회하고 AND/OR/NOT 조건을 적용했어요. 제목·본문에 맞은 말이 많은 물건을 먼저 보여주고, 사진 특징은 같은 등급 안에서 순위를 올립니다.</p>
+      <p className="direct-search__ai-note">적어둔 말로 공개 정보를 넓게 찾아보고, 원하는 조건에 맞는 물건을 먼저 보여드렸어요. 사진이 닮은 물건도 앞쪽에 배치했어요.</p>
     </div>}
-    {showTiers && <div className="direct-search__tiers" role="note">
+    {showTiers && mode === 'ai' && <div className="direct-search__tiers" role="note">
       <strong>표시 순서</strong>
       {TIER_LEGEND.map(tier => <span key={tier.label} className={'direct-search__tier direct-search__tier--' + tier.className}>{tier.label}</span>)}
     </div>}
@@ -449,8 +474,8 @@ export default function DirectSearchPage() {
         <div className="direct-search__pagination-top">
           {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-top" position="top" />}
           <div className="direct-search__summary">
-            <p className="direct-search__scope">경찰청 공개 습득물 · 공개 정보 {live.scanned.toLocaleString('ko-KR')}건 스캔{appliedFilters ? ` 후 ${appliedFilters}개 필터 적용` : ''}{live.scanLimitReached ? ' (앞쪽 기준)' : ''}</p>
-            <p className="direct-search__count" role="status">{keyword ? `'${keyword}' 검색 결과 ` : '전체 목록 '}{live.total.toLocaleString('ko-KR')}건 중 {page}페이지 · 화면 {items.length}건</p>
+            <p className="direct-search__scope">경찰청 공개 습득물 · 공개 정보 {live.scanned.toLocaleString('ko-KR')}건 확인{appliedFilters ? ` · 선택 조건 ${appliedFilters}개 적용` : ''}</p>
+            <p className="direct-search__count" role="status">{keyword ? `'${keyword}' 검색 결과 ` : '전체 목록 '}{live.total.toLocaleString('ko-KR')}건 중 {page}페이지 · 이 페이지 {items.length}건</p>
           </div>
         </div>
         {items.length ? <div className="gallery-result-grid direct-search__grid">

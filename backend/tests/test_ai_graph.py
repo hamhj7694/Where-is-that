@@ -27,6 +27,27 @@ def _state():
     }
 
 
+def test_visual_fetch_downloads_the_same_photo_once(monkeypatch):
+    calls: list[str] = []
+
+    def fake_fetch(url):
+        calls.append(url)
+        return "data:image/jpeg;base64,Yg=="
+
+    monkeypatch.setattr(ai_pipeline, "_fetch_public_image", fake_fetch)
+    state = _state()
+    state["request"].candidates = [
+        SimpleNamespace(id="a", imageUrl="https://example.com/photo.jpg?utm_source=test", text=""),
+        SimpleNamespace(id="b", imageUrl="https://example.com/photo.jpg", text=""),
+        SimpleNamespace(id="c", imageUrl="https://example.com/other.jpg", text=""),
+    ]
+
+    updated = ai_graph._visual_fetch(state)
+
+    assert len(calls) == 2
+    assert set(updated["photo_images"]) == {"a", "b", "c"}
+
+
 def test_route_calls_vlm_census_only_on_configured_local_clip_path(monkeypatch):
     monkeypatch.setattr(config, "VLM_CROP_CENSUS", True)
     monkeypatch.setattr(config, "AI_SIMILARITY_PROVIDER", "local-clip")
