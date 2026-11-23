@@ -98,7 +98,7 @@
 
 <section id="models">
   <h2>2. AI 모델 맵</h2>
-  <p class="desc">세 역할 모두 <code>openai-compatible</code> · <code>gpt-6-luna</code>. 키 값은 절대 표시하지 않습니다(서버 <code>.env</code> 전용).</p>
+  <p class="desc">역할은 <code>multimodal</code>과 <code>imageSimilarity</code> 두 개입니다. 멀티모달은 <code>openai-compatible</code> · <code>gpt-6-luna</code>, 유사도는 기본 <code>local-clip</code>(사전학습 가중치, 학습 없음). 키 값은 절대 표시하지 않습니다(서버 <code>.env</code> 전용).</p>
   <div class="card">
     <table id="model-table">
       <thead><tr><th>역할</th><th>Provider / 모델</th><th>환경변수(이름만)</th><th>호출 엔드포인트</th><th>연결 기능</th><th>상태</th></tr></thead>
@@ -189,8 +189,8 @@ const DATA = {
     { title:"AI 역할 2개로 재구성", body:"multimodal(자연어·이미지·joint 해석)과 imageSimilarity(사진 임베딩 유사도) 두 역할로 나눴습니다. 기존 LLM/VLM/Vision은 호환용 별칭이고, 전용 유사도 미설정 시 멀티모달이 사진 대조를 맡습니다.", tone:"ok" },
     { title:"텍스트로 공개 사진 분석", body:"첨부 사진이 없어도 '딸기가 그려진 지갑' 같은 말에서 시각 특징을 뽑아 공개 API 사진을 분석합니다. 사진만 있는 항목과 설명만 있는 항목을 같은 후보 풀에서 점수화해 모두 우선순위가 될 수 있습니다.", tone:"ok" },
     { title:"결과 섹션 순서·구분선", body:"종합 → 설명·조건 → 사진 특징 순서로 바꾸고, 섹션 사이에만 1px 구분선과 일정한 여백을 적용했습니다. 확정 4개 영역의 레이아웃·카피·데이터 경계는 유지했습니다.", tone:"ok" },
-    { title:"로컬 CLIP + YOLOE 크롭", body:"사전학습 가중치만 사용합니다. YOLOE가 자연어 타깃(예: 지갑)만 잘라내고 CLIP이 그 크롭과 공개 사진을 벡터로 비교합니다. 단순 배경이면 탐지를 건너뛰고, 물건이 이미 화면 대부분이면 원본을 씁니다.", tone:"ok" },
-    { title:"LangGraph 호출 효율화", body:"텍스트만 있으면 LLM, 사진만 있으면 VLM, 둘 다 있으면 joint 멀티모달만 호출합니다. 로컬 임베딩이 성공하면 폴백 호출을 생략하고, 검색 카테고리 후보 최대 8건만 비교합니다.", tone:"ok" },
+    { title:"로컬 CLIP + YOLOE 크롭", body:"사전학습 가중치만 사용합니다. 객체가 2개 이상이거나 종류가 2가지 이상일 때만 YOLOE가 자연어 타깃(예: 지갑)을 잘라내고 CLIP이 그 크롭과 공개 사진을 벡터로 비교합니다. 단일 객체는 원본을 쓰고, VLM census가 객체 수·종류를 보강합니다.", tone:"ok" },
+    { title:"LangGraph 호출 효율화", body:"텍스트만 있으면 LLM, 사진만 있으면 VLM, 둘 다 있으면 joint 멀티모달만 호출합니다. 로컬 임베딩이 성공하면 폴백을 생략하고, 검색 카테고리 후보 최대 8건만 비교합니다. 텍스트 전용 점수가 평평하면 멀티모달이 공개 사진을 직접 대조합니다.", tone:"ok" },
   ],
   models: [
     { role:"Multimodal", model:"openai-compatible · gpt-6-luna", env:"GEUGEO_AI_MULTIMODAL_PROVIDER / _MODEL / _BASE_URL / _API_KEY (fallback GEUGEO_AI_LLM/VLM/VISION, OPENAI_API_KEY)",
