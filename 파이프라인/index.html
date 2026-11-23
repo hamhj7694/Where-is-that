@@ -60,6 +60,40 @@
   .note{color:var(--sub);font-size:12px;border-left:2px solid var(--acc);padding-left:11px;margin:10px 0}
   .banner{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:18px}
   .banner b{color:var(--acc2)}
+  .mini{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:7px;padding:4px 9px;font-size:11px;cursor:pointer;margin-top:8px}
+  .mini:hover{background:#173452;color:#fff}
+  .algo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin:14px 0}
+  .algo-card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px;text-align:left;color:var(--txt);cursor:pointer}
+  .algo-card:hover{border-color:var(--acc2);background:var(--panel2)}
+  .algo-card b{display:block;font-size:13px;margin-bottom:4px}
+  .algo-card span{display:block;color:var(--sub);font-size:11.5px;line-height:1.5}
+  .algo-card em{display:inline-block;font-style:normal;color:var(--acc);font-size:10px;margin-bottom:5px}
+  .detail-head{border-left:3px solid var(--acc2);padding-left:12px;margin-bottom:14px}
+  .detail-head h3{margin:0 0 4px;font-size:18px}
+  .detail-head p{margin:0;color:var(--sub);font-size:12.5px}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px;margin:12px 0}
+  .detail-box{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px}
+  .detail-box h4{margin:0 0 6px;font-size:12.5px;color:var(--acc)}
+  .detail-box ul,.detail-box ol{margin:0;padding-left:17px;color:var(--sub);font-size:12px}
+  .detail-box li{margin-bottom:4px}
+  .detail-box p{margin:0;color:var(--sub);font-size:12px}
+  .kv{width:100%;font-size:11.5px;margin:0}
+  .kv th,.kv td{padding:6px 8px}
+  .rel{display:flex;flex-wrap:wrap;gap:6px}
+  .rel button{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer}
+  .mask{position:fixed;inset:0;background:rgba(3,8,15,.72);display:none;place-items:center;z-index:50;padding:20px}
+  .mask.on{display:grid}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(900px,100%);max-height:88vh;overflow:auto;padding:18px 20px}
+  .modal__top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+  .modal__top h3{margin:0;font-size:17px}
+  .modal__top button{background:none;color:var(--sub);border:1px solid var(--line);border-radius:8px;padding:4px 10px;cursor:pointer}
+  .req-list{list-style:none;margin:12px 0 0;padding:0}
+  .req-list li{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:7px}
+  .req-list .meta{color:var(--acc2);font-size:11px}
+  .req-list .body{color:var(--txt);font-size:12.5px;margin-top:4px;white-space:pre-wrap;word-break:break-all}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .toolbar select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px;font:inherit;font-size:12px}
+  .toolbar button{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px}
 </style>
 </head>
 <body>
@@ -85,6 +119,17 @@
   <button data-go="direct-browse">C2. 코드 필터·백그라운드 스캔</button>
   <button data-go="direct-result">C3. 등급별 결과 표시</button>
 
+  <div class="group">E. 검색 알고리즘 (개별 보기·요청)</div>
+  <button data-go="algo-map">E0. 알고리즘 지도 · 요청함</button>
+  <button data-go="algo-detail" data-algo="algo-query-interpret">E1. 자연어 → 검색 조건</button>
+  <button data-go="algo-detail" data-algo="algo-code-filter">E2. 코드 · 기간 필터</button>
+  <button data-go="algo-detail" data-algo="algo-text-tiers">E3. 등급 · 텍스트 점수</button>
+  <button data-go="algo-detail" data-algo="algo-visual-match">E4. 공개 사진 AI 분석</button>
+  <button data-go="algo-detail" data-algo="algo-ranking">E5. 최종 정렬 · 페이지</button>
+  <button data-go="algo-detail" data-algo="algo-browse-more">E6. 더 찾아보기 · 작업</button>
+  <button data-go="algo-detail" data-algo="algo-web-reference">E7. 웹 참고 · 임베딩</button>
+  <button data-go="algo-detail" data-algo="model-multimodal">E8. AI 모델 3종 보기</button>
+
   <div class="group">공통 / 점검</div>
   <button data-go="common-web">D0. 인터넷 참고·임베딩</button>
   <button data-go="common-base">D1. 캐시·비밀값·헬스</button>
@@ -103,9 +148,9 @@
 
   <h3>① AI 모델 / 역할</h3>
   <div class="grid g3">
-    <div class="card"><h4>multimodal</h4><p>말 + 사진 + 말·사진 함께 읽기. 사진 설명, 조건 정리, 사진 채점, VLM census를 모두 맡습니다. <code>gpt-6-luna</code>, <code>/chat/completions</code> JSON 모드.</p><div><span class="tag a">1개 역할</span><span class="tag">llm/vlm/vision = 호환 별칭</span></div></div>
-    <div class="card"><h4>imageSimilarity</h4><p>사진끼리 닮은 정도를 점수로 매깁니다. 기본 <code>local-clip</code>. <code>none</code>, <code>openai-compatible</code>, <code>clip-http</code> 선택 가능.</p><div><span class="tag b">점수 전용</span><span class="tag">파인튜닝 없음</span></div></div>
-    <div class="card"><h4>YOLOE</h4><p>크롭 1단계에서만 씁니다. 사전학습 가중치 그대로, 객체 2개 이상이거나 종류 2가지 이상일 때만 자릅니다.</p><div><span class="tag b">크롭 1단계</span></div></div>
+    <div class="card"><h4>multimodal</h4><p>말 + 사진 + 말·사진 함께 읽기. 사진 설명, 조건 정리, 사진 채점, VLM census를 모두 맡습니다. <code>gpt-6-luna</code>, <code>/chat/completions</code> JSON 모드.</p><div><span class="tag a">1개 역할</span><span class="tag">llm/vlm/vision = 호환 별칭</span></div><button class="mini algo-open" data-algo="model-multimodal">개별 보기 · 수정 요청</button></div>
+    <div class="card"><h4>imageSimilarity</h4><p>사진끼리 닮은 정도를 점수로 매깁니다. 기본 <code>local-clip</code>. <code>none</code>, <code>openai-compatible</code>, <code>clip-http</code> 선택 가능.</p><div><span class="tag b">점수 전용</span><span class="tag">파인튜닝 없음</span></div><button class="mini algo-open" data-algo="model-similarity">개별 보기 · 수정 요청</button></div>
+    <div class="card"><h4>YOLOE</h4><p>크롭 1단계에서만 씁니다. 사전학습 가중치 그대로, 객체 2개 이상이거나 종류 2가지 이상일 때만 자릅니다.</p><div><span class="tag b">크롭 1단계</span></div><button class="mini algo-open" data-algo="model-yoloe">개별 보기 · 수정 요청</button></div>
   </div>
 
   <h3>② 라이브러리 / 프레임워크</h3>
@@ -128,12 +173,13 @@
 
   <h3>④ 세 화면 AI 연결 한눈에</h3>
   <table>
-    <tr><th>화면</th><th>AI 조건 정리</th><th>AI 사진 점수</th><th>AI 재정렬</th><th>결과 순서</th></tr>
-    <tr><td>A. 갤러리에서 찾기</td><td>버튼 없음(정책)</td><td><span class="tag a">연결</span> <code>vision/compare</code></td><td><span class="tag a">연결</span></td><td>종합·이미지·맥락 3축</td></tr>
-    <tr><td>B. 물건 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code></td><td><span class="tag a">연결</span> <code>vision/match-public</code></td><td><span class="tag a">연결</span> <code>search/rank-context</code></td><td>확정 4개 영역</td></tr>
-    <tr><td>C. 직접 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code> (말에서 시각 특징 추출)</td><td><span class="tag a">연결</span> <code>vision/match-public</code> 재사용</td><td><span class="tag w">부분</span> 사진 점수로 등급만 끌어올림</td><td>제목·본문에 맞은 말이 많은 순 → 같은 등급에서 사진 점수 → 최신순</td></tr>
+    <tr><th>화면</th><th>AI 조건 정리</th><th>AI 사진 점수</th><th>AI 재정렬</th><th>결과 순서</th><th>개별 보기</th></tr>
+    <tr><td>A. 갤러리에서 찾기</td><td>버튼 없음(정책)</td><td><span class="tag a">연결</span> <code>vision/compare</code></td><td><span class="tag a">연결</span></td><td>종합·이미지·맥락 3축</td><td><button class="mini algo-open" data-algo="algo-gallery-compare">유사도 비교</button></td></tr>
+    <tr><td>B. 물건 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code></td><td><span class="tag a">연결</span> <code>vision/match-public</code></td><td><span class="tag a">연결</span> <code>search/rank-context</code></td><td>확정 4개 영역</td><td><button class="mini algo-open" data-algo="algo-context-rank">맥락 재정렬</button></td></tr>
+    <tr><td>C. 직접 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code> (말에서 시각 특징 추출)</td><td><span class="tag a">연결</span> <code>vision/match-public</code> 재사용</td><td><span class="tag w">부분</span> 사진 점수로 등급만 끌어올림</td><td>등급 → (제목·본문 신호×10 + 사진 점수) 내림차순, 동점이면 최신순</td><td><button class="mini algo-open" data-algo="algo-ranking">정렬 규칙</button></td></tr>
   </table>
-  <div class="note">직접 찾기도 AI가 말 속에서 캐릭터·색상·카드 종류·이름을 시각 특징으로 뽑아 <b>공개 API 사진을 직접 봅니다</b>. 모델이 모르는 <code>치이카와</code>·<code>짱구</code>는 <b>D0 인터넷 참고 단계</b>에서 설명과 참고 이미지를 먼저 임베딩해 비교합니다. “약 한 달 전”, “오래전에”라는 말은 <b>그 시점 전후 기간 필터</b>로 바꿔 먼저 좁힙니다. 사진 분석은 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 진행하고, 충분히 맞으면 일찍 멈춥니다. <b>50점 이상이면 사진 일치로 인정</b>하되 조기 종료는 90점(또는 70점 3건)으로 엄격히 유지해 오래된 사진을 놓치지 않습니다. 결과는 <b>모두 표시</b>하며 남은 오래된 사진은 <b>더 찾아보기</b>로 이어서 봅니다. <code>류*진</code>은 <code>류영진</code>·<code>류세진</code>으로도 찾습니다.</div>
+  <div class="note">위의 <b>모델 카드·개별 보기 버튼</b>을 누르면 해당 모델/검색 방식/알고리즘의 입력·단계·임계값·실패 처리·코드 위치를 따로 보여주고, 그 항목을 지정한 수정 요청을 바로 보낼 수 있습니다. 왼쪽 <b>E. 검색 알고리즘</b> 메뉴에서도 같은 정보를 볼 수 있습니다.</div>
+  <div class="note">직접 찾기도 AI가 말 속에서 캐릭터·색상·카드 종류·이름을 시각 특징으로 뽑아 <b>공개 API 사진을 직접 봅니다</b>. 모델이 모르는 <code>치이카와</code>·<code>짱구</code>는 <b>D0 인터넷 참고 단계</b>에서 설명과 참고 이미지를 먼저 임베딩해 비교합니다. “약 한 달 전”, “오래전에”라는 말은 <b>그 시점 전후 기간 필터</b>로 바꿔 먼저 좁힙니다. 사진 분석은 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 진행하고, 충분히 맞으면 일찍 멈춥니다. <b>40점 이상이면 점수만 남기고 50점 이상이면 사진 일치로 인정</b>하되 조기 종료는 90점(또는 70점 3건)으로 엄격히 유지해 오래된 사진을 놓치지 않습니다. 결과는 <b>모두 표시</b>하며 남은 오래된 사진은 <b>더 찾아보기</b>로 이어서 봅니다. <code>류*진</code>은 <code>류영진</code>·<code>류세진</code>으로도 찾습니다.</div>
 </section>
 
 <!-- A1 -->
@@ -141,7 +187,7 @@
   <h2>A1. 갤러리에서 찾기 — 사진 연결·준비 <span class="tag">로컬만</span></h2>
   <p class="lead">사진은 기기에서만 읽습니다. 이 단계에는 서버 AI 호출이 없습니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="03_gallery_input.png" alt="갤러리 연결 화면"></div><div class="cap"><b>인풋</b><span>/gallery — 사진 여러 장 선택 또는 폴더 연결.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/03_gallery_before.png" alt="갤러리 연결 전 화면 캡처"></div><div class="cap"><b>인풋 (실캡처)</b><span>/gallery — 사진 여러 장 선택 또는 폴더 연결 버튼. 캡처는 로컬 예시 사진 4장을 넣기 전 상태입니다.</span></div></div>
     <div><div class="steps">
       <div class="step local"><b>갤러리 연결</b><div class="what">브라우저 파일 API로 사진/폴더를 읽고 새로고침해도 유지합니다.</div><div class="code">gallery-store.ts</div></div>
       <div class="arrow">▼</div>
@@ -149,7 +195,7 @@
       <div class="arrow">▼</div>
       <div class="step"><b>참고 사진 준비 완료</b><div class="what">여기서부터 A2의 <code>vision/compare</code>로 넘어갑니다. AI 조건 정리 버튼은 /gallery에 두지 않습니다.</div></div>
     </div></div>
-    <div><div class="shot"><img src="03_gallery_input.png" alt="연결 화면"></div><div class="cap"><b>아웃풋</b><span>연결된 갤러리 이름·사진 수가 검색창 위에 표시됩니다.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/03_gallery_after.png" alt="갤러리 연결 후 화면 캡처"></div><div class="cap"><b>아웃풋 (실캡처)</b><span>/gallery/results?view=all — 연결한 이미지 4장이 그리드로 표시되고, 검색창 위에 “4장의 이미지를 연결했어요”가 나옵니다.</span></div></div>
   </div>
   <div class="req" data-req="gallery-prepare"><h4>✎ 이 구간 수정 요청</h4><p>저장하면 오픈코드 피클이 읽고 실제 코드를 고칩니다.</p>
     <select class="scope"><option>전체</option><option>갤러리 연결</option><option>중복 제거</option></select>
@@ -161,7 +207,7 @@
   <h2>A2. 갤러리에서 찾기 — 사진 유사도 비교 <span class="tag a">AI 연결됨</span></h2>
   <p class="lead">참고 사진과 내 사진을 같이 보고 점수를 매겨 순위를 바꿉니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="03_gallery_input.png" alt="갤러리 입력"></div><div class="cap"><b>인풋</b><span>검색문 + 참고 사진 + 갤러리 후보 사진.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/03_gallery_input.png" alt="갤러리 입력"></div><div class="cap"><b>인풋</b><span>검색문 + 참고 사진 + 갤러리 후보 사진.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>참고 사진 설명</b><div class="what">multimodal이 참고 사진을 먼저 설명합니다.</div><div class="code">ai_pipeline.py:192</div></div>
       <div class="arrow">▼</div>
@@ -203,7 +249,7 @@
   <h2>B1. 물건 찾기 — 조건 정리 + 공개 수집 <span class="tag a">AI 연결됨</span></h2>
   <p class="lead">한 문장을 검색 조건으로 바꾸고, 공식 코드표로 공개 API를 먼저 좁힙니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="01_input_search.png" alt="물건 찾기 입력"></div><div class="cap"><b>인풋</b><span>/lost-found 검색창에 “신림역 근처 검은 가죽 지갑” 입력.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/01_input_search.png" alt="물건 찾기 입력"></div><div class="cap"><b>인풋</b><span>/lost-found 검색창에 “신림역 근처 검은 가죽 지갑” 입력.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>분기</b><div class="what">사진 있음 → describe, 없음 → interpret.</div><div class="code">ai_graph.py:50-51,97-108</div></div>
       <div class="arrow">▼</div>
@@ -214,7 +260,7 @@
       <div class="step"><b>공식 코드 필터</b><div class="what">분류·색상·지역·기간을 전용 필터 API에 넘겨 서버에서 먼저 좁힙니다. <code>maxPages</code> 기본 200, 0이면 마지막까지.</div><div class="code">lostfound_codes.py:121-174 · police_api.py:381-532</div></div>
       <div class="step fail"><b>실패 폴백</b><div class="what">AI 실패 시 원문 검색으로 계속합니다.</div><div class="code">LostSearchComposer.tsx:55-65</div></div>
     </div></div>
-    <div><div class="shot"><img src="02_output_search.png" alt="조건 정리 결과"></div><div class="cap"><b>아웃풋</b><span>AI가 정리한 검색 초안 + 경찰청 탐색어·AND/OR·사진 특징.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/02_output_search.png" alt="조건 정리 결과"></div><div class="cap"><b>아웃풋</b><span>AI가 정리한 검색 초안 + 경찰청 탐색어·AND/OR·사진 특징.</span></div></div>
   </div>
   <div class="req" data-req="lost-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>사진 설명</option><option>조건 정리 프롬프트</option><option>공식 코드 필터</option><option>스캔 상한</option></select>
@@ -226,7 +272,7 @@
   <h2>B2. 물건 찾기 — 사진 특징 매칭 <span class="tag a">AI 연결됨</span></h2>
   <p class="lead">“딸기 그림이 있는 지갑”처럼 말로 한 특징으로 공개 사진을 찾습니다. 사진이 없어도 됩니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="01_input_search.png" alt="사진 특징 입력"></div><div class="cap"><b>인풋</b><span>사진 특징 문구 + 검색어. 첨부 사진이 있으면 함께.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/01_input_search.png" alt="사진 특징 입력"></div><div class="cap"><b>인풋</b><span>사진 특징 문구 + 검색어. 첨부 사진이 있으면 함께.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>D0 웹 참고 → fetch</b><div class="what">모델이 모르는 캐릭터·브랜드는 웹에서 설명과 참고 사진을 먼저 임베딩합니다. 허용 호스트 사진은 512px JPEG로. 실패하면 설명 텍스트로 이동.</div><div class="code">web_reference.py · ai_graph.py:111-129</div></div>
       <div class="arrow">▼</div>
@@ -240,7 +286,7 @@
       <div class="arrow">▼</div>
       <div class="step"><b>finish</b><div class="what">설명 점수 채우고 <code>imageSimilarity</code> 내림차순 반환.</div><div class="code">ai_graph.py:275-318</div></div>
     </div></div>
-    <div><div class="shot"><img src="02_output_search.png" alt="사진 특징 결과"></div><div class="cap"><b>아웃풋</b><span>“사진 특징이 비슷한 후보”. 실측 이미지 R@1/R@3/MRR@5 = 1.000.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/02_output_search.png" alt="사진 특징 결과"></div><div class="cap"><b>아웃풋</b><span>“사진 특징이 비슷한 후보”. 실측 이미지 R@1/R@3/MRR@5 = 1.000.</span></div></div>
   </div>
   <div class="req" data-req="lost-visual"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>사진 가져오기</option><option>census/크롭</option><option>후보 8개</option><option>점수 보정</option><option>폴백 임계값</option></select>
@@ -252,7 +298,7 @@
   <h2>B3. 물건 찾기 — 맥락 재정렬 + 결과 <span class="tag a">AI 연결됨</span></h2>
   <p class="lead">설명·조건 후보를 문맥에 맞게 다시 줄 세우고 확정 4개 영역에 담습니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="02_output_search.png" alt="결과 입력"></div><div class="cap"><b>인풋</b><span>“설명·조건이 비슷한 후보” 전체 텍스트 + 사용자 문장.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/02_output_search.png" alt="결과 입력"></div><div class="cap"><b>인풋</b><span>“설명·조건이 비슷한 후보” 전체 텍스트 + 사용자 문장.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>맥락 재정렬</b><div class="what"><code>rank_context_candidates.txt</code>로 <code>llm</code> 역할이 순위를 매깁니다.</div><div class="code">ai_pipeline.py:344-364</div></div>
       <div class="arrow">▼</div>
@@ -260,7 +306,7 @@
       <div class="arrow">▼</div>
       <div class="step local"><b>확정 4개 영역</b><span class="what">종합 / 설명·조건 / 사진 특징 — 레이아웃·카피·카드 크기·상태·데이터 경계는 바꾸지 않습니다.</span></div>
     </div></div>
-    <div><div class="shot"><img src="02_output_search.png" alt="최종 결과"></div><div class="cap"><b>아웃풋</b><span>최종 분실물 후보 화면.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/02_output_search.png" alt="최종 결과"></div><div class="cap"><b>아웃풋</b><span>최종 분실물 후보 화면.</span></div></div>
   </div>
   <div class="req" data-req="lost-context"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>재정렬 프롬프트</option><option>ID 검증</option><option>4구역 표시</option></select>
@@ -272,15 +318,15 @@
   <h2>C1. 직접 찾기 — 검색어 조건 정리 <span class="tag a">AI 연결</span></h2>
   <p class="lead">AI는 키워드와 AND/OR뿐 아니라 <b>말 속에 담긴 시각 특징</b>(캐릭터·색상·브랜드·사진 속 이름)도 뽑습니다. 첨부 사진이 없어도 공개 API 사진을 비교할 특징이 생깁니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="04_direct_input.png" alt="직접 찾기 입력"></div><div class="cap"><b>인풋</b><span>/direct-search 검색창에 “검은 가죽 지갑” 입력.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/04_direct_input.png" alt="직접 찾기 입력"></div><div class="cap"><b>인풋</b><span>/direct-search 검색창에 “검은 가죽 지갑” 입력.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>prepareAI('direct')</b><div class="what">검색어가 바뀔 때만 <code>/api/ai/search/prepare</code>를 한 번 부릅니다. 사진 첨부 없이도 <code>imageFeatures</code>가 나옵니다.</div><div class="code">DirectSearchPage.tsx · interpret_search.txt</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><b>조건 추출</b><div class="what"><code>criteriaFromPlan()</code>로 API 탐색어·AND/OR·<code>imageFeatures</code>를 만듭니다. 브랜드·카드 종류는 넓은 탐색어 <code>카드</code>로 잡고 특징은 따로 보관합니다. “약 한 달 전”, “오래전에” 같은 말은 <code>fromDate</code>/<code>toDate</code>로 바꿔 조회 기간에 적용합니다.</div><div class="code">DirectSearchPage.tsx · ai-match-model.ts · interpret_search.txt</div></div>
+      <div class="step"><b>조건 추출</b><div class="what"><code>criteriaFromPlan()</code>로 API 탐색어·AND/OR·<code>imageFeatures</code>를 만듭니다. 브랜드·캐릭터 이름은 짧은 탐색어로 반드시 유지하고, 일반 명사 <code>카드</code>는 고유어 뒤에 둡니다. “약 한 달 전”, “오래전에” 같은 말은 <code>fromDate</code>/<code>toDate</code>로 바꿔 조회 기간에 적용하며, 사용자가 기간을 지우면 AI 추정 기간을 다시 넣지 않습니다.</div><div class="code">DirectSearchPage.tsx · ai-match-model.ts · interpret_search.txt</div></div>
       <div class="step fail"><b>실패 폴백</b><div class="what">AI가 실패하면 빈 조건으로 원문 검색을 이어갑니다. 검색 자체는 죽지 않습니다.</div><div class="code">DirectSearchPage.tsx:60-65</div></div>
       <div class="note">필터만 바꿀 때는 AI를 다시 부르지 않고 서버 조회만 다시 합니다.</div>
     </div></div>
-    <div><div class="shot"><img src="04_direct_input.png" alt="조건 정리 후"></div><div class="cap"><b>아웃풋</b><span>검색 조건 접기/펼치기와 조건 적용 버튼.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/04_direct_input.png" alt="조건 정리 후"></div><div class="cap"><b>아웃풋</b><span>검색 조건 접기/펼치기와 조건 적용 버튼.</span></div></div>
   </div>
   <div class="req" data-req="direct-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>조건 정리</option><option>실패 폴백</option></select>
@@ -292,7 +338,7 @@
   <h2>C2. 직접 찾기 — 코드 필터·백그라운드 스캔·등급 <span class="tag">서버</span></h2>
   <p class="lead">공식 코드표로 먼저 좁히고, 오래 걸리는 조회는 서버 작업으로 넘깁니다. 중복을 제거한 뒤 일치 등급을 붙입니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="04_direct_input.png" alt="필터 입력"></div><div class="cap"><b>인풋</b><span>검색어 + 분류·색상·지역·기간 필터 + AI 조건.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/04_direct_input.png" alt="필터 입력"></div><div class="cap"><b>인풋</b><span>검색어 + 분류·색상·지역·기간 필터 + AI 조건.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>작업 시작</b><div class="what"><code>POST /api/lostfound/browse/jobs</code>가 즉시 <code>jobId</code>를 줍니다. 탭을 닫거나 다른 페이지로 가도 <code>ThreadPoolExecutor</code>가 서버에서 계속 조회합니다. 30분 TTL.</div><div class="code">main.py: start_lostfound_browse_job</div></div>
       <div class="arrow">▼</div>
@@ -300,13 +346,13 @@
       <div class="arrow">▼</div>
       <div class="step"><b>필터 → 공식 코드 + 스캔</b><div class="what">분류·색상·지역과 자연어에서 읽은 기간을 공식 코드·날짜로 바꿔 서버에서 먼저 좁힙니다. 사용자가 직접 고른 기간이 AI 추정보다 우선. 타임아웃 45초, 스캔 페이지 최대 8개(더 찾아보기 시 최대 24개).</div><div class="code">lostfound_codes.py · police_api.py: metadata_pass · main.py: _browse_page_cap</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><b>중복 제거·등급 계산</b><div class="what"><code>exclude</code>만 확실히 제외. 나머지는 AI/검색어/필터/부분 일치 신호를 확인해 등급 0~5를 붙이고 <b>전부</b> 남깁니다. 같은 등급 안에서는 제목·본문에 맞은 말 수가 많은 순, 그다음 최신순.</div><div class="code">police_api.py: MATCH_TIERS</div></div>
+      <div class="step"><b>중복 제거·등급 계산</b><div class="what"><code>exclude</code>만 확실히 제외. 나머지는 AI/검색어/필터/부분 일치 신호를 확인해 등급 0~5를 붙이고 <b>전부</b> 남깁니다. 같은 등급 안에서는 제목·본문 신호×10 + 사진 점수가 높은 순, 동점이면 최신 습득일·ID 순.</div><div class="code">police_api.py: MATCH_TIERS</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><b>웹 참고 → 공개 사진 AI 분석</b><div class="what">낯선 이름은 D0에서 참고 사진·특징을 먼저 얻습니다. 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 비교하고, 90점 이상 또는 70점 이상 3건이 나오면 더 오래된 사진은 건너뜁니다. <b>50점 이상</b>이면 사진 특징으로 인정해 <code>visualScore</code>를 붙입니다. 텍스트가 이미 맞은 등급은 유지하고, <b>사진만 맞은 물건은 등급 1</b>에 두어 정확히 적힌 물건보다 뒤에 오게 한 뒤 정렬·페이지네이션합니다. 조기 종료로 안 본 사진이 남으면 <code>visualMore</code>를 true로 돌려줍니다.</div><div class="code">main.py: _apply_visual_hints · web_reference.py</div></div>
+      <div class="step"><b>웹 참고 → 공개 사진 AI 분석</b><div class="what">낯선 이름은 D0에서 참고 사진·특징을 먼저 얻습니다. 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 비교하고, 90점 이상 또는 70점 이상 3건이 나오면 더 오래된 사진은 건너뜁니다. <b>40점 이상</b>이면 <code>visualScore</code>에 남기고 <b>50점 이상</b>이면 사진 특징으로 인정해 등급도 올립니다. 텍스트가 이미 맞은 등급은 유지하고, <b>사진만 맞은 물건은 등급 1</b>에 두어 정확히 적힌 물건보다 뒤에 오게 한 뒤 정렬·페이지네이션합니다. 조기 종료로 안 본 사진이 남으면 <code>visualMore</code>를 true로 돌려줍니다.</div><div class="code">main.py: _apply_visual_hints · web_reference.py</div></div>
       <div class="arrow">▼</div>
       <div class="step local"><b>응답·캐시</b><div class="what"><code>matchTier</code>/<code>matchLabel</code>/<code>visualScore</code> 포함. 오류 없을 때만 300초 TTL 캐시. 부분 실패는 캐시하지 않습니다.</div></div>
     </div></div>
-    <div><div class="shot"><img src="05_direct_output.jpg" alt="목록 결과"></div><div class="cap"><b>아웃풋</b><span>등급·사진 점수 배지가 붙은 공개 습득물 목록 + 더 찾아보기 버튼.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/05_direct_output.jpg" alt="목록 결과"></div><div class="cap"><b>아웃풋</b><span>등급·사진 점수 배지가 붙은 공개 습득물 목록 + 더 찾아보기 버튼.</span></div></div>
   </div>
   <div class="req" data-req="direct-browse"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>백그라운드 작업</option><option>코드 변환</option><option>스캔 한도</option><option>등급 계산</option><option>공개 사진 분석</option></select>
@@ -316,19 +362,19 @@
 <!-- C3 -->
 <section class="page" id="direct-result">
   <h2>C3. 직접 찾기 — 등급별 결과 표시 <span class="tag a">사진 점수 포함</span></h2>
-  <p class="lead">조건에 맞는 것·안 맞는 것·AI가 찾은 것을 <b>전부</b> 보여주되, 제목에 검색어가 적힌 물건을 먼저 보여줍니다. 사진은 같은 등급 안에서 순위를 올리고, 상세 페이지에서 돌아오면 마지막 검색 결과를 그대로 되살립니다.</p>
+  <p class="lead">조건에 맞는 것·안 맞는 것·AI가 찾은 것을 <b>전부</b> 보여주되, 제목에 검색어가 적힌 물건을 먼저 보여줍니다. 같은 등급 안에서는 텍스트 신호×10 + 사진 점수로 순위를 정하고, 상세 페이지에서 돌아오면 마지막 검색 결과를 그대로 되살립니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="04_direct_input.png" alt="검색 입력"></div><div class="cap"><b>인풋</b><span>C1 조건 + C2 등급 결과.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/04_direct_input.png" alt="검색 입력"></div><div class="cap"><b>인풋</b><span>C1 조건 + C2 등급 결과.</span></div></div>
     <div><div class="steps">
       <div class="step"><b>등급 0 — 모두 일치</b><div class="what">AI 조건 + 검색어 + 조건 필터를 모두 만족.</div><div class="code">MATCH_TIERS[0]</div></div>
       <div class="step"><b>등급 1~3 — 단일 신호</b><div class="what">AI 조건 일치 / 검색어 일치 / 조건 필터 일치 순.</div><div class="code">MATCH_TIERS[1..3]</div></div>
-      <div class="step"><b>등급 4~5 — 나머지</b><div class="what">부분 일치 / 공개 원문. 화면을 비우지 않고 끝까지 표시. 같은 등급 안에서는 텍스트 일치 수 → 사진 점수 → 최신순.</div><div class="code">MATCH_TIERS[4..5]</div></div>
+      <div class="step"><b>등급 4~5 — 나머지</b><div class="what">부분 일치 / 공개 원문. 화면을 비우지 않고 끝까지 표시. 같은 등급 안에서는 텍스트 신호×10 + 사진 점수 → 동점이면 최신순.</div><div class="code">MATCH_TIERS[4..5]</div></div>
       <div class="step local"><b>카드 배지 + 범례</b><div class="what">각 카드에 등급 배지를 붙이고 목록 위에 6단계 범례를 표시. 사진으로 찾은 항목은 <code>사진 특징 00점</code> 배지를 따로 붙입니다.</div><div class="code">components.tsx · direct-search.css</div></div>
       <div class="step local"><b>오래 걸릴 때</b><div class="what">“AI가 찾아보고 있어요” + 회전 모션 + 점 3개 바운스. 2초 넘으면 경과 초도 표시. 다른 페이지로 가도 검색은 계속.</div><div class="code">DirectSearchPage.tsx</div></div>
       <div class="step local"><b>더 찾아보기</b><div class="what"><code>visualMore</code>면 “최신 사진 N장을 살펴봤어요” 안내와 버튼을 보여줍니다. 누르면 실제로 본 장수만큼 <code>skipVisual</code>을 더해 새 백그라운드 작업을 시작하고, 더 오래된 사진부터 같은 분석을 반복합니다. 앞서 찾은 <code>visualScore</code>도 <code>priorVisualScores</code>로 같이 보내 이미 찾은 물건이 순위에서 사라지지 않게 합니다. 결과가 없을 때도 같은 버튼이 나타납니다.</div><div class="code">DirectSearchPage.tsx · lostfound-api.ts</div></div>
       <div class="step"><b>실패 시</b><div class="what">AI 조건 정리가 실패해도 원문 검색 결과는 그대로 노출. 오류 메시지는 화면에 그대로 표시.</div></div>
     </div></div>
-    <div><div class="shot"><img src="05_direct_output.jpg" alt="최종 목록"></div><div class="cap"><b>아웃풋</b><span>등급 배지·사진 점수·더 찾아보기 안내가 있는 결과 화면.</span></div></div>
+    <div><div class="shot"><img src="/pipeline/05_direct_output.jpg" alt="최종 목록"></div><div class="cap"><b>아웃풋</b><span>등급 배지·사진 점수·더 찾아보기 안내가 있는 결과 화면.</span></div></div>
   </div>
   <div class="req" data-req="direct-result"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>등급 표시</option><option>정렬 우선순위</option><option>진행 모션</option><option>페이지 표시</option></select>
@@ -376,6 +422,30 @@
     <textarea placeholder="예: 만료 캐시도 주기적으로 정리해 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
+<!-- E0 -->
+<section class="page" id="algo-map">
+  <h2>E0. 검색 알고리즘 지도 · 요청함 <span class="tag a">서버 설명 연동</span></h2>
+  <p class="lead">모델·검색 방식·알고리즘을 하나씩 열어 보고, 각 항목을 지정해 수정 요청할 수 있습니다. 설명은 서버의 <code>/api/pipeline/algorithms</code>에서 읽습니다.</p>
+  <div class="banner"><b>보는 법:</b> 카드를 누르면 입력 → 단계 → 임계값 → 출력 → 코드 위치 → 실패 처리 순으로 보여줍니다. 같은 창에서 “이 알고리즘 수정 요청”을 보내면 요청함에 <b>대상 알고리즘 ID</b>가 함께 저장됩니다.</div>
+  <div id="algo-grid" class="algo-grid"><div class="card"><p>알고리즘 목록을 불러오는 중…</p></div></div>
+  <h3>저장된 수정 요청</h3>
+  <div class="toolbar">
+    <select id="request-filter" aria-label="요청 대상 필터"><option value="">전체 대상</option></select>
+    <button id="request-refresh" type="button">다시 불러오기</button>
+    <span id="request-count" class="tag"></span>
+  </div>
+  <ul id="request-list" class="req-list"><li>요청을 불러오는 중…</li></ul>
+  <div class="req" data-req="direct-search"><h4>✎ 알고리즘 전체 수정 요청</h4><p>특정 알고리즘을 지정하지 않고 검색 체계 전체에 대한 요청을 남깁니다.</p>
+    <select class="scope"><option>전체</option><option>검색 규칙 재설계</option><option>정확도 개선</option><option>속도 개선</option></select>
+    <textarea placeholder="예: 사진 점수보다 제목 일치를 더 강하게 반영해 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
+</section>
+
+<!-- E1~E8 공용 상세 -->
+<section class="page" id="algo-detail">
+  <div id="algo-detail-body"><div class="card"><p>알고리즘을 불러오는 중…</p></div></div>
+  <div id="algo-detail-request"></div>
+</section>
+
 <!-- AUDIT -->
 <section class="page" id="audit">
   <h2>D2. 파이프라인 점검 결과</h2>
@@ -402,7 +472,7 @@
     <tr><td><span class="tag w">나중</span></td><td>텍스트 점수 100 포화, 하드코딩 보정치, 임의 YOLOE 토큰</td><td>자동 게이트, 설정화, 토큰 allowlist</td></tr>
     <tr><td><span class="tag w">나중</span></td><td>테스트 공백: local-clip 전체 invoke, 폴백 ID 검증, fetch 예외, 색상 별칭, 로그 마스킹, cache_prune</td><td>해당 경로 테스트 추가</td></tr>
   </table>
-  <div class="note">검증 기준: 백엔드 pytest 113개 · 프론트 432개 · 타입체크 통과. 실검색 지갑 623건 / 640건 스캔, 등급 0~5 전부 표시. 사진 24건 중 12건 평가 이미지 R@1/R@3/MRR@5 = 1.000. 텍스트 전용 CLIP R@1 0.083~0.167이라 폴백 경로를 탑니다.</div>
+  <div class="note">검증 기준: 백엔드 pytest 115개 · 프론트 432개 · 타입체크 통과. 실검색 지갑 623건 / 640건 스캔, 등급 0~5 전부 표시. 사진 24건 중 12건 평가 이미지 R@1/R@3/MRR@5 = 1.000. 텍스트 전용 CLIP R@1 0.083~0.167이라 폴백 경로를 탑니다.</div>
   <div class="req" data-req="audit"><h4>✎ 전체 수정 요청</h4><p> 무엇을 먼저 고칠지 적어 주세요.</p>
     <select class="scope"><option>전체</option><option>당장 항목부터</option><option>나중 항목 검토</option><option>새 고도화 제안</option></select>
     <textarea placeholder="예: 당장 항목 중 라벨 변환이랑 범위 캡 먼저 고쳐줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
@@ -410,40 +480,248 @@
 </main>
 </div>
 
+<div class="mask" id="algo-mask" role="dialog" aria-modal="true" aria-label="알고리즘 상세">
+  <div class="modal">
+    <div class="modal__top"><h3 id="algo-modal-title">알고리즘 상세</h3><button id="algo-modal-close" type="button">닫기</button></div>
+    <div id="algo-modal-body"></div>
+  </div>
+</div>
+
 <script>
-const pages = ['home','gallery-prepare','gallery-compare','gallery-result','lost-prepare','lost-visual','lost-context','direct-prepare','direct-browse','direct-result','common-base','audit'];
-function go(id){
+const pages = ['home','gallery-prepare','gallery-compare','gallery-result','lost-prepare','lost-visual','lost-context','direct-prepare','direct-browse','direct-result','common-web','common-base','audit','algo-map','algo-detail'];
+const algoById = new Map();
+const boundForms = new WeakSet();
+let currentAlgo = '';
+
+function hashParts(){
+  const [id, algo] = location.hash.slice(1).split(':');
+  return { id: id || 'home', algo: algo || '' };
+}
+function go(id, algo){
   if(!pages.includes(id)) id='home';
+  if(id==='algo-detail') currentAlgo = algo || currentAlgo || 'algo-query-interpret';
   document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.id===id));
-  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.go===id));
-  if(location.hash.slice(1)!==id) history.replaceState(null,'','#'+id);
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',
+    b.dataset.go===id && (id!=='algo-detail' || (b.dataset.algo||'')===currentAlgo)));
+  const target = id==='algo-detail' ? '#'+id+':'+currentAlgo : '#'+id;
+  if(location.hash.slice(1)!==target.slice(1)) history.replaceState(null,'',target);
+  if(id==='algo-detail') renderDetail(currentAlgo);
   window.scrollTo(0,0);
 }
-document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
-window.addEventListener('hashchange',()=>go(location.hash.slice(1)));
-go(location.hash.slice(1));
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go,b.dataset.algo||'')));
+window.addEventListener('hashchange',()=>{const h=hashParts();go(h.id,h.algo);});
 
-document.querySelectorAll('.req').forEach(box=>{
-  const button=box.querySelector('button'), msg=box.querySelector('.msg');
+function el(tag, cls, text){
+  const node=document.createElement(tag);
+  if(cls) node.className=cls;
+  if(text!==undefined) node.textContent=text;
+  return node;
+}
+function infoBox(title, values, ordered){
+  const box=el('div','detail-box');
+  box.appendChild(el('h4','',title));
+  if(Array.isArray(values)){
+    const list=el(ordered?'ol':'ul');
+    values.forEach(v=>list.appendChild(el('li','',v)));
+    box.appendChild(list);
+  }else box.appendChild(el('p','',values||'—'));
+  return box;
+}
+function ruleBox(algo){
+  const box=el('div','detail-box');
+  box.appendChild(el('h4','','임계값 · 규칙'));
+  const table=el('table','kv');
+  (algo.rules||[]).forEach(rule=>{
+    const tr=el('tr');
+    tr.appendChild(el('th','',rule.label));
+    tr.appendChild(el('td','',rule.value));
+    table.appendChild(tr);
+  });
+  box.appendChild(table);
+  return box;
+}
+function relationBox(algo){
+  const box=el('div','detail-box');
+  box.appendChild(el('h4','','함께 보면 좋은 항목'));
+  const wrap=el('div','rel');
+  (algo.related||[]).forEach(id=>{
+    const btn=el('button','',(algoById.get(id)?.title)||id);
+    btn.type='button';
+    btn.addEventListener('click',()=>go('algo-detail',id));
+    wrap.appendChild(btn);
+  });
+  box.appendChild(wrap);
+  return box;
+}
+function renderAlgoInto(host, algo){
+  host.replaceChildren();
+  const head=el('div','detail-head');
+  head.appendChild(el('h3','',algo.title));
+  head.appendChild(el('p','',algo.summary));
+  const tags=el('div');
+  [algo.kind, algo.pipeline, 'ID: '+algo.id].forEach(t=>tags.appendChild(el('span','tag',t)));
+  head.appendChild(tags);
+  host.appendChild(head);
+  const grid=el('div','detail-grid');
+  grid.appendChild(infoBox('입력', algo.input));
+  grid.appendChild(infoBox('처리 단계', algo.steps, true));
+  grid.appendChild(infoBox('출력', algo.output));
+  grid.appendChild(ruleBox(algo));
+  grid.appendChild(infoBox('코드 위치', algo.code));
+  grid.appendChild(infoBox('실패 · 주의', algo.failure));
+  grid.appendChild(relationBox(algo));
+  host.appendChild(grid);
+}
+function renderDetail(id){
+  const body=document.getElementById('algo-detail-body');
+  const reqHost=document.getElementById('algo-detail-request');
+  const algo=algoById.get(id);
+  if(!algo){
+    body.replaceChildren(el('div','card', id ? '알고리즘을 찾지 못했어요: '+id : '알고리즘을 선택해 주세요.'));
+    reqHost.replaceChildren();
+    return;
+  }
+  renderAlgoInto(body, algo);
+  reqHost.replaceChildren(makeRequestForm(algo.pipeline, algo.id, algo.scopes, '이 알고리즘 수정 요청'));
+}
+function renderAlgoGrid(){
+  const grid=document.getElementById('algo-grid');
+  if(!grid) return;
+  grid.replaceChildren();
+  [...algoById.values()].forEach(algo=>{
+    const card=el('button','algo-card');
+    card.type='button';
+    card.appendChild(el('em','',algo.kind+' · '+algo.pipeline));
+    card.appendChild(el('b','',algo.title));
+    card.appendChild(el('span','',algo.summary));
+    card.addEventListener('click',()=>go('algo-detail',algo.id));
+    grid.appendChild(card);
+  });
+}
+function openAlgoModal(id){
+  const algo=algoById.get(id);
+  if(!algo) return;
+  document.getElementById('algo-modal-title').textContent=algo.title;
+  const body=document.getElementById('algo-modal-body');
+  renderAlgoInto(body, algo);
+  const reqHost=el('div');
+  reqHost.appendChild(makeRequestForm(algo.pipeline, algo.id, algo.scopes, '이 항목 수정 요청'));
+  body.appendChild(reqHost);
+  document.getElementById('algo-mask').classList.add('on');
+}
+function closeAlgoModal(){document.getElementById('algo-mask').classList.remove('on');}
+document.getElementById('algo-modal-close').addEventListener('click',closeAlgoModal);
+document.getElementById('algo-mask').addEventListener('click',e=>{if(e.target.id==='algo-mask') closeAlgoModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeAlgoModal();});
+document.querySelectorAll('.algo-open').forEach(btn=>btn.addEventListener('click',()=>openAlgoModal(btn.dataset.algo)));
+
+function makeRequestForm(pipeline, target, scopes, title){
+  const box=el('div','req');
+  box.dataset.req=pipeline;
+  box.dataset.target=target||'';
+  box.appendChild(el('h4','','✎ '+title));
+  box.appendChild(el('p','',target ? '대상: '+target : '검색 체계 전체를 대상으로 저장합니다.'));
+  const select=el('select','scope');
+  (scopes||['전체']).forEach(s=>{
+    const opt=el('option','',s); opt.value=s; select.appendChild(opt);
+  });
+  box.appendChild(select);
+  box.appendChild(el('textarea'));
+  box.querySelector('textarea').placeholder='예: 사진 점수 가중치를 낮추고 제목 일치를 더 우선해 줘';
+  const button=el('button','','저장하고 요청하기');
+  button.type='button';
+  box.appendChild(button);
+  box.appendChild(el('div','msg'));
+  bindRequest(box);
+  return box;
+}
+function bindRequest(box){
+  if(boundForms.has(box)) return;
+  boundForms.add(box);
+  const button=box.querySelector('button'), msg=box.querySelector('.msg'), textarea=box.querySelector('textarea');
   button.addEventListener('click',async()=>{
-    const text=box.querySelector('textarea').value.trim();
+    const text=textarea.value.trim();
     if(!text){msg.textContent='내용을 먼저 적어 주세요.';msg.style.color='var(--warn)';return;}
     button.disabled=true; msg.textContent='저장하는 중…'; msg.style.color='var(--acc2)';
     try{
       const res=await fetch('/api/pipeline/request',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pipeline:box.dataset.req,scope:box.querySelector('.scope').value,message:text})
+        body:JSON.stringify({
+          pipeline:box.dataset.req,
+          target:box.dataset.target||'',
+          scope:box.querySelector('.scope').value,
+          message:text
+        })
       });
       const data=await res.json();
       if(!res.ok) throw new Error(data.detail?.message||data.message||'저장 실패');
       msg.textContent='저장됨 · '+data.id+' — 오픈코드 피클이 읽고 작업할게요.';
       msg.style.color='var(--acc)';
-      box.querySelector('textarea').value='';
+      textarea.value='';
+      await loadRequests();
     }catch(e){
       msg.textContent='저장 실패: '+e.message; msg.style.color='var(--bad)';
     }finally{button.disabled=false;}
   });
-});
+}
+document.querySelectorAll('.req').forEach(bindRequest);
+
+async function loadRequests(){
+  const list=document.getElementById('request-list');
+  if(!list) return;
+  const filter=document.getElementById('request-filter');
+  const previous=filter.value;
+  try{
+    const res=await fetch('/api/pipeline/requests');
+    if(!res.ok) throw new Error('요청함을 읽지 못했어요.');
+    const items=(await res.json()).items||[];
+    const targets=new Set([...algoById.keys(), ...items.map(i=>i.target||'')].filter(Boolean));
+    filter.replaceChildren();
+    filter.appendChild(el('option','','전체 대상'));
+    filter.firstChild.value='';
+    [...targets].sort().forEach(t=>{
+      const opt=el('option','',(algoById.get(t)?.title)||t);
+      opt.value=t; filter.appendChild(opt);
+    });
+    filter.value=previous && targets.has(previous) ? previous : '';
+    const visible=items.filter(i=>!filter.value || (i.target||'')===filter.value);
+    document.getElementById('request-count').textContent=visible.length+'건 저장됨';
+    list.replaceChildren();
+    if(!visible.length){list.appendChild(el('li','','아직 저장된 요청이 없어요.'));return;}
+    visible.slice().reverse().forEach(item=>{
+      const li=el('li');
+      const meta=el('div','meta');
+      meta.textContent=(item.createdAt||'')+' · '+(item.pipeline||'')+' · '+(item.target||'알고리즘 전체')+' · '+(item.scope||'전체')+' · '+(item.status||'pending');
+      li.appendChild(meta);
+      li.appendChild(el('div','body',item.message||''));
+      list.appendChild(li);
+    });
+  }catch(e){
+    list.replaceChildren();
+    list.appendChild(el('li','','요청함을 불러오지 못했어요: '+e.message));
+  }
+}
+document.getElementById('request-filter').addEventListener('change',loadRequests);
+document.getElementById('request-refresh').addEventListener('click',loadRequests);
+
+async function loadAlgorithms(){
+  try{
+    const res=await fetch('/api/pipeline/algorithms');
+    if(!res.ok) throw new Error('알고리즘 목록을 읽지 못했어요.');
+    const data=await res.json();
+    (data.items||[]).forEach(a=>algoById.set(a.id,a));
+    renderAlgoGrid();
+    const h=hashParts();
+    if(h.id==='algo-detail') renderDetail(h.algo||currentAlgo);
+  }catch(e){
+    const grid=document.getElementById('algo-grid');
+    grid.replaceChildren(el('div','card','알고리즘 목록을 불러오지 못했어요: '+e.message));
+  }
+}
+loadAlgorithms();
+loadRequests();
+const initial=hashParts();
+go(initial.id,initial.algo);
 </script>
 </body>
 </html>

@@ -342,6 +342,8 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     visualAnalyzed: bool = False
     visualScanned: int = 0
     visualMore: bool = False
+    # 현재 페이지 밖 항목의 사진 점수도 '더 찾아보기'로 이어가기 위해 함께 돌려준다.
+    visualScores: dict[str, int] = Field(default_factory=dict)
 
 
 class BrowseJobStart(BaseModel):

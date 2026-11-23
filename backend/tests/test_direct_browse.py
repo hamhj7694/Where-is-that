@@ -405,3 +405,122 @@ def test_browse_keeps_text_region_check_when_region_has_no_official_code(monkeyp
     assert result["total"] == 1
     assert result["items"][0]["matchTier"] == 2  # 지역 불일치 → 조건 필터 등급이 아님
 
+
+def test_filtered_browse_reads_enough_pages_for_the_visual_pool(monkeypatch):
+    seen: list[int] = []
+
+    def fake_search_filtered(source: str, params: dict, page: int = 1, rows: int = 20) -> dict:
+        seen.append(page)
+        return {
+            "items": [row(f"{source}:{page}", "2026-04-01")] if page <= 8 else [],
+            "totalCount": 3000,
+        }
+
+    monkeypatch.setattr(police_api, "search_filtered", fake_search_filtered)
+    # 한 페이지만 필요한 요청이라도 사진 60장을 볼 만큼(4페이지×10건)은 읽어야 한다.
+    police_api.browse_all(
+        "지갑", 1, 10,
+        filters={"category": "지갑 > 남성용 지갑"},
+        max_pages=4, visual_need=40,
+    )
+    assert max(seen) >= 4
+
+
+def test_prior_visual_scores_survive_when_ai_features_are_missing():
+    old = row("police:old", "2026-01-01", imageUrl="https://www.lost112.go.kr/a.jpg")
+    result = {"items": [old], "allItems": [old], "total": 1}
+    payload = SimpleNamespace(
+        keyword="카드", hints={}, page=1, rows=1, skipVisual=0,
+        priorVisualScores={"police:old": 96},
+    )
+    updated = main._apply_visual_hints(result, payload)
+    assert updated["items"][0]["visualScore"] == 96
+    assert updated["items"][0]["matchTier"] == 1
+    assert updated["visualScores"] == {"police:old": 96}
+
+
+def test_same_result_is_not_scanned_twice(monkeypatch):
+    items = [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 11)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 10}
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+        skipVisual=0, priorVisualScores={},
+    )
+    batches: list[list[str]] = []
+
+    def fake_match(request):
+        batches.append([candidate.id for candidate in request.candidates])
+        return SimpleNamespace(results=[
+            SimpleNamespace(id=candidate.id, imageSimilarity=95, basis="photo")
+            for candidate in request.candidates
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    main._apply_visual_hints(result, payload)
+    main._apply_visual_hints(result, payload)
+    assert len(batches) == 1
+
+
+def test_failed_visual_batch_is_not_counted_as_scanned(monkeypatch):
+    items = [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 13)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 12}
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+        skipVisual=0, priorVisualScores={},
+    )
+
+    def fail_match(_request):
+        raise RuntimeError("AI unavailable")
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fail_match)
+    updated = main._apply_visual_hints(result, payload)
+    assert updated["visualScanned"] == 0
+    assert updated["visualAnalyzed"] is False
+    assert updated["visualMore"] is True
+
+
+def test_prior_high_score_does_not_stop_the_next_deeper_scan(monkeypatch):
+    items = [
+        row(f"police:{index:03d}", f"2026-01-{index % 28 + 1:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 81)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 80}
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+        skipVisual=60, priorVisualScores={"police:001": 96},
+    )
+    batches: list[int] = []
+
+    def fake_match(request):
+        batches.append(len(request.candidates))
+        return SimpleNamespace(results=[])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    updated = main._apply_visual_hints(result, payload)
+    assert len(batches) > 1  # 이전 점수 때문에 첫 묶음에서 멈추지 않는다.
+    assert updated["items"][0]["visualScore"] == 96
+
+
+def test_weak_photo_score_is_kept_without_promoting_the_tier(monkeypatch):
+    item = row("police:weak", "2026-01-01", imageUrl="https://www.lost112.go.kr/a.jpg", matchTier=5)
+    result = {"items": [item], "allItems": [item], "total": 1}
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+        skipVisual=0, priorVisualScores={},
+    )
+    monkeypatch.setattr(
+        ai_pipeline, "match_visual_features",
+        lambda request: SimpleNamespace(results=[
+            SimpleNamespace(id="police:weak", imageSimilarity=45, basis="photo"),
+        ]),
+    )
+    updated = main._apply_visual_hints(result, payload)
+    assert updated["items"][0]["visualScore"] == 45
+    assert updated["items"][0]["matchTier"] == 5
+

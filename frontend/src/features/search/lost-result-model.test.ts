@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate } from './catalog-model'
-import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, validateLostResultDates, type LostResultState } from './lost-result-model'
+import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, validateLostResultDates, type LostResultState } from './lost-result-model'
 import { REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from './model'
 
 function candidate(id: string, patch: Partial<Candidate> = {}): Candidate {
@@ -57,6 +57,13 @@ describe('공개 후보 필터의 데이터 경계', () => {
   })
   it.each([['2024-02-29', true], ['2026-02-29', false], ['2026-13-01', false], ['2026-01-00', false], ['2026-1-1', false], ['0000-01-01', false], ['garbage', false]])('날짜 %s의 실제 달력을 검사한다', (value, valid) => {
     expect(isValidLostResultDate(value as string)).toBe(valid)
+  })
+  it('사용자가 기간을 지웠으면 AI가 읽은 기간을 다시 넣지 않는다', () => {
+    const aiDates = { from: '2026-10-20', to: '2026-11-20' }
+    expect(resolveAiDateFilters(new URLSearchParams(''), aiDates)).toEqual(aiDates)
+    expect(resolveAiDateFilters(new URLSearchParams('from=2026-11-01'), aiDates)).toEqual({ from: '2026-11-01', to: '2026-11-20' })
+    expect(resolveAiDateFilters(new URLSearchParams(''), aiDates, true)).toEqual({ from: '', to: '' })
+    expect(resolveAiDateFilters(new URLSearchParams('from=2026-11-01'), aiDates, true)).toEqual({ from: '2026-11-01', to: '' })
   })
 })
 

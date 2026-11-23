@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -142,6 +143,25 @@ class AiFilters(BaseModel):
     view: str = Field(default="", max_length=30)
     fromDate: str = Field(default="", max_length=10)
     toDate: str = Field(default="", max_length=10)
+
+    @field_validator("fromDate", "toDate", mode="before")
+    @classmethod
+    def normalize_date(cls, value: object) -> str:
+        """AI가 날짜가 아닌 말을 넣어도 조회가 깨지지 않도록 YYYY-MM-DD만 남긴다."""
+        text = str(value or "").strip().replace("/", "-").replace(".", "-")
+        matched = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", text)
+        if not matched:
+            return ""
+        try:
+            return date(*(int(part) for part in matched.groups())).isoformat()
+        except ValueError:
+            return ""
+
+    @model_validator(mode="after")
+    def fix_reversed_range(self) -> "AiFilters":
+        if self.fromDate and self.toDate and self.fromDate > self.toDate:
+            self.fromDate, self.toDate = self.toDate, self.fromDate
+        return self
 
 
 class AiSearchPlan(BaseModel):

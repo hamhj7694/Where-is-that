@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { readLostResultFilters } from '../search/lost-result-model'
+import { readLostResultFilters, resolveAiDateFilters } from '../search/lost-result-model'
 import {
   dedupeLostFound, getBrowseJob, startBrowseJob, toCandidate,
   type BrowsePayload, type FoundItem, type LostBrowseFilters,
@@ -26,6 +26,8 @@ interface StoredJob {
   reloadToken: number
   /** 더 찾아보기로 건너뛴 사진 수. 새로고침 후에도 이어볼 위치를 기억한다. */
   skipVisual: number
+  /** 현재 페이지 밖에서 찾은 사진 점수까지 이어받는다. */
+  priorVisualScores?: Record<string, number>
 }
 
 function readStoredJob(): StoredJob | null {
@@ -55,13 +57,14 @@ interface LiveState {
   criteriaApplied: boolean
   visualScanned: number
   visualMore: boolean
+  visualScores: Record<string, number>
   loading: boolean
   error: string | null
   partial: boolean
 }
 const initialLive = (loading: boolean): LiveState => ({
   raw: [], total: 0, scanned: 0, scanLimitReached: false,
-  criteriaApplied: false, visualScanned: 0, visualMore: false,
+  criteriaApplied: false, visualScanned: 0, visualMore: false, visualScores: {},
   loading, error: null, partial: false,
 })
 
@@ -73,6 +76,8 @@ interface StoredSearch {
   live: LiveState
   criteria: AiSearchCriteria
   aiDates: { from: string; to: string }
+  /** 사용자가 AI 추정 기간을 지웠으면 다시 넣지 않는다. */
+  aiPeriodOff?: boolean
   analyzedKeyword: string
   skipVisual: number
   visualProgress: { scanned: number; total: number }
@@ -121,6 +126,8 @@ export default function DirectSearchPage() {
   const [skipVisual, setSkipVisual] = useState(restored?.skipVisual ?? 0)
   const [visualProgress, setVisualProgress] = useState(restored?.visualProgress ?? { scanned: 0, total: 0 })
   const [aiDates, setAiDates] = useState<{ from: string; to: string }>(restored?.aiDates ?? { from: '', to: '' })
+  const [aiPeriodOff, setAiPeriodOff] = useState(restored?.aiPeriodOff ?? false)
+  const hadDateKeys = useRef(params.has('from') || params.has('to'))
   const [criteria, setCriteria] = useState<AiSearchCriteria>(restored?.criteria ?? EMPTY_SEARCH_CRITERIA)
   const [aiBusy, setAiBusy] = useState(false)
   // 분석이 끝난 검색어만 조회한다. AI 응답 전 원문 검색이 먼저 실행돼 깜빡이는 것을 막는다.
@@ -137,6 +144,8 @@ export default function DirectSearchPage() {
       clearStoredSearch()
       setCriteria(EMPTY_SEARCH_CRITERIA)
       setAiDates({ from: '', to: '' })
+      setAiPeriodOff(false)
+      hadDateKeys.current = false
       setSkipVisual(0)
       setAiBusy(false)
       setAnalyzedKeyword('')
@@ -156,6 +165,8 @@ export default function DirectSearchPage() {
         setCriteria(criteriaFromPlan(plan, keyword))
         // "약 한 달 전", "오래전에" 같은 말을 AI가 날짜로 바꾸면 조회 기간에 적용한다.
         setAiDates({ from: plan?.filters?.fromDate || '', to: plan?.filters?.toDate || '' })
+        // 새로 분석한 검색어에서는 이전 검색의 '기간 해제' 상태를 이어가지 않는다.
+        setAiPeriodOff(false)
         setAnalyzedKeyword(keyword)
       })
       .catch(() => {
@@ -163,22 +174,30 @@ export default function DirectSearchPage() {
         // AI가 실패해도 원문 검색으로 공개 목록을 유지한다.
         setCriteria(EMPTY_SEARCH_CRITERIA)
         setAiDates({ from: '', to: '' })
+        setAiPeriodOff(false)
         setAnalyzedKeyword(keyword)
       })
       .finally(() => { if (!cancelled) setAiBusy(false) })
     return () => { cancelled = true }
   }, [keyword])
 
+  // 필터 UI에서 기간을 지워 URL 키가 사라졌으면 AI 추정 기간을 다시 넣지 않는다.
+  useEffect(() => {
+    const hasDate = params.has('from') || params.has('to')
+    if (hadDateKeys.current && !hasDate && (aiDates.from || aiDates.to)) setAiPeriodOff(true)
+    if (hasDate) setAiPeriodOff(false)
+    hadDateKeys.current = hasDate
+  }, [params, aiDates])
+
   const hints = useMemo(() => criteriaToHints(criteria), [criteria])
   const filters = useMemo<LostBrowseFilters>(() => {
-    const values = readLostResultFilters(params)
+    const raw = readLostResultFilters(params)
+    const dates = resolveAiDateFilters(params, aiDates, aiPeriodOff)
     return {
-      category: values.category, color: values.color, region: values.region,
-      // 사용자가 직접 고른 기간이 우선이고, 없으면 자연어에서 읽은 기간을 쓴다.
-      from: values.from || aiDates.from,
-      to: values.to || aiDates.to,
+      category: raw.category, color: raw.color, region: raw.region,
+      from: dates.from, to: dates.to,
     }
-  }, [params, aiDates])
+  }, [params, aiDates, aiPeriodOff])
 
   // 검색은 서버 작업으로 넘긴다. 페이지를 옮기거나 탭을 닫아도 서버는 계속 진행하고,
   // 돌아오면 저장해 둔 jobId로 결과를 이어받는다.
@@ -198,7 +217,7 @@ export default function DirectSearchPage() {
     const remember = (value: LiveState) => {
       writeStoredSearch({
         keyword, input, page, params: params.toString(), live: value,
-        criteria, aiDates, analyzedKeyword: keyword, skipVisual, visualProgress,
+        criteria, aiDates, aiPeriodOff, analyzedKeyword: keyword, skipVisual, visualProgress,
       })
     }
     const finish = (payload: BrowsePayload) => {
@@ -212,6 +231,7 @@ export default function DirectSearchPage() {
         criteriaApplied: payload.criteriaApplied,
         visualScanned: payload.visualScanned ?? 0,
         visualMore: payload.visualMore ?? false,
+        visualScores: payload.visualScores ?? {},
         loading: false,
         error: null,
         partial: payload.errors.length > 0,
@@ -246,7 +266,11 @@ export default function DirectSearchPage() {
         const resumable = stored && stored.keyword === keyword && stored.page === page
           && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
         // 더 찾아보기로 넘어가도 앞서 찾은 사진 점수는 서버에 되돌려 준다.
-        const priorVisualScores: Record<string, number> = {}
+        // 서버가 돌려준 전체 맵을 우선 쓰고, 이전 응답에만 있던 점수도 합친다.
+        const priorVisualScores: Record<string, number> = { ...(stored?.priorVisualScores ?? {}) }
+        for (const [id, score] of Object.entries(live.visualScores ?? {})) {
+          if (score > 0) priorVisualScores[id] = score
+        }
         for (const item of live.raw) {
           if (item.visualScore && item.visualScore > 0) priorVisualScores[item.id] = item.visualScore
         }
@@ -254,7 +278,13 @@ export default function DirectSearchPage() {
           ? { jobId: stored.jobId, status: 'pending' }
           : await startBrowseJob(keyword, page, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
         if (cancelled) return
-        writeStoredJob({ jobId: job.jobId, keyword, page, reloadToken, skipVisual })
+        writeStoredJob({
+          jobId: job.jobId, keyword, page, reloadToken, skipVisual,
+          priorVisualScores: {
+            ...(stored?.priorVisualScores ?? {}),
+            ...live.visualScores,
+          },
+        })
         remember(initialLive(true))
         await poll(job.jobId)
       } catch (cause) {
@@ -308,7 +338,8 @@ export default function DirectSearchPage() {
   // 이미 본 사진만큼 건너뛰고 더 오래된 사진을 이어서 분석한다.
   function lookDeeper() {
     if (live.loading) return
-    setSkipVisual(current => current + Math.max(live.visualScanned, 60))
+    // 서버가 실제로 본 사진 수만큼만 건너뛴다. 0장이면 최소 1장만 더 진행해 같은 배치를 다시 본다.
+    setSkipVisual(current => current + Math.max(live.visualScanned, 1))
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 

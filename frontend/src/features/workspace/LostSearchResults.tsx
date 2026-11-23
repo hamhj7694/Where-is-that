@@ -178,6 +178,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   const keyword = resolveApiKeyword(criteria, draft.aiPlan?.channels.combined.query || draft.aiPlan?.channels.image.query || draft.query)
   const pageParam = params.get('page')
   const loadingMoreRef = useRef(false)
+  const aiPlanQueryRef = useRef<string | null>(null)
 
   useEffect(() => {
     const plan = draft.aiPlan
@@ -193,6 +194,12 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
       to: plan.filters.toDate,
     }
     const next = new URLSearchParams(params)
+    // 다른 검색어로 바꿨으면 이전 자연어가 넣은 제안 필터를 먼저 지운다.
+    const planQuery = plan.originalQuery || ''
+    if (aiPlanQueryRef.current !== null && aiPlanQueryRef.current !== planQuery) {
+      for (const key of Object.keys(suggestions)) next.delete(key)
+    }
+    aiPlanQueryRef.current = planQuery
     for (const [key, value] of Object.entries(suggestions)) {
       if (!next.get(key) && value) next.set(key, value)
     }

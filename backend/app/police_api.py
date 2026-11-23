@@ -442,14 +442,15 @@ def _browse_filtered(
     page: int,
     rows: int,
     max_pages: int | None,
+    visual_need: int = 0,
 ) -> tuple[dict[str, list[dict]], list[dict], int, bool]:
-    """전용 필터 API로 서버에서 좁힌 뒤, 필요할 때만 다음 페이지를 읽는다."""
+    """전용 필터 API로 서버에서 좁힌 뒤, 사진 분석 풀을 채울 때까지 다음 페이지를 읽는다."""
     results: dict[str, list[dict]] = {}
     errors: list[dict] = []
     total_reported = 0
     pages_scanned = 0
     limit_reached = False
-    needed = page * rows
+    needed = max(page * rows, visual_need)
     cap = config.LOSTFOUND_MAX_PAGES if max_pages is None else max_pages
 
     for params in param_sets:
@@ -506,6 +507,7 @@ def browse_all(
     filters: dict | None = None,
     hints: dict | None = None,
     max_pages: int | None = None,
+    visual_need: int = 0,
 ) -> dict:
     """직접 찾기용: 필터가 있으면 전용 API로, 없으면 이름 검색으로 여러 페이지를 스캔한다."""
     cleaned = _keyword(keyword)
@@ -521,7 +523,9 @@ def browse_all(
     region_applied = bool(lostfound_codes.region_param(str((filters or {}).get("region") or "")))
 
     if use_codes:
-        results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(param_sets, cleaned, page, rows, max_pages)
+        results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(
+            param_sets, cleaned, page, rows, max_pages, visual_need,
+        )
         reported_totals["filtered"] = total_reported
     else:
         raw_keywords = criteria.get("apiKeywords") or ([cleaned] if cleaned else [""])
@@ -616,8 +620,8 @@ def browse_all(
             row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
             deduped[key] = row
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
-    # 같은 등급 안에서도 제목·본문에 검색어와 AI 조건이 더 많이 맞은 물건부터 보여준다.
-    # 사진 점수만 높은 물건이 텍스트로 정확히 맞은 물건을 밀어내지 않게 한다.
+    # 같은 등급 안에서도 제목·본문에 맞은 말이 많은 물건부터 보여준다.
+    # 사진 점수는 텍스트 신호×10과 합산해 텍스트 우선 순위를 유지한다(최종 정렬도 같은 규칙).
     items.sort(key=lambda row: (
         row["matchTier"], -text_signal_score(row, criteria, cleaned),
     ))
@@ -649,8 +653,12 @@ def search_all(keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = 
     if not cleaned and not allow_empty:
         raise PoliceError("lostfound_invalid_query", "검색할 물품명을 입력해 주세요.")
     criteria = _normalize_criteria(hints)
-    # 자연어 문장 전체를 PRDT_NM에 넣으면 0건이므로 AI가 분리한 핵심 명사로 넓게 가져온 뒤 JSON으로 좁힌다.
-    api_keywords = (criteria.get("apiKeywords") or ([cleaned] if cleaned else [""]))[:3]
+    # 자연어 문장 전체를 PRDT_NM에 넣으면 0건이므로 browse_all과 같은 규칙으로 낱말을 쪼갠다.
+    raw_keywords = criteria.get("apiKeywords") or ([cleaned] if cleaned else [""])
+    split_keywords: list[str] = []
+    for term in raw_keywords:
+        split_keywords.extend(term.split())
+    api_keywords = list(dict.fromkeys(split_keywords))[:3] or [""]
 
     results: dict[str, list[dict]] = {}
     errors: list[dict] = []

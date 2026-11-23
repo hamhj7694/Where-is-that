@@ -41,6 +41,20 @@ def test_enrich_keeps_existing_reference_photo(monkeypatch):
     assert references == existing
 
 
+def test_enrich_still_looks_up_description_when_reference_photos_are_full(monkeypatch):
+    monkeypatch.setattr(config, "WEB_REFERENCE_ENABLED", True)
+    calls = []
+    monkeypatch.setattr(web_reference, "lookup", lambda term: calls.append(term) or {
+        "features": ["흰색 동그란 캐릭터"],
+        "images": ["data:image/jpeg;base64,Yw=="],
+    })
+    existing = ["data:image/jpeg;base64,YQ==", "data:image/jpeg;base64,Yg=="]
+    features, references = web_reference.enrich(["치이카와"], existing)
+    assert calls == ["치이카와"]  # 사진이 2장이어도 이름 설명은 가져온다.
+    assert "흰색 동그란 캐릭터" in features
+    assert references == existing  # 사진은 상한을 넘기지 않는다.
+
+
 def test_generic_terms_are_skipped():
     assert web_reference.is_generic("카드")
     assert web_reference.is_generic("하늘색")

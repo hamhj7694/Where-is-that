@@ -89,6 +89,39 @@ describe('AI 맞춤 검색 조건', () => {
     expect(result.apiKeywords).toEqual(['치이카와', '카드'])
   })
 
+  it('고유 명사를 되살릴 때 원래 탐색어와 색상까지 모두 밀어내지 않는다', () => {
+    const plan = {
+      ...basePlan,
+      criteria: {
+        ...criteria,
+        apiKeywords: ['카드'],
+        include: [],
+        any: [],
+        exclude: [],
+        imageFeatures: ['검은색', '파란색', '치이카와'],
+      },
+    }
+    const result = criteriaFromPlan(plan, '치이카와 카드')
+    expect(result.apiKeywords).toContain('치이카와')
+    expect(result.apiKeywords).toContain('카드')
+  })
+
+  it('탐색어가 꽉 차 있어도 고유 명사가 일반 명사 자리를 대신한다', () => {
+    const plan = {
+      ...basePlan,
+      criteria: {
+        ...criteria,
+        apiKeywords: ['카드', '검은색', '파란색'],
+        include: ['치이카와'],
+        any: [], exclude: [], imageFeatures: [],
+      },
+    }
+    const result = criteriaFromPlan(plan, '치이카와 카드')
+    expect(result.apiKeywords).toContain('치이카와')
+    expect(result.apiKeywords).toContain('카드')
+    expect(result.apiKeywords).toHaveLength(3)
+  })
+
   it('AND 조건을 모두 만족하면 만점 근거를 만든다', () => {
     const match = matchPublicItem(item, criteria)
     expect(match.excludedBy).toBeNull()

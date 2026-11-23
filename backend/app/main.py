@@ -55,18 +55,48 @@ logger = logging.getLogger(__name__)
 VISUAL_SCAN_CAP = 60
 VISUAL_BATCH_SIZE = 8
 VISUAL_MATCH_MIN = 40
-# 50점부터 '사진 특징이 맞음'으로 인정해 오래된 후보도 앞에 올린다.
+# 40점부터 사진 점수를 남기고, 50점부터 '사진 특징이 맞음'으로 등급도 올린다.
 VISUAL_STRONG_MIN = 50
 # 조기 종료는 엄격하게 유지한다. 50점 하나로 멈추면 오래된 사진을 못 보기 때문이다.
 VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
 VISUAL_EARLY_STOP_HIT_MIN = 70
+# 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
+BROWSE_ALGO_VERSION = 6
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
     """더 찾아보기에서는 더 오래된 페이지까지 허용한다(최대 24페이지)."""
     extra = max(0, getattr(payload, "skipVisual", 0)) // VISUAL_SCAN_CAP
     return min(payload.maxPages, min(config.LOSTFOUND_BROWSE_PAGE_CAP * (1 + extra), 24))
+
+
+def _normalize_prior_scores(payload: "LostFoundBrowseRequest") -> dict[str, int]:
+    """이전 탐색에서 얻은 사진 점수만 되살린다. 잘못된 값은 캐시 키에서도 제외한다."""
+    raw = getattr(payload, "priorVisualScores", None) or {}
+    return {
+        str(key): value
+        for key, value in raw.items()
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100
+    }
+
+
+def _restore_visual_scores(result: dict, scores: dict[str, int]) -> None:
+    """사전 점수를 전체 후보에 다시 붙인다. 같은 문구가 중복 쌓이지 않게 정리한다."""
+    if not scores:
+        return
+    for item in (result.get("allItems") or result.get("items") or []):
+        score = scores.get(item["id"])
+        if not score:
+            continue
+        ai = item.get("aiMatch") or {"hits": [], "allInclude": False}
+        hits = [hit for hit in (ai.get("hits") or []) if not str(hit).startswith("사진 특징 ")]
+        hits.append(f"사진 특징 {score}점")
+        item["aiMatch"] = {**ai, "hits": hits}
+        item["visualScore"] = score
+        if score >= VISUAL_STRONG_MIN and item.get("matchTier", 5) > 1:
+            item["matchTier"] = 1
+            item["matchLabel"] = "AI 사진 일치"
 
 
 # 파이프라인 확인용 로컬 문서/요청함. 서버 코드와 같은 저장소에 두고 HTML에서 직접 불러온다.
@@ -83,11 +113,273 @@ PIPELINE_IDS = {
 }
 PIPELINE_REQUEST_LOCK = threading.Lock()
 
+# 확인실 화면이 모델/검색 방식/알고리즘을 개별로 설명하고 요청을 보낼 때 쓰는 공통 목록.
+# 화면은 이 API를 그대로 읽으므로 설명과 실제 코드를 한곳에서 관리한다.
+PIPELINE_ALGORITHMS = [
+    {
+        "id": "model-multimodal", "kind": "AI 모델", "title": "multimodal (말·사진 함께 읽기)",
+        "pipeline": "search-prepare",
+        "summary": "사진 설명, 자연어 조건 정리, 사진 채점, 맥락 재정렬을 맡는 하나의 멀티모달 역할.",
+        "input": ["사진 원본 또는 data URL", "검색 문장", "프롬프트 파일의 JSON 스키마"],
+        "steps": [
+            "설명/조건 정리/점수 매기기 요청을 JSON 모드로 보낸다.",
+            "vlm·vision·llm 별칭은 모두 같은 multimodal 설정으로 라우팅한다.",
+            "응답이 깨지면 원문 검색 또는 규칙 기반 점수로 떨어진다.",
+        ],
+        "output": "설명문, 검색 조건, 0~100점 점수, 순위 목록.",
+        "rules": [
+            {"label": "호출 경로", "value": "/chat/completions · JSON 모드"},
+            {"label": "역할 별칭", "value": "llm / vlm / vision → multimodal"},
+            {"label": "실패 시", "value": "조건 정리는 빈 조건, 점수는 규칙 기반 폴백"},
+        ],
+        "code": ["backend/app/config.py", "backend/app/ai_pipeline.py"],
+        "failure": "키·토큰은 응답에 절대 담지 않는다.",
+        "scopes": ["전체", "프롬프트", "역할 라우팅", "실패 폴백", "응답 파싱"],
+        "related": ["algo-query-interpret", "algo-visual-match", "algo-context-rank"],
+    },
+    {
+        "id": "model-similarity", "kind": "AI 모델", "title": "imageSimilarity (사진 점수)",
+        "pipeline": "candidate-compare",
+        "summary": "사진끼리 또는 문장과 사진이 닮은 정도를 점수로 만드는 비교 모델.",
+        "input": ["참고 사진 임베딩", "후보 사진 임베딩 또는 설명 문장"],
+        "steps": [
+            "기본값은 local-clip. none/openai-compatible/clip-http로 교체 가능.",
+            "사진↔사진과 문장↔사진의 점수 범위를 각각 보정한다.",
+            "1위 점수와 1·2위 차이가 낮으면 멀티모달이 다시 채점한다.",
+        ],
+        "output": "후보별 유사도 점수와 정렬된 목록.",
+        "rules": [
+            {"label": "기본 모델", "value": "local-clip (Ultralytics CLIP)"},
+            {"label": "사진↔사진", "value": "0.45 ~ 1.00 구간 사용"},
+            {"label": "문장↔사진", "value": "0.10 ~ 0.45 구간 사용"},
+        ],
+        "code": ["backend/app/image_similarity.py", "backend/app/ai_graph.py"],
+        "failure": "모델이 없으면 규칙 기반 점수로 대체하고 그 사실을 표시한다.",
+        "scopes": ["전체", "임베딩", "점수 보정", "폴백 임계값", "모델 교체"],
+        "related": ["model-yoloe", "algo-gallery-compare", "algo-visual-match"],
+    },
+    {
+        "id": "model-yoloe", "kind": "AI 모델", "title": "YOLOE (사진 자르기)",
+        "pipeline": "candidate-compare",
+        "summary": "사진 안에 물건이 여럿일 때만 관심 영역을 잘라 비교 정확도를 높인다.",
+        "input": ["원본 사진", "사전학습 가중치"],
+        "steps": [
+            "객체가 2개 이상이거나 종류가 2가지 이상일 때만 크롭을 실행한다.",
+            "라벨이 시각 프롬프트 값이면 건너뛰고 공식 코드표의 이름만 쓴다.",
+            "자른 영역을 원본과 함께 후보로 비교한다.",
+        ],
+        "output": "원본 + 관심 영역 크롭 목록.",
+        "rules": [
+            {"label": "실행 조건", "value": "객체 ≥2 또는 종류 ≥2"},
+            {"label": "가중치", "value": "사전학습 값 그대로 (파인튜닝 없음)"},
+        ],
+        "code": ["backend/app/local_vision.py"],
+        "failure": "탐지 실패 시 원본 사진만으로 계속한다.",
+        "scopes": ["전체", "실행 조건", "라벨 변환", "크롭 개수"],
+        "related": ["model-similarity", "algo-gallery-compare"],
+    },
+    {
+        "id": "algo-query-interpret", "kind": "검색 방식", "title": "자연어 → 검색 조건",
+        "pipeline": "search-prepare",
+        "summary": "한 문장에서 탐색어·AND/OR/NOT·시각 특징·기간을 뽑아 검색 조건으로 바꾼다.",
+        "input": ["사용자 검색 문장", "선택 필터", "오늘 날짜"],
+        "steps": [
+            "AI가 apiKeywords/include/any/exclude/imageFeatures와 날짜를 추정한다.",
+            "고유명사는 짧은 탐색어로 줄이거나 없애지 않고 반드시 유지한다.",
+            "-front가 include/imageFeatures의 짧은 고유어를 다시 넣어 누락을 막는다.",
+            "AI가 실패하면 원문 검색으로 계속한다.",
+        ],
+        "output": "AiSearchPlan → 공개 API 탐색어와 필터 조건.",
+        "rules": [
+            {"label": "apiKeywords", "value": "고유명사 포함 · 최대 3개"},
+            {"label": "include/any/exclude", "value": "각 최대 8개"},
+            {"label": "기간 표현", "value": "'약 한 달 전'·'지난주' → fromDate/toDate"},
+        ],
+        "code": ["backend/prompts/interpret_search.txt", "frontend/src/features/search/ai-match-model.ts"],
+        "failure": "조건이 비어도 검색 자체는 중단되지 않는다.",
+        "scopes": ["전체", "고유명사 유지", "기간 표현", "AND/OR/NOT", "프롬프트"],
+        "related": ["algo-code-filter", "algo-text-tiers", "algo-web-reference"],
+    },
+    {
+        "id": "algo-code-filter", "kind": "검색 방식", "title": "공식 코드 · 날짜 필터",
+        "pipeline": "direct-search",
+        "summary": "분류·색상·지역·기간을 공식 코드표로 바꿔 공개 API 요청 단계에서 먼저 좁힌다.",
+        "input": ["사용자가 고른 필터", "자연어에서 추정한 기간"],
+        "steps": [
+            "분류/색상/지역/기간을 전용 필터 API 파라미터로 변환한다.",
+            "사용자가 직접 고른 기간이 AI 추정 기간보다 우선한다.",
+            "응답 전체에 남은 필터를 다시 적용하고, 지역 코드로 좁혔으면 텍스트 지역 검사는 생략한다.",
+        ],
+        "output": "필터가 적용된 공개 습득물 원문 목록.",
+        "rules": [
+            {"label": "코드표", "value": "분류 45종 · 색상 85코드/39표시명 · 지역 17개 시도"},
+            {"label": "우선순위", "value": "사용자 선택 기간 > AI 추정 기간"},
+            {"label": "스캔 상한", "value": "기본 8페이지 · 더 찾아보기 최대 24페이지"},
+        ],
+        "code": ["backend/app/lostfound_codes.py", "backend/app/police_api.py"],
+        "failure": "필터 API 실패 시 다른 소스 결과로 계속하고 오류를 함께 돌려준다.",
+        "scopes": ["전체", "코드 변환", "기간 우선순위", "스캔 상한", "중복 제거"],
+        "related": ["algo-query-interpret", "algo-browse-more", "algo-text-tiers"],
+    },
+    {
+        "id": "algo-text-tiers", "kind": "알고리즘", "title": "신호 등급 · 텍스트 점수",
+        "pipeline": "direct-search",
+        "summary": "AI 조건·검색어·필터가 맞은 정도를 등급으로 붙이고, 제목 일치를 텍스트 점수로 매긴다.",
+        "input": ["공개 항목", "정리된 검색 조건", "검색어"],
+        "steps": [
+            "exclude만 확실히 제외하고 나머지는 전부 남긴다.",
+            "맞은 신호 수로 등급 0~5를 매긴다. 0등급은 실제 맞은 신호 이름을 라벨로 붙인다.",
+            "제목 4점·본문 2점·분류 1점으로 텍스트 신호 점수를 계산한다.",
+            "가려진 이름(*?●○×)은 1~3글자 와일드카드로 서로 매칭한다.",
+        ],
+        "output": "matchTier, matchLabel, aiMatch, text_signal_score.",
+        "rules": [
+            {"label": "등급", "value": "0 = 모두 일치 · 1~3 = 단일 신호 · 4~5 = 부분/원문"},
+            {"label": "텍스트 가중", "value": "제목 4 · 본문 2 · 분류 1"},
+            {"label": "표시 범위", "value": "exclude 외 전부 표시"},
+        ],
+        "code": ["backend/app/police_api.py", "backend/tests/test_direct_browse.py"],
+        "failure": "조건이 없으면 원문 순서를 유지한다.",
+        "scopes": ["전체", "등급 계산", "텍스트 가중", "와일드카드", "라벨"],
+        "related": ["algo-ranking", "algo-code-filter", "algo-visual-match"],
+    },
+    {
+        "id": "algo-visual-match", "kind": "알고리즘", "title": "공개 사진 AI 분석",
+        "pipeline": "public-visual-match",
+        "summary": "필터를 마친 공개 사진을 최신순으로 AI가 직접 보고 특징 점수를 매긴다.",
+        "input": ["imageFeatures", "웹 참고 사진", "공개 사진이 있는 후보"],
+        "steps": [
+            "낯선 이름은 먼저 웹에서 설명과 참고 사진을 가져온다.",
+            "최신 습득일부터 사진이 있는 후보를 8장씩 묶어 AI가 본다.",
+            "40점 이상이면 visualScore를 남기고, 50점 이상이면 사진 특징으로 등급 1에 둔다.",
+            "텍스트가 이미 맞은 등급은 유지하고, 사진만 맞은 물건은 등급 1에 둔다.",
+        ],
+        "output": "visualScore, 사진 특징 배지, 갱신된 등급.",
+        "rules": [
+            {"label": "점수 표시 / 등급 승격", "value": "40점 / 50점 이상"},
+            {"label": "조기 종료", "value": "90점 이상 또는 70점 이상 3건"},
+            {"label": "약한 CLIP", "value": "40점 미만이면 멀티모달이 원본을 다시 봄"},
+        ],
+        "code": ["backend/app/main.py", "backend/app/ai_pipeline.py", "backend/app/web_reference.py"],
+        "failure": "한 묶음이 실패해도 나머지 묶음과 목록은 유지한다.",
+        "scopes": ["전체", "인정 점수", "조기 종료", "배치 크기", "약한 점수 폴백"],
+        "related": ["algo-web-reference", "algo-ranking", "algo-browse-more"],
+    },
+    {
+        "id": "algo-ranking", "kind": "알고리즘", "title": "최종 정렬 · 페이지네이션",
+        "pipeline": "direct-search",
+        "summary": "전체 후보를 다시 정렬한 뒤 현재 페이지만 잘라 보여준다.",
+        "input": ["등급", "텍스트 신호 점수", "visualScore", "습득일", "page/rows"],
+        "steps": [
+            "1순위 등급(작을수록 앞), 2순위 텍스트 신호×10 + 사진 점수(클수록 앞).",
+            "동점이면 최신 습득일, 그다음 ID 내림차순으로 안정적으로 정렬한다.",
+            "정렬은 페이지에 잘린 항목까지 포함한 전체 풀에 적용한다.",
+        ],
+        "output": "total과 현재 페이지 items.",
+        "rules": [
+            {"label": "정렬 키", "value": "(matchTier, -(text×10 + visual), foundDate, id)"},
+            {"label": "사진만 일치", "value": "등급 1 → 텍스트 정확 일치보다 뒤"},
+            {"label": "페이지", "value": "정렬 후 시작점 계산"},
+        ],
+        "code": ["backend/app/main.py", "backend/app/police_api.py"],
+        "failure": "후보가 없으면 빈 목록과 total 0을 돌려준다.",
+        "scopes": ["전체", "등급 우선", "텍스트 가중", "사진 가중", "동점 처리"],
+        "related": ["algo-text-tiers", "algo-visual-match", "algo-browse-more"],
+    },
+    {
+        "id": "algo-web-reference", "kind": "검색 방식", "title": "웹 참고 · 임베딩",
+        "pipeline": "data-collect",
+        "summary": "모델이 모르는 고유명사를 웹에서 먼저 조사해 설명과 참고 사진을 만든다.",
+        "input": ["imageFeatures 중 고유명사"],
+        "steps": [
+            "일반 명사(카드·하늘색)는 제외하고 고유명사만 고른다.",
+            "공개 위키 리더와 이미지 검색 썸네일에서 설명·사진을 가져온다.",
+            "참고 사진은 512px JPEG data URL로 만들어 임베딩에 넣는다.",
+            "실패해도 빈 참고 값으로 사진 비교를 계속한다.",
+        ],
+        "output": "보강된 imageFeatures와 references.",
+        "rules": [
+            {"label": "캐시", "value": "용어별 7일"},
+            {"label": "참고 사진", "value": "대표 2장"},
+            {"label": "키/토큰", "value": "저장·표시하지 않음"},
+        ],
+        "code": ["backend/app/web_reference.py", "backend/app/db.py"],
+        "failure": "외부 요청 실패는 조용히 무시하고 로컬 비교로 이어진다.",
+        "scopes": ["전체", "검색 소스", "고유명사 판별", "참고 사진 수", "캐시 기간"],
+        "related": ["algo-query-interpret", "algo-visual-match"],
+    },
+    {
+        "id": "algo-browse-more", "kind": "검색 방식", "title": "백그라운드 스캔 · 더 찾아보기",
+        "pipeline": "direct-search",
+        "summary": "오래 걸리는 조회를 서버 작업으로 넘기고, 남은 오래된 사진을 이어서 분석한다.",
+        "input": ["검색 조건", "skipVisual", "priorVisualScores", "jobId"],
+        "steps": [
+            "작업 시작 즉시 jobId를 주고 브라우저는 0.9초마다 진행 상황을 확인한다.",
+            "탭을 닫거나 페이지를 옮겨도 서버가 스캔을 계속한다.",
+            "더 찾아보기는 실제로 본 사진 수만큼 skipVisual을 더한다.",
+            "앞서 얻은 visualScore는 priorVisualScores로 되살린다.",
+        ],
+        "output": "진행률, visualScanned, visualMore, 최종 결과.",
+        "rules": [
+            {"label": "작업 보관", "value": "30분 TTL"},
+            {"label": "배치", "value": "8장 단위"},
+            {"label": "표시 조건", "value": "visualMore일 때 더 찾아보기 버튼"},
+        ],
+        "code": ["backend/app/main.py", "frontend/src/features/workspace/DirectSearchPage.tsx"],
+        "failure": "작업이 만료되면 새 검색을 시작한다.",
+        "scopes": ["전체", "작업 보관", "진행 표시", "skipVisual", "priorVisualScores"],
+        "related": ["algo-code-filter", "algo-visual-match", "algo-ranking"],
+    },
+    {
+        "id": "algo-gallery-compare", "kind": "검색 방식", "title": "갤러리 사진 유사도 비교",
+        "pipeline": "candidate-compare",
+        "summary": "내 사진과 참고 사진을 함께 보고 후보 사진의 순위를 매긴다.",
+        "input": ["참고 사진", "검색 문장", "갤러리 후보 사진"],
+        "steps": [
+            "참고 사진을 먼저 설명한다.",
+            "문장·설명·원본·후보를 한 번에 보내 점수를 받는다.",
+            "후보 ID가 정확히 한 번씩 모두 있는지 검증한다.",
+            "imageSimilarity 점수로 교체해 내림차순 정렬한다.",
+        ],
+        "output": "종합·이미지·맥락 3축 점수와 정렬 결과.",
+        "rules": [
+            {"label": "ID 검증", "value": "누락·중복 시 502"},
+            {"label": "사진 위치", "value": "브라우저 로컬 · 서버 업로드 없음"},
+        ],
+        "code": ["backend/app/ai_pipeline.py", "frontend/src/features/search/gallery-store.ts"],
+        "failure": "설명 실패 503, 채점 실패 502, 같은 검색어 재요청은 중복 호출 없음.",
+        "scopes": ["전체", "참고 사진 설명", "채점 프롬프트", "ID 검증", "유사도 교체"],
+        "related": ["model-similarity", "model-yoloe"],
+    },
+    {
+        "id": "algo-context-rank", "kind": "검색 방식", "title": "맥락 재정렬",
+        "pipeline": "context-rank",
+        "summary": "물건 찾기의 텍스트 후보를 문맥에 맞게 다시 줄 세운다.",
+        "input": ["설명·조건 후보 전체", "사용자 문장"],
+        "steps": [
+            "순위 프롬프트로 후보별 관련성을 다시 매긴다.",
+            "누락·중복 ID가 있으면 502로 되돌린다.",
+            "확정 4개 영역(종합/설명·조건/사진 특징) 안에서만 표시를 바꾼다.",
+        ],
+        "output": "관련성 순 후보 목록.",
+        "rules": [
+            {"label": "ID 완전성", "value": "누락·중복 시 502"},
+            {"label": "레이아웃", "value": "확정 4개 영역 유지"},
+        ],
+        "code": ["backend/app/ai_pipeline.py", "backend/prompts/rank_context_candidates.txt"],
+        "failure": "AI 실패 시 원래 점수 순을 유지한다.",
+        "scopes": ["전체", "재정렬 프롬프트", "ID 검증", "표시 영역"],
+        "related": ["model-multimodal", "algo-gallery-compare"],
+    },
+]
+PIPELINE_TARGETS = {item["id"] for item in PIPELINE_ALGORITHMS}
+
 
 class PipelineRequestPayload(BaseModel):
     pipeline: str = Field(min_length=1, max_length=60)
     scope: str = Field(default="전체", max_length=120)
     message: str = Field(min_length=1, max_length=4000)
+    target: str = Field(default="", max_length=60)
 
 
 def utc_now() -> str:
@@ -294,6 +586,12 @@ def _read_pipeline_requests() -> list[dict]:
     return rows if isinstance(rows, list) else []
 
 
+@app.get("/api/pipeline/algorithms", include_in_schema=False)
+def pipeline_algorithms() -> dict:
+    """확인실의 모델·검색 방식·알고리즘 설명. 비밀값은 포함하지 않는다."""
+    return {"items": PIPELINE_ALGORITHMS}
+
+
 @app.get("/api/pipeline/requests", include_in_schema=False)
 def pipeline_requests() -> dict:
     return {"items": _read_pipeline_requests()}
@@ -305,11 +603,15 @@ def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
     pipeline = payload.pipeline.strip()
     if pipeline not in PIPELINE_IDS:
         raise api_error(400, "invalid_pipeline", "알 수 없는 파이프라인이에요.")
+    target = payload.target.strip()
+    if target and target not in PIPELINE_TARGETS:
+        raise api_error(400, "invalid_target", "알 수 없는 알고리즘이에요.")
     item = {
-        "id": f"req-{int(time.time() * 1000)}",
+        "id": f"req-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}",
         "createdAt": utc_now(),
         "status": "pending",
         "pipeline": pipeline,
+        "target": target,
         "scope": payload.scope.strip() or "전체",
         "message": payload.message.strip(),
     }
@@ -318,10 +620,13 @@ def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
         path = PIPELINE_DIR / "requests.json"
         rows = _read_pipeline_requests()
         rows.append(item)
-        path.write_text(
+        # 임시 파일에 쓴 뒤 교체해, 저장 중단으로 requests.json이 깨지지 않게 한다.
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(
             json.dumps(rows[-200:], ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        temporary.replace(path)
     return {"ok": True, "id": item["id"], "savedAt": item["createdAt"]}
 
 
@@ -492,13 +797,14 @@ def _lostfound_list_key(payload: LostFoundListRequest) -> str:
 def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
     raw = json.dumps(
         {
-            "v": 5,  # 더 찾아보기·앞서 찾은 점수·텍스트 우선 순위 반영
+            "v": BROWSE_ALGO_VERSION,
             "keyword": payload.keyword.strip(),
             "page": payload.page,
             "rows": payload.rows,
-            "maxPages": payload.maxPages,
+            # 실제 스캔에 쓰이는 값이어야 같은 결과끼리 캐시를 공유한다.
+            "effectiveMaxPages": _browse_page_cap(payload),
             "skipVisual": payload.skipVisual,
-            "priorVisualScores": payload.priorVisualScores,
+            "priorVisualScores": _normalize_prior_scores(payload),
             "hints": payload.hints or {},
             "filters": payload.filters,
         },
@@ -572,23 +878,36 @@ def _apply_visual_hints(
 
     놓치는 것보다 조금 더 보는 편이 낫다. 페이지에 잘린 항목까지 스캔한 전체 후보를
     여러 번에 나눠 분석하고, 사진 점수가 조금이라도 있으면 앞으로 끌어올린다.
+    사전 점수 복원과 최종 정렬은 어떤 조기 반환 경로에서도 빠지지 않는다.
     """
     result.setdefault("visualScanned", 0)
     result.setdefault("visualMore", False)
     hints = payload.hints or {}
     features = [term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()]
-    if not features or result.get("visualAnalyzed"):
-        return result
+    prior = _normalize_prior_scores(payload)
+    pool = result.get("allItems") or result.get("items") or []
+    # AI 조건이 비었거나 후보가 없어도 이전에 찾은 점수는 되살리고 정렬은 한다.
+    _restore_visual_scores(result, prior)
+
+    def ranked() -> dict:
+        # 현재 페이지에 없어도 '더 찾아보기'가 점수를 이어받을 수 있도록 전체 맵을 돌려준다.
+        result["visualScores"] = {
+            item["id"]: item["visualScore"]
+            for item in pool
+            if isinstance(item.get("visualScore"), int) and item["visualScore"] > 0
+        }
+        return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
+
+    if not features or not pool:
+        result["visualMore"] = False
+        return ranked()
+
     from . import web_reference
     from .ai_pipeline import match_visual_features
     from .ai_schemas import AiVisualMatchCandidate, AiVisualMatchRequest
 
     # 낯선 캐릭터·브랜드는 웹에서 찾은 설명과 참고 사진을 먼저 붙인다.
     features, web_references = web_reference.enrich(features)
-
-    pool = result.get("allItems") or result.get("items") or []
-    if not pool:
-        return result
     # 필터는 이미 서버에서 다 적용됐다. 이제는 최신 습득일부터 본다.
     # 잃어버린 지 얼마 안 된 물건을 찾을 확률이 훨씬 높기 때문이다.
     ordered = sorted(pool, key=lambda row: row.get("matchTier", 5))
@@ -597,14 +916,22 @@ def _apply_visual_hints(
     skip = max(0, getattr(payload, "skipVisual", 0))
     with_photos = [item for item in ordered if item.get("imageUrl")]
     photo_items = with_photos[skip:skip + VISUAL_SCAN_CAP]
+    scan_key = {"skip": skip, "features": features[:8]}
+    if result.get("visualScanKey") == scan_key:
+        # 같은 응답을 다시 처리할 때는 AI를 또 부르지 않는다. 단, 점수 복원·정렬은 위에서 했다.
+        return ranked()
     if not photo_items:
         result["visualAnalyzed"] = True
         result["visualScanned"] = 0
         result["visualMore"] = False
-        return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
+        result["visualScanKey"] = scan_key
+        return ranked()
+
     if progress:
         progress(0, len(photo_items))
 
+    # 조기 종료는 '이번 탐색에서 새로 찾은 점수'만 기준으로 삼는다.
+    # 이전 탐색의 높은 점수가 섞이면 더 찾아보기가 첫 배치에서 멈춰 버린다.
     scores: dict[str, int] = {}
     analyzed = 0
     for start in range(0, len(photo_items), VISUAL_BATCH_SIZE):
@@ -626,49 +953,29 @@ def _apply_visual_hints(
             ))
         except Exception:
             # 한 묶음이 실패해도 나머지 묶음과 공개 원문 목록은 유지한다.
+            # 실패한 배치는 '본 사진'으로 세지 않아 더 찾아보기에서 다시 볼 수 있다.
             continue
-        finally:
-            # 조기 종료로 남은 묶음을 안 봤으면 실제로 본 장수만 알려준다.
-            # '더 찾아보기'는 이 값만큼 건너뛰고 다음 오래된 사진부터 이어본다.
-            analyzed = min(start + VISUAL_BATCH_SIZE, len(photo_items))
-            if progress:
-                progress(analyzed, len(photo_items))
+        analyzed += len(batch)
+        if progress:
+            progress(analyzed, len(photo_items))
         for row in matched.results:
             if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
-                scores[row.id] = row.imageSimilarity
+                scores[row.id] = max(scores.get(row.id, 0), row.imageSimilarity)
         # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
         if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
             break
         if sum(1 for value in scores.values() if value >= VISUAL_EARLY_STOP_HIT_MIN) >= VISUAL_EARLY_STOP_HITS:
             break
 
-    result["visualAnalyzed"] = True
+    result["visualAnalyzed"] = skip + analyzed >= len(with_photos)
     result["visualScanned"] = analyzed
     result["visualMore"] = skip + analyzed < len(with_photos)
-    # 더 찾아보기에서도 앞서 찾은 사진은 점수를 유지한다(높은 점수 우선).
-    prior = {
-        str(key): value for key, value in (getattr(payload, "priorVisualScores", {}) or {}).items()
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100
-    }
-    for key, value in prior.items():
-        scores[key] = max(scores.get(key, 0), value)
-    if not scores:
-        return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
-    for item in pool:
-        score = scores.get(item["id"])
-        if score is None:
-            continue
-        ai = item.get("aiMatch") or {"hits": [], "allInclude": False}
-        hits = list(ai.get("hits") or [])
-        hits.append(f"사진 특징 {score}점")
-        item["aiMatch"] = {**ai, "hits": hits}
-        item["visualScore"] = score
-        # 텍스트 신호가 이미 맞은 물건의 등급은 유지한다. 사진만 맞은 물건은
-        # 텍스트로 맞은 물건 바로 아래 등급에 두고 점수로 순위를 정한다.
-        if score >= VISUAL_STRONG_MIN and item.get("matchTier", 5) > 1:
-            item["matchTier"] = 1
-            item["matchLabel"] = "AI 사진 일치"
-    return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
+    result["visualScanKey"] = scan_key
+    # 이번에 새로 찾은 점수와 이전 탐색에서 이어받은 점수를 합쳐 화면에 되살린다.
+    combined = dict(prior)
+    combined.update(scores)
+    _restore_visual_scores(result, combined)
+    return ranked()
 
 
 @app.post("/api/lostfound/browse", response_model=LostFoundBrowseResponse)
@@ -693,6 +1000,9 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
             filters=payload.filters,
             hints=payload.hints,
             max_pages=_browse_page_cap(payload),
+            # 필터를 걸어도 사진 60장을 볼 만큼은 읽는다. 페이지 분량만 읽으면
+            # 공식 코드 필터를 쓴 순간 사진 분석과 더 찾아보기가 조용히 꺼진다.
+            visual_need=_browse_page_cap(payload) * payload.rows,
         )
         result = _apply_visual_hints(result, payload)
     except police_api.PoliceError as error:
@@ -730,6 +1040,7 @@ def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
             filters=payload.filters,
             hints=payload.hints,
             max_pages=_browse_page_cap(payload),
+            visual_need=_browse_page_cap(payload) * payload.rows,
         )
         def report_visual(scanned: int, total: int) -> None:
             with _browse_jobs_lock:

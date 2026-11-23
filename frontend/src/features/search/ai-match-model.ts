@@ -22,6 +22,12 @@ export const EMPTY_SEARCH_CRITERIA: AiSearchCriteria = {
 const MAX_API_KEYWORDS = 3
 const MAX_TERMS = 8
 const MAX_TERM_LENGTH = 40
+// 색상·일반 명사는 탐색어 자리를 차지하지만 고유명사보다 뒤로 보낸다.
+const GENERIC_KEYWORDS = new Set([
+  '카드', '지갑', '가방', '모자', '인형', '열쇠', '현금', '휴대폰', '안경', '우산', '책', '옷', '신발',
+  '검정', '검은색', '빨간색', '파란색', '하늘색', '노란색', '초록색', '흰색', '회색', '갈색', '분홍색', '보라색', '주황색',
+])
+const isSpecificKeyword = (term: string) => term.length >= 2 && !GENERIC_KEYWORDS.has(term)
 
 function cleanTerms(value: readonly unknown[] | undefined, limit: number): string[] {
   if (!Array.isArray(value)) return []
@@ -62,13 +68,18 @@ export function criteriaFromPlan(plan: AiSearchPlan | null | undefined, fallback
     if (!provided.apiKeywords.length) {
       const fallback = [plan.channels.combined.query, plan.channels.image.query, ...plan.channels.combined.keywords, fallbackQuery]
       provided.apiKeywords = cleanTerms(fallback, MAX_API_KEYWORDS)
-    } else if (provided.apiKeywords.length < MAX_API_KEYWORDS) {
+    } else {
       // "치이카와 카드"처럼 AI가 카드만 탐색어로 고르면 제목에 치이카와가 있는 물건을 놓친다.
-      // include에 있는 짧은 고유어를 탐색어에도 되돌려 넣어 정확 일치부터 스캔하게 한다.
+      // include·imageFeatures의 고유어를 먼저 넣되, 원래 있던 탐색어도 끝에서 밀려나지 않게 보존한다.
       const missing = [...provided.include, ...provided.imageFeatures].filter(
-        term => term.length >= 2 && !term.includes(' ') && !provided.apiKeywords.includes(term),
+        term => term.length >= 2 && term.length <= 12 && isSpecificKeyword(term)
+          && !provided.apiKeywords.includes(term),
       )
-      provided.apiKeywords = cleanTerms([...missing, ...provided.apiKeywords], MAX_API_KEYWORDS)
+      if (missing.length) {
+        const specific = provided.apiKeywords.filter(isSpecificKeyword)
+        const generic = provided.apiKeywords.filter(term => !isSpecificKeyword(term))
+        provided.apiKeywords = cleanTerms([...specific, ...missing, ...generic], MAX_API_KEYWORDS)
+      }
     }
     return provided
   }

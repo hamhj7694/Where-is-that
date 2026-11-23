@@ -261,10 +261,9 @@ def enrich(image_features: list[str], references: list[str] | None = None) -> tu
     if not config.WEB_REFERENCE_ENABLED:
         return features[:8], refs[:6]
     for term in list(features[:4]):
-        if len(refs) >= config.WEB_REFERENCE_MAX_IMAGES:
-            break
         if is_generic(term):
             continue
+        # 사진이 이미 충분해도 낯선 이름의 설명은 필요하다. 이미지 개수만 제한한다.
         info = lookup(term)
         if not info:
             continue

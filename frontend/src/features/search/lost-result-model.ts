@@ -47,6 +47,21 @@ export function validateLostResultDates(values: Pick<LostResultFilterValues, 'fr
   return from && to && from > to ? '종료일을 시작일 이후로 선택해 주세요.' : null
 }
 
+/**
+ * 직접 찾기에서 자연어로 읽은 기간과 사용자가 고른 기간을 합친다.
+ * 사용자가 필터를 지워 날짜 키가 사라졌다고 바로 AI 기간을 다시 넣지 않도록
+ * '지웠음(aiPeriodOff)' 신호를 함께 받는다.
+ */
+export function resolveAiDateFilters(
+  params: URLSearchParams,
+  aiDates: { from: string; to: string },
+  aiPeriodOff = false,
+): { from: string; to: string } {
+  const values = readLostResultFilters(params)
+  if (aiPeriodOff) return { from: values.from, to: values.to }
+  return { from: values.from || aiDates.from, to: values.to || aiDates.to }
+}
+
 export function lostResultFilterLabel(key: LostResultFilterKey, value: string): string {
   return key === 'view' ? REFERENCE_PHOTO_VIEWS.find(option => option.value === value)?.label ?? '전체 방향' : value
 }

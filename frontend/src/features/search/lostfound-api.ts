@@ -150,6 +150,8 @@ export interface BrowsePayload extends SearchPayload {
   visualScanned?: number
   /** 아직 보지 않은 오래된 사진이 남아 있는지. */
   visualMore?: boolean
+  /** 현재 페이지 밖을 포함해 찾은 사진 점수. 다음 탐색에 되돌려 준다. */
+  visualScores?: Record<string, number>
 }
 
 interface ErrorPayload {
@@ -215,16 +217,13 @@ export function browseLostFound(
   filters?: LostBrowseFilters,
   maxPages = 200,
   skipVisual = 0,
+  priorVisualScores?: Record<string, number>,
 ): Promise<BrowsePayload> {
   return request<BrowsePayload>('/lostfound/browse', {
     method: 'POST',
     // 공개 API가 느려도 무한 로딩으로 남지 않도록 상한을 둔다.
     signal: AbortSignal.timeout(70_000),
-    body: JSON.stringify({
-      keyword, page, rows, maxPages, skipVisual,
-      ...(hints ? { hints } : {}),
-      ...(filters ? { filters } : {}),
-    }),
+    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores),
   })
 }
 
