@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Bot, Check, CreditCard, ImageOff, Info, KeyRound, MapPin, RotateCcw, Search, ShieldCheck, Smartphone, Wallet, Watch } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Check, CreditCard, Image as ImageIcon, ImageOff, Info, KeyRound, MapPin, RotateCcw, Search, ShieldCheck, Smartphone, Wallet, Watch } from 'lucide-react'
 import '../../styles/ai-searching.css'
 import Modal from '../../components/Modal'
 import { usePhotoPreview } from '../search/SearchComposer'
@@ -87,7 +87,7 @@ export function NoPhoto({ message = '등록된 사진 없음', category }: { mes
   </div>
 }
 
-const AI_SEARCH_ITEMS = [CreditCard, Smartphone, Wallet, Watch, KeyRound]
+const AI_SEARCH_ITEMS = [ImageIcon, CreditCard, Smartphone, Wallet, Watch, KeyRound]
 
 /** 검색 중 빈칸 대신: 로봇이 선반의 물건을 돋보기로 훑으며 뒤지는 장면. */
 export function AiSearching({ label = 'AI가 물건을 뒤지고 있어요', compact = false }: { label?: string; compact?: boolean }) {

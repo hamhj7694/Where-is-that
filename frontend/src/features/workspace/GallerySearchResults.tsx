@@ -7,6 +7,7 @@ import { validateSearch, type GallerySource, type SearchDraft } from '../search/
 import { copy } from '../search/copy'
 import SearchComposer from '../search/SearchComposer'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
+import { withMinimumVisible } from './ai-loading'
 import { AiSearching, DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, RetryButton } from './components'
 import GallerySearchAssistant from './GallerySearchAssistant'
 import GalleryQuerySummary from './GalleryQuerySummary'
@@ -113,7 +114,8 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
   const [rankRetry, setRankRetry] = useState(0)
   // 파일 객체 identity가 바뀌어도 같은 검색이면 재분석하지 않도록 키로 묶는다.
   const rankKey = [rankSeed ?? 0, rankRetry, draft.query, draft.photo ? localPhotoId(draft.photo) : '', gallery?.files.length ?? 0].join('|')
-  useEffect(() => {
+  // 페인트 전에 로딩을 켜서 결과 화면이 먼저 번쩍이지 않게 한다.
+  useLayoutEffect(() => {
     if (!gallery || (!draft.query.trim() && !draft.photo)) {
       setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError(''); setRankBusy(false)
       return
@@ -123,13 +125,14 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
       .slice(0, AI_GALLERY_RANK_LIMIT)
     if (!candidates.length) return
     let cancelled = false
+    const startedAt = Date.now()
     setRankBusy(true); setRanking(null); setReferenceDescriptions([]); setSimilaritySource('multimodal'); setRankStatus(''); setRankError('')
-    void requestRanking(rankKey, {
+    void withMinimumVisible(startedAt, requestRanking(rankKey, {
       mode: 'gallery',
       query: draft.query,
       references: draft.photo ? [draft.photo] : [],
       candidates: candidates.map(item => ({ id: item.id, file: item.file })),
-    }).then(({ results, referenceDescriptions, imageSimilaritySource }) => {
+    })).then(({ results, referenceDescriptions, imageSimilaritySource }) => {
       if (cancelled) return
       setRanking(toGalleryRankMap(results))
       setReferenceDescriptions(referenceDescriptions)
@@ -256,7 +259,9 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     <div className="gallery-results__toolbar"><p>검색 범위 · {gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장 · 이미지 유사도 {similaritySource === 'vision-model' ? '전용 비전 계산' : '멀티모달 추정'}</p>
       {!wide && assistantToggle}
     </div>
-    <div className="gallery-results__sections">{channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>
+    <div className="gallery-results__sections">{rankBusy
+      ? <AiSearching label="AI가 연결된 사진을 골라보고 정리하고 있어요" />
+      : channel ? renderChannel(channel, true) : GALLERY_CHANNELS.map(which => renderChannel(which))}</div>
   </main>
     {wide ? open && <div className="gallery-assistant-dock"><GallerySearchAssistant id={panelId} wide state={assistant} baseQuery={draft.query} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} /></div>
       : <Modal open={open} title="검색 도우미" focusKey={panelId} className="gallery-assistant-modal" initialFocus={assistantInput} onClose={() => showAssistant(false)}><GallerySearchAssistant id={panelId} wide={false} hideHeading state={assistant} baseQuery={draft.query} inputRef={assistantInput} onChange={changeAssistant} onClose={() => showAssistant(false)} onApply={onRefine} /></Modal>}

@@ -13,6 +13,7 @@ import { matchPublicItemImages, rankLostContextCandidates, type AiContextRankCan
 import { criteriaFromPlan, criteriaToHints, criteriaLabels, hasSearchCriteria, matchPublicItem, resolveApiKeyword, type AiSearchCriteria } from '../search/ai-match-model'
 import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
 import { localPhotoId, OFFICIAL_SEARCH_URL } from './data'
+import { minimumWait, withMinimumVisible } from './ai-loading'
 import GalleryQuerySummary from './GalleryQuerySummary'
 import GallerySearchAssistant from './GallerySearchAssistant'
 import LostResultFilters from './LostResultFilters'
@@ -395,9 +396,10 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   }
   function startContextRanking(scope: string, request: ContextRankInput) {
     const requestId = ++rankRequestSequence.current
+    const startedAt = Date.now()
     setRankBusy(true)
     setRankError('')
-    void rankLostContextCandidates(request).then(results => {
+    void withMinimumVisible(startedAt, rankLostContextCandidates(request)).then(results => {
       if (requestId === rankRequestSequence.current) setContextRank({ scope, results })
     }).catch(cause => {
       if (requestId === rankRequestSequence.current) setRankError(cause instanceof Error ? cause.message : 'AI가 설명·장소 후보를 비교하지 못했어요.')
@@ -408,6 +410,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
   async function startVisualRanking(scope: string) {
     if (!visualCandidates.length) return
     const requestId = ++visualRequestSequence.current
+    const startedAt = Date.now()
     setVisualBusy(true)
     setVisualError('')
     // 서버는 한 번에 12건까지만 받는다. 최신순으로 한 묶음씩 보고, 이미 충분히 맞으면 멈춘다.
@@ -435,6 +438,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
         setVisualError(cause instanceof Error ? cause.message : 'AI가 공개 사진·설명을 비교하지 못했어요.')
       }
     } finally {
+      await minimumWait(startedAt)
       if (requestId === visualRequestSequence.current) setVisualBusy(false)
     }
   }
@@ -504,7 +508,9 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     {visualError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{visualError}{visualCandidates.length > 0 && <> <button type="button" onClick={() => startVisualRanking(visualRankScope)}>다시 시도</button></>}</p>}
     {activeVisual && !visualBusy && <p className="lost-context-rank-status" role="status">공개 후보 {activeVisual.length}건의 사진·설명을 시각 특징과 비교해 정리했어요. 이미지 유사도는 {visualMatch?.source === 'vision-model' ? '전용 비전' : '멀티모달'} 분석 기준이에요.</p>}
     {params.get('state') === 'stale' && <p className="inline-error">공식 기록이 변경된 상태 예시예요.</p>}
-    <div className="gallery-results__sections">{channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
+    <div className="gallery-results__sections">{live.loading || rankBusy || visualBusy
+      ? <AiSearching label="AI가 공개 사진과 설명을 골라보고 정리하고 있어요" />
+      : channel ? renderSection(channel, true) : LOST_RESULT_CHANNELS.map(which => renderSection(which))}</div>
     <p className="field__help result-disclaimer">같은 물건인지와 보관 여부는 보관기관에 확인해 주세요. AI가 잘못 찾거나 놓칠 수 있고, 공개 정보가 부족하면 검색이 제한될 수 있어요.</p>
   </main>{wide ? open && <div className="gallery-assistant-dock">{assistantPanel}</div> : <Modal open={open} title="검색 도우미" focusKey={id} className="gallery-assistant-modal" initialFocus={input} onClose={() => showAssistant(false)}>{assistantPanel}</Modal>}
   </div>

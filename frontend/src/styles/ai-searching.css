@@ -41,6 +41,7 @@
 .ai-search__item:nth-child(3) { animation-delay: 0.7s; }
 .ai-search__item:nth-child(4) { animation-delay: 1.05s; }
 .ai-search__item:nth-child(5) { animation-delay: 1.4s; }
+.ai-search__item:nth-child(6) { animation-delay: 1.75s; }
 .ai-search__bot {
   position: absolute;
   left: 6%;
@@ -120,7 +121,6 @@
   stroke-width: 1.1;
   color: #334155;
 }
-.no-photo.no-photo--category > svg { width: 96px; height: 96px; color: #334155; }
 .no-photo:not(.no-photo--category) > svg { width: 64px; height: 64px; color: #334155; }
 .detail-photo > .no-photo.no-photo--category > svg { width: 128px; height: 128px; }
 .found-card__image > .no-photo.no-photo--category > svg,
