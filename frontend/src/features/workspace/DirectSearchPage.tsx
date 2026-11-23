@@ -22,6 +22,8 @@ interface StoredJob {
   keyword: string
   page: number
   reloadToken: number
+  /** 더 찾아보기로 건너뛴 사진 수. 새로고침 후에도 이어볼 위치를 기억한다. */
+  skipVisual: number
 }
 
 function readStoredJob(): StoredJob | null {
@@ -49,13 +51,16 @@ interface LiveState {
   scanned: number
   scanLimitReached: boolean
   criteriaApplied: boolean
+  visualScanned: number
+  visualMore: boolean
   loading: boolean
   error: string | null
   partial: boolean
 }
 const initialLive = (loading: boolean): LiveState => ({
   raw: [], total: 0, scanned: 0, scanLimitReached: false,
-  criteriaApplied: false, loading, error: null, partial: false,
+  criteriaApplied: false, visualScanned: 0, visualMore: false,
+  loading, error: null, partial: false,
 })
 
 const TIER_LEGEND = [
@@ -74,6 +79,8 @@ export default function DirectSearchPage() {
   const [live, setLive] = useState<LiveState>(() => initialLive(true))
   const [reloadToken, setReloadToken] = useState(0)
   const [elapsed, setElapsed] = useState(0)
+  // '더 찾아보기'를 누를 때마다 이미 본 사진 수를 더해 더 오래된 사진부터 다시 조회한다.
+  const [skipVisual, setSkipVisual] = useState(0)
   const [visualProgress, setVisualProgress] = useState({ scanned: 0, total: 0 })
   const [aiDates, setAiDates] = useState<{ from: string; to: string }>({ from: '', to: '' })
   const [criteria, setCriteria] = useState<AiSearchCriteria>(EMPTY_SEARCH_CRITERIA)
@@ -88,12 +95,14 @@ export default function DirectSearchPage() {
     if (!keyword) {
       setCriteria(EMPTY_SEARCH_CRITERIA)
       setAiDates({ from: '', to: '' })
+      setSkipVisual(0)
       setAiBusy(false)
       setAnalyzedKeyword('')
       return
     }
     let cancelled = false
     setAiBusy(true)
+    setSkipVisual(0)
     prepareAiSearch('direct', keyword, [])
       .then(plan => {
         if (cancelled) return
@@ -143,6 +152,8 @@ export default function DirectSearchPage() {
         scanned: payload.scanned,
         scanLimitReached: payload.scanLimitReached,
         criteriaApplied: payload.criteriaApplied,
+        visualScanned: payload.visualScanned ?? 0,
+        visualMore: payload.visualMore ?? false,
         loading: false,
         error: null,
         partial: payload.errors.length > 0,
@@ -170,12 +181,18 @@ export default function DirectSearchPage() {
     const begin = async () => {
       try {
         const stored = readStoredJob()
-        const resumable = stored && stored.keyword === keyword && stored.page === page && stored.reloadToken === reloadToken
+        const resumable = stored && stored.keyword === keyword && stored.page === page
+          && stored.reloadToken === reloadToken && stored.skipVisual === skipVisual
+        // 더 찾아보기로 넘어가도 앞서 찾은 사진 점수는 서버에 되돌려 준다.
+        const priorVisualScores: Record<string, number> = {}
+        for (const item of live.raw) {
+          if (item.visualScore && item.visualScore > 0) priorVisualScores[item.id] = item.visualScore
+        }
         const job = resumable
           ? { jobId: stored.jobId, status: 'pending' }
-          : await startBrowseJob(keyword, page, API_ROWS, hints, filters)
+          : await startBrowseJob(keyword, page, API_ROWS, hints, filters, 200, skipVisual, priorVisualScores)
         if (cancelled) return
-        writeStoredJob({ jobId: job.jobId, keyword, page, reloadToken })
+        writeStoredJob({ jobId: job.jobId, keyword, page, reloadToken, skipVisual })
         await poll(job.jobId)
       } catch (cause) {
         if (!cancelled) fail(cause instanceof Error && cause.message ? cause.message : '검색을 시작하지 못했어요.')
@@ -186,7 +203,7 @@ export default function DirectSearchPage() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [keyword, page, reloadToken, hints, filters, analyzedKeyword])
+  }, [keyword, page, reloadToken, skipVisual, hints, filters, analyzedKeyword])
 
   // 로딩이 길어지면 경과 초를 보여준다.
   useEffect(() => {
@@ -223,6 +240,13 @@ export default function DirectSearchPage() {
     setParams(updated, { replace: true })
     if (next !== keyword) setKeyword(next)
     else setReloadToken(token => token + 1)
+  }
+
+  // 이미 본 사진만큼 건너뛰고 더 오래된 사진을 이어서 분석한다.
+  function lookDeeper() {
+    if (live.loading) return
+    setSkipVisual(current => current + Math.max(live.visualScanned, 60))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function showAll() {
@@ -293,7 +317,14 @@ export default function DirectSearchPage() {
         </div>
         {items.length ? <div className="gallery-result-grid direct-search__grid">
           {items.map(item => <FoundCard key={item.id} item={item} to={'/lost-found/item/' + (item.source ?? 'police') + '/' + encodeURIComponent((item.atcId ?? item.id) + ':' + (item.fdSn ?? '1')) + '?back=' + encodeURIComponent(back)} />)}
-        </div> : <EmptyState title="조건에 맞는 물건이 없어요" description="다른 키워드나 검색 조건을 사용해 보세요."><button type="button" className="button button--secondary" onClick={showAll}>전체 목록 보기</button></EmptyState>}
+        </div> : <EmptyState title="조건에 맞는 물건이 없어요" description="다른 키워드나 검색 조건을 사용해 보세요.">
+          {live.visualMore && <button type="button" className="button button--primary" onClick={lookDeeper}>더 찾아보기</button>}
+          <button type="button" className="button button--secondary" onClick={showAll}>전체 목록 보기</button>
+        </EmptyState>}
+        {!live.loading && !live.error && keyword && live.visualMore && <div className="direct-search__deeper" role="region" aria-label="오래된 사진 추가 검색">
+          <span>최신 사진 {live.visualScanned}장을 살펴봤어요. 아직 확인하지 않은 오래된 사진이 남아 있어요.</span>
+          <button type="button" className="button button--secondary" onClick={lookDeeper}>더 찾아보기</button>
+        </div>}
         {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-bottom" />}
       </>}
     <p className="field__help result-disclaimer">동일 물건인지와 보관 여부는 보관기관에 확인해 주세요.</p>

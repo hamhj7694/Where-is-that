@@ -133,7 +133,7 @@
     <tr><td>B. 물건 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code></td><td><span class="tag a">연결</span> <code>vision/match-public</code></td><td><span class="tag a">연결</span> <code>search/rank-context</code></td><td>확정 4개 영역</td></tr>
     <tr><td>C. 직접 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code> (말에서 시각 특징 추출)</td><td><span class="tag a">연결</span> <code>vision/match-public</code> 재사용</td><td><span class="tag w">부분</span> 사진 점수로 등급만 끌어올림</td><td>일치 등급 우선 · 등급 내 공개 API 원문 순서</td></tr>
   </table>
-  <div class="note">직접 찾기도 AI가 말 속에서 캐릭터·색상·카드 종류·이름을 시각 특징으로 뽑아 <b>공개 API 사진을 직접 봅니다</b>. 모델이 모르는 <code>치이카와</code>·<code>짱구</code>는 <b>D0 인터넷 참고 단계</b>에서 설명과 참고 이미지를 먼저 임베딩해 비교합니다. “약 한 달 전”, “오래전에”라는 말은 <b>그 시점 전후 기간 필터</b>로 바꿔 먼저 좁힙니다. 사진 분석은 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 진행하고, 충분히 맞으면 일찍 멈춥니다. 결과는 <b>모두 표시</b>하며 <code>류*진</code>은 <code>류영진</code>·<code>류세진</code>으로도 찾습니다.</div>
+  <div class="note">직접 찾기도 AI가 말 속에서 캐릭터·색상·카드 종류·이름을 시각 특징으로 뽑아 <b>공개 API 사진을 직접 봅니다</b>. 모델이 모르는 <code>치이카와</code>·<code>짱구</code>는 <b>D0 인터넷 참고 단계</b>에서 설명과 참고 이미지를 먼저 임베딩해 비교합니다. “약 한 달 전”, “오래전에”라는 말은 <b>그 시점 전후 기간 필터</b>로 바꿔 먼저 좁힙니다. 사진 분석은 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 진행하고, 충분히 맞으면 일찍 멈춥니다. <b>50점 이상이면 사진 일치로 인정</b>하되 조기 종료는 90점(또는 70점 3건)으로 엄격히 유지해 오래된 사진을 놓치지 않습니다. 결과는 <b>모두 표시</b>하며 남은 오래된 사진은 <b>더 찾아보기</b>로 이어서 봅니다. <code>류*진</code>은 <code>류영진</code>·<code>류세진</code>으로도 찾습니다.</div>
 </section>
 
 <!-- A1 -->
@@ -298,15 +298,15 @@
       <div class="arrow">▼</div>
       <div class="step local"><b>jobId 저장·폴링</b><div class="what">브라우저는 <code>localStorage</code>에 jobId를 저장하고 0.9초마다 <code>GET .../jobs/{id}</code>로 확인. 돌아오면 같은 작업 결과를 이어받습니다.</div><div class="code">DirectSearchPage.tsx · lostfound-api.ts</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><b>필터 → 공식 코드 + 스캔</b><div class="what">분류·색상·지역과 자연어에서 읽은 기간을 공식 코드·날짜로 바꿔 서버에서 먼저 좁힙니다. 사용자가 직접 고른 기간이 AI 추정보다 우선. 타임아웃 45초, 스캔 페이지 최대 8개.</div><div class="code">lostfound_codes.py · police_api.py: metadata_pass</div></div>
+      <div class="step"><b>필터 → 공식 코드 + 스캔</b><div class="what">분류·색상·지역과 자연어에서 읽은 기간을 공식 코드·날짜로 바꿔 서버에서 먼저 좁힙니다. 사용자가 직접 고른 기간이 AI 추정보다 우선. 타임아웃 45초, 스캔 페이지 최대 8개(더 찾아보기 시 최대 24개).</div><div class="code">lostfound_codes.py · police_api.py: metadata_pass · main.py: _browse_page_cap</div></div>
       <div class="arrow">▼</div>
       <div class="step"><b>중복 제거·등급 계산</b><div class="what"><code>exclude</code>만 확실히 제외. 나머지는 AI/검색어/필터/부분 일치 신호를 확인해 등급 0~5를 붙이고 <b>전부</b> 남깁니다. 같으면 공개 API 최신순 유지.</div><div class="code">police_api.py: MATCH_TIERS</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><b>웹 참고 → 공개 사진 AI 분석</b><div class="what">낯선 이름은 D0에서 참고 사진·특징을 먼저 얻습니다. 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 비교하고, 90점 이상 또는 70점 이상 3건이 나오면 더 오래된 사진은 건너뜁니다. 40점 이상이면 등급을 올리고 <code>visualScore</code>를 붙인 뒤 다시 정렬·페이지네이션합니다.</div><div class="code">main.py: _apply_visual_hints · web_reference.py</div></div>
+      <div class="step"><b>웹 참고 → 공개 사진 AI 분석</b><div class="what">낯선 이름은 D0에서 참고 사진·특징을 먼저 얻습니다. 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 비교하고, 90점 이상 또는 70점 이상 3건이 나오면 더 오래된 사진은 건너뜁니다. <b>50점 이상</b>이면 등급 0으로 올리고 <code>visualScore</code>를 붙인 뒤 다시 정렬·페이지네이션합니다. 조기 종료로 안 본 사진이 남으면 <code>visualMore</code>를 true로 돌려줍니다.</div><div class="code">main.py: _apply_visual_hints · web_reference.py</div></div>
       <div class="arrow">▼</div>
       <div class="step local"><b>응답·캐시</b><div class="what"><code>matchTier</code>/<code>matchLabel</code>/<code>visualScore</code> 포함. 오류 없을 때만 300초 TTL 캐시. 부분 실패는 캐시하지 않습니다.</div></div>
     </div></div>
-    <div><div class="shot"><img src="05_direct_output.png" alt="목록 결과"></div><div class="cap"><b>아웃풋</b><span>등급 배지가 붙은 공개 습득물 목록 + 진행 모션.</span></div></div>
+    <div><div class="shot"><img src="05_direct_output.jpg" alt="목록 결과"></div><div class="cap"><b>아웃풋</b><span>등급·사진 점수 배지가 붙은 공개 습득물 목록 + 더 찾아보기 버튼.</span></div></div>
   </div>
   <div class="req" data-req="direct-browse"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>백그라운드 작업</option><option>코드 변환</option><option>스캔 한도</option><option>등급 계산</option><option>공개 사진 분석</option></select>
@@ -325,9 +325,10 @@
       <div class="step"><b>등급 4~5 — 나머지</b><div class="what">부분 일치 / 공개 원문. 화면을 비우지 않고 끝까지 표시. 같은 등급 안에서는 공개 API 순서.</div><div class="code">MATCH_TIERS[4..5]</div></div>
       <div class="step local"><b>카드 배지 + 범례</b><div class="what">각 카드에 등급 배지를 붙이고 목록 위에 6단계 범례를 표시. 사진으로 찾은 항목은 <code>사진 특징 00점</code> 배지를 따로 붙입니다.</div><div class="code">components.tsx · direct-search.css</div></div>
       <div class="step local"><b>오래 걸릴 때</b><div class="what">“AI가 찾아보고 있어요” + 회전 모션 + 점 3개 바운스. 2초 넘으면 경과 초도 표시. 다른 페이지로 가도 검색은 계속.</div><div class="code">DirectSearchPage.tsx</div></div>
+      <div class="step local"><b>더 찾아보기</b><div class="what"><code>visualMore</code>면 “최신 사진 N장을 살펴봤어요” 안내와 버튼을 보여줍니다. 누르면 실제로 본 장수만큼 <code>skipVisual</code>을 더해 새 백그라운드 작업을 시작하고, 더 오래된 사진부터 같은 분석을 반복합니다. 앞서 찾은 <code>visualScore</code>도 <code>priorVisualScores</code>로 같이 보내 이미 찾은 물건이 순위에서 사라지지 않게 합니다. 결과가 없을 때도 같은 버튼이 나타납니다.</div><div class="code">DirectSearchPage.tsx · lostfound-api.ts</div></div>
       <div class="step"><b>실패 시</b><div class="what">AI 조건 정리가 실패해도 원문 검색 결과는 그대로 노출. 오류 메시지는 화면에 그대로 표시.</div></div>
     </div></div>
-    <div><div class="shot"><img src="05_direct_output.png" alt="최종 목록"></div><div class="cap"><b>아웃풋</b><span>등급 배지·범례·진행 안내가 있는 결과 화면.</span></div></div>
+    <div><div class="shot"><img src="05_direct_output.jpg" alt="최종 목록"></div><div class="cap"><b>아웃풋</b><span>등급 배지·사진 점수·더 찾아보기 안내가 있는 결과 화면.</span></div></div>
   </div>
   <div class="req" data-req="direct-result"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
     <select class="scope"><option>전체</option><option>등급 표시</option><option>정렬 우선순위</option><option>진행 모션</option><option>페이지 표시</option></select>

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { browseLostFound, formatDescription, formatFoundDateTime, searchLostFound, toCandidate, type FoundItem } from './lostfound-api'
+import { browseLostFound, formatDescription, formatFoundDateTime, searchLostFound, startBrowseJob, toCandidate, type FoundItem } from './lostfound-api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -110,9 +110,22 @@ describe('직접 찾기 서버 필터 조회', () => {
     )
     const [, request] = fetch.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(String(request.body))).toEqual({
-      keyword: '검은 가죽 지갑', page: 2, rows: 40, maxPages: 200,
+      keyword: '검은 가죽 지갑', page: 2, rows: 40, maxPages: 200, skipVisual: 0,
       hints: { apiKeywords: ['지갑'], include: ['가죽'], any: [], exclude: ['파손'], imageFeatures: [] },
       filters: { color: '블랙(검정)', region: '서울' },
+    })
+  })
+
+  it('더 찾아보기는 건너뛸 사진 수를 서버 작업에 전달한다', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ jobId: 'job-1', status: 'pending' }), { status: 200 },
+    ))
+    vi.stubGlobal('fetch', fetch)
+    await startBrowseJob('치이카와', 1, 40, undefined, undefined, 200, 60, { 'police:card': 96 })
+    const [, request] = fetch.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(request.body))).toEqual({
+      keyword: '치이카와', page: 1, rows: 40, maxPages: 200, skipVisual: 60,
+      priorVisualScores: { 'police:card': 96 },
     })
   })
 })

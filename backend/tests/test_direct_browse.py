@@ -101,6 +101,75 @@ def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):
     assert batches[0] == [f"police:{index}" for index in range(10, 2, -1)]
 
 
+def test_visual_match_at_50_counts_without_stopping_older_photos(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
+    )
+    items = [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 13)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 12}
+    batches: list[list[str]] = []
+
+    def fake_match(request):
+        batches.append([candidate.id for candidate in request.candidates])
+        return SimpleNamespace(results=[
+            SimpleNamespace(id=candidate.id, imageSimilarity=50, basis="photo")
+            for candidate in request.candidates
+        ])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    main._apply_visual_hints(result, payload)
+    assert len(batches) == 2  # 50점 하나로 멈추지 않고 오래된 묶음까지 본다.
+    assert result["visualScanned"] == 12
+    assert result["visualMore"] is False
+    assert result["items"][0]["matchTier"] == 0  # 50점도 사진 특징 일치로 인정.
+
+
+def test_look_deeper_skips_seen_photos_and_reports_remaining(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1, skipVisual=8,
+    )
+    items = [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(1, 81)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 80}
+    batches: list[list[str]] = []
+
+    def fake_match(request):
+        batches.append([candidate.id for candidate in request.candidates])
+        return SimpleNamespace(results=[])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
+    main._apply_visual_hints(result, payload)
+    assert batches[0][0] == "police:72"  # 최신 8장을 건너뛰고 그 다음부터 본다.
+    assert result["visualScanned"] == 60
+    assert result["visualMore"] is True  # 아직 더 오래된 사진이 남았다.
+
+
+def test_deeper_search_keeps_the_score_found_earlier(monkeypatch):
+    payload = SimpleNamespace(
+        keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=3,
+        skipVisual=8, priorVisualScores={"police:old": 96},
+    )
+    old = row("police:old", "2026-01-01", imageUrl="https://www.lost112.go.kr/a.jpg")
+    items = [old] + [
+        row(f"police:{index}", f"2026-01-{index:02d}", imageUrl="https://www.lost112.go.kr/a.jpg")
+        for index in range(2, 21)
+    ]
+    result = {"items": [items[0]], "allItems": items, "total": 20}
+    monkeypatch.setattr(
+        ai_pipeline, "match_visual_features",
+        lambda request: SimpleNamespace(results=[]),
+    )
+    main._apply_visual_hints(result, payload)
+    assert result["items"][0]["id"] == "police:old"  # 앞서 찾은 사진이 맨 위에 남는다.
+    assert result["items"][0]["visualScore"] == 96
+    assert result["items"][0]["matchTier"] == 0
+
+
 def test_browse_filters_whole_pool_and_recalculates_total(monkeypatch):
     pages = {
         1: [row("police:a", "2026-01-03", color="사용자정의색", matchScore=99.0)],

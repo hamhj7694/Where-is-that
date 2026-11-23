@@ -146,6 +146,10 @@ export interface BrowsePayload extends SearchPayload {
   scanLimitReached: boolean
   criteriaApplied: boolean
   filtersApplied: Record<string, string>
+  /** 서버가 실제로 분석한 공개 사진 수. 더 찾아보기 기준으로 쓴다. */
+  visualScanned?: number
+  /** 아직 보지 않은 오래된 사진이 남아 있는지. */
+  visualMore?: boolean
 }
 
 interface ErrorPayload {
@@ -210,13 +214,14 @@ export function browseLostFound(
   hints?: LostSearchHints,
   filters?: LostBrowseFilters,
   maxPages = 200,
+  skipVisual = 0,
 ): Promise<BrowsePayload> {
   return request<BrowsePayload>('/lostfound/browse', {
     method: 'POST',
     // 공개 API가 느려도 무한 로딩으로 남지 않도록 상한을 둔다.
     signal: AbortSignal.timeout(70_000),
     body: JSON.stringify({
-      keyword, page, rows, maxPages,
+      keyword, page, rows, maxPages, skipVisual,
       ...(hints ? { hints } : {}),
       ...(filters ? { filters } : {}),
     }),
@@ -236,27 +241,32 @@ export interface BrowseJobStatus {
   /** 서버가 공개 사진을 몇 장까지 봤는지. */
   visualScanned?: number
   visualTotal?: number
+  /** 더 찾아보기로 이어볼 오래된 사진이 있는지. */
+  visualMore?: boolean
 }
 
 function browseBody(
   keyword: string, page: number, rows: number,
-  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200,
+  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
+  priorVisualScores?: Record<string, number>,
 ): string {
   return JSON.stringify({
-    keyword, page, rows, maxPages,
+    keyword, page, rows, maxPages, skipVisual,
     ...(hints ? { hints } : {}),
     ...(filters ? { filters } : {}),
+    ...(priorVisualScores && Object.keys(priorVisualScores).length ? { priorVisualScores } : {}),
   })
 }
 
 /** 백그라운드 검색 시작. 탭을 닫아도 서버에서 계속 진행된다. */
 export function startBrowseJob(
   keyword: string, page = 1, rows = 40,
-  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200,
+  hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
+  priorVisualScores?: Record<string, number>,
 ): Promise<BrowseJobStart> {
   return request<BrowseJobStart>('/lostfound/browse/jobs', {
     method: 'POST',
-    body: browseBody(keyword, page, rows, hints, filters, maxPages),
+    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores),
   })
 }
 

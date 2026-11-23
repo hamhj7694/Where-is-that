@@ -256,3 +256,21 @@
   color: #0f6b4f;
   background: #e7f8f0;
 }
+
+/* 더 찾아보기: 최신 사진을 다 본 뒤 오래된 사진을 이어서 분석 */
+.direct-search__deeper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid #b7dcc9;
+  border-radius: 10px;
+  background: #e7f8f0;
+  color: #0f6b4f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.direct-search__deeper .button { min-height: 36px; padding-inline: 14px; font-size: 13px; white-space: nowrap; }

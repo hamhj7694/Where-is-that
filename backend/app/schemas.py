@@ -240,6 +240,10 @@ class LostFoundBrowseRequest(BaseModel):
     maxPages: int = Field(default=200, ge=1, le=1000)
     hints: dict[str, Any] | None = None
     filters: dict[str, str] = Field(default_factory=dict)
+    # 더 찾아보기: 이미 분석한 최신 사진 수만큼 건너뛰고 오래된 사진을 본다.
+    skipVisual: int = Field(default=0, ge=0, le=600)
+    # 앞선 탐색에서 이미 찾은 사진 점수. 새 탐색에서 사라지지 않도록 되살린다.
+    priorVisualScores: dict[str, int] = Field(default_factory=dict, max_length=200)
 
     @field_validator("hints")
     @classmethod
@@ -336,6 +340,8 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     criteriaApplied: bool = False
     filtersApplied: dict[str, str] = Field(default_factory=dict)
     visualAnalyzed: bool = False
+    visualScanned: int = 0
+    visualMore: bool = False
 
 
 class BrowseJobStart(BaseModel):
@@ -354,6 +360,7 @@ class BrowseJobStatus(BaseModel):
     error: str | None = None
     visualScanned: int = 0
     visualTotal: int = 0
+    visualMore: bool = False
 
 
 class MapConfigResponse(BaseModel):

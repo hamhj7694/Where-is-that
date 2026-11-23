@@ -55,10 +55,19 @@ logger = logging.getLogger(__name__)
 VISUAL_SCAN_CAP = 60
 VISUAL_BATCH_SIZE = 8
 VISUAL_MATCH_MIN = 40
-VISUAL_STRONG_MIN = 70
-# 최신순으로 조금씩 보다가 충분히 맞는 것이 나오면 더 오래된 사진은 보지 않는다.
+# 50점부터 '사진 특징이 맞음'으로 인정해 오래된 후보도 앞에 올린다.
+VISUAL_STRONG_MIN = 50
+# 조기 종료는 엄격하게 유지한다. 50점 하나로 멈추면 오래된 사진을 못 보기 때문이다.
 VISUAL_EARLY_STOP_MIN = 90
 VISUAL_EARLY_STOP_HITS = 3
+VISUAL_EARLY_STOP_HIT_MIN = 70
+
+
+def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
+    """더 찾아보기에서는 더 오래된 페이지까지 허용한다(최대 24페이지)."""
+    extra = max(0, getattr(payload, "skipVisual", 0)) // VISUAL_SCAN_CAP
+    return min(payload.maxPages, min(config.LOSTFOUND_BROWSE_PAGE_CAP * (1 + extra), 24))
+
 
 # 파이프라인 확인용 로컬 문서/요청함. 서버 코드와 같은 저장소에 두고 HTML에서 직접 불러온다.
 PIPELINE_DIR = Path(__file__).resolve().parents[2] / "파이프라인"
@@ -483,11 +492,13 @@ def _lostfound_list_key(payload: LostFoundListRequest) -> str:
 def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
     raw = json.dumps(
         {
-            "v": 2,  # 사진 분석 결과가 들어간 응답으로 캐시 버전 올림
+            "v": 4,  # 더 찾아보기(건너뛴 사진 수)와 앞서 찾은 점수까지 반영
             "keyword": payload.keyword.strip(),
             "page": payload.page,
             "rows": payload.rows,
             "maxPages": payload.maxPages,
+            "skipVisual": payload.skipVisual,
+            "priorVisualScores": payload.priorVisualScores,
             "hints": payload.hints or {},
             "filters": payload.filters,
         },
@@ -542,6 +553,8 @@ def _apply_visual_hints(
     놓치는 것보다 조금 더 보는 편이 낫다. 페이지에 잘린 항목까지 스캔한 전체 후보를
     여러 번에 나눠 분석하고, 사진 점수가 조금이라도 있으면 앞으로 끌어올린다.
     """
+    result.setdefault("visualScanned", 0)
+    result.setdefault("visualMore", False)
     hints = payload.hints or {}
     features = [term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()]
     if not features or result.get("visualAnalyzed"):
@@ -560,7 +573,10 @@ def _apply_visual_hints(
     # 잃어버린 지 얼마 안 된 물건을 찾을 확률이 훨씬 높기 때문이다.
     ordered = sorted(pool, key=lambda row: row.get("matchTier", 5))
     ordered.sort(key=lambda row: row.get("foundDate", ""), reverse=True)
-    photo_items = [item for item in ordered if item.get("imageUrl")][:VISUAL_SCAN_CAP]
+    # '더 찾아보기'는 이미 본 최신 사진을 건너뛰고 그 다음 오래된 묶음을 분석한다.
+    skip = max(0, getattr(payload, "skipVisual", 0))
+    with_photos = [item for item in ordered if item.get("imageUrl")]
+    photo_items = with_photos[skip:skip + VISUAL_SCAN_CAP]
     if not photo_items:
         result["visualAnalyzed"] = True
         return result
@@ -568,6 +584,7 @@ def _apply_visual_hints(
         progress(0, len(photo_items))
 
     scores: dict[str, int] = {}
+    analyzed = 0
     for start in range(0, len(photo_items), VISUAL_BATCH_SIZE):
         batch = photo_items[start:start + VISUAL_BATCH_SIZE]
         candidates = []
@@ -589,18 +606,30 @@ def _apply_visual_hints(
             # 한 묶음이 실패해도 나머지 묶음과 공개 원문 목록은 유지한다.
             continue
         finally:
+            # 조기 종료로 남은 묶음을 안 봤으면 실제로 본 장수만 알려준다.
+            # '더 찾아보기'는 이 값만큼 건너뛰고 다음 오래된 사진부터 이어본다.
+            analyzed = min(start + VISUAL_BATCH_SIZE, len(photo_items))
             if progress:
-                progress(min(start + VISUAL_BATCH_SIZE, len(photo_items)), len(photo_items))
+                progress(analyzed, len(photo_items))
         for row in matched.results:
             if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
                 scores[row.id] = row.imageSimilarity
         # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
         if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
             break
-        if sum(1 for value in scores.values() if value >= VISUAL_STRONG_MIN) >= VISUAL_EARLY_STOP_HITS:
+        if sum(1 for value in scores.values() if value >= VISUAL_EARLY_STOP_HIT_MIN) >= VISUAL_EARLY_STOP_HITS:
             break
 
     result["visualAnalyzed"] = True
+    result["visualScanned"] = analyzed
+    result["visualMore"] = skip + analyzed < len(with_photos)
+    # 더 찾아보기에서도 앞서 찾은 사진은 점수를 유지한다(높은 점수 우선).
+    prior = {
+        str(key): value for key, value in (getattr(payload, "priorVisualScores", {}) or {}).items()
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100
+    }
+    for key, value in prior.items():
+        scores[key] = max(scores.get(key, 0), value)
     if not scores:
         return result
     for item in pool:
@@ -645,7 +674,7 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
             payload.rows,
             filters=payload.filters,
             hints=payload.hints,
-            max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
+            max_pages=_browse_page_cap(payload),
         )
         result = _apply_visual_hints(result, payload)
     except police_api.PoliceError as error:
@@ -682,7 +711,7 @@ def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
             payload.rows,
             filters=payload.filters,
             hints=payload.hints,
-            max_pages=min(payload.maxPages, config.LOSTFOUND_BROWSE_PAGE_CAP),
+            max_pages=_browse_page_cap(payload),
         )
         def report_visual(scanned: int, total: int) -> None:
             with _browse_jobs_lock:
@@ -700,7 +729,10 @@ def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
             with closing(db.connect()) as connection:
                 db.cache_set(connection, "lostfound", _lostfound_browse_key(payload), result)
         with _browse_jobs_lock:
-            _browse_jobs[job_id].update(status="done", result=result, finishedAt=time.time())
+            _browse_jobs[job_id].update(
+                status="done", result=result,
+                visualMore=bool(result.get("visualMore")), finishedAt=time.time(),
+            )
     except police_api.PoliceError as error:
         with _browse_jobs_lock:
             _browse_jobs[job_id].update(status="error", error=error.message, finishedAt=time.time())
@@ -732,8 +764,9 @@ def start_lostfound_browse_job(payload: LostFoundBrowseRequest) -> dict:
             "status": "done" if cached is not None else "pending",
             "result": cached,
             "error": None,
-            "visualScanned": 0,
+            "visualScanned": int((cached or {}).get("visualScanned", 0)),
             "visualTotal": 0,
+            "visualMore": bool((cached or {}).get("visualMore")),
             "createdAt": time.time(),
             "finishedAt": time.time() if cached is not None else None,
         }
@@ -755,6 +788,7 @@ def get_lostfound_browse_job(job_id: str) -> dict:
         "error": job["error"],
         "visualScanned": job.get("visualScanned", 0),
         "visualTotal": job.get("visualTotal", 0),
+        "visualMore": job.get("visualMore", False),
     }
 
 
