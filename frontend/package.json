@@ -8,12 +8,14 @@
     "dev:web": "vite --host 127.0.0.1",
     "dev:local-gallery": "node local-gallery/bridge.mjs",
     "build": "tsc -b && vite build",
+    "build:pipeline": "vite build --config vite.pipeline.config.ts",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vitest run"
   },
   "dependencies": {
+    "@xyflow/react": "^13.0.2",
     "lucide-react": "1.73.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

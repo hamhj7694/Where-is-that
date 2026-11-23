@@ -125,11 +125,20 @@ def test_pipeline_screen_exposes_clickable_node_flow_map():
     html = response.text
     assert 'data-go="flow-map"' in html
     assert 'id="flow-map"' in html
-    for function in ("renderFlowMap", "drawFlowLinks", "selectFlowNode"):
-        assert "function " + function + "(" in html
+    # React Flow(@xyflow/react) 노드 그래프 번들을 사용한다.
+    assert 'id="flow-react-root"' in html
+    assert '/pipeline/flow-map.js' in html
+    assert '/pipeline/flow-map.css' in html
+    assert "pipeline-node-select" in html
+    assert "function selectFlowNode(" in html
     for lane in ("A · 갤러리에서 찾기", "B · 물건 찾기", "C · 직접 찾기", "D · 공통 / 점검", "E · 개별 AI 모델"):
         assert lane in html
-    assert "marker-end" in html and "stroke-dasharray" in html
+
+    # 번들 파일도 같은 경로로 서빙되어야 한다.
+    script = client.get("/pipeline/flow-map.js")
+    style = client.get("/pipeline/flow-map.css")
+    assert script.status_code == 200 and len(script.content) > 1000
+    assert style.status_code == 200 and len(style.content) > 100
 
 
 def test_ai_dates_are_normalized_and_never_reversed():

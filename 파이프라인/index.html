@@ -123,29 +123,18 @@
   .todo__ask:hover{background:#173452;color:#fff}
   .todo__empty{color:var(--sub);font-size:12px;padding:8px 0}
   .todo__msg{font-size:11.5px;color:var(--acc);min-height:17px;margin-top:6px}
-  /* 프레임 안 노드 지도: 단계를 선으로 잇고, 누르면 역할·입력·출력·수정 요청을 보여준다. */
+  /* 프레임 안 노드 지도: React Flow(@xyflow/react) DAG. 노드/선/줌은 flow-map.css가 담당한다. */
   .node-frame{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
   @media(max-width:1250px){.node-frame{grid-template-columns:1fr}}
-  .node-canvas{position:relative;min-width:0;max-width:100%;min-height:620px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-  .node-canvas:before{content:"";position:absolute;inset:0;background-image:radial-gradient(#2a3a52 1px,transparent 1px);background-size:20px 20px;opacity:.55;pointer-events:none}
-  .node-links{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
-  .node-lanes{position:relative;display:grid;min-width:0;gap:16px}
-  .lane{position:relative;min-width:0;background:rgba(10,16,26,.72);border:1px solid var(--line);border-radius:12px;padding:12px}
-  .lane__label{color:var(--sub);font-size:10.5px;letter-spacing:.08em;font-weight:700;margin-bottom:9px}
-  .lane__nodes{display:flex;gap:30px;align-items:stretch;overflow-x:auto;padding:2px 2px 8px;scrollbar-color:#2a3a52 transparent}
-  .node{position:relative;z-index:2;flex:0 0 198px;min-height:96px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:10px 12px;color:var(--txt);cursor:pointer}
-  .node:hover{border-color:var(--acc2);background:#1d2b40}
-  .node.selected{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
-  .node:focus-visible{outline:2px solid var(--acc2);outline-offset:2px}
-  .node__step{display:inline-block;font-size:10px;color:var(--acc);border:1px solid #1d6b57;border-radius:999px;padding:1px 7px;margin-bottom:5px}
-  .node__title{display:block;font-size:13px;font-weight:700;line-height:1.5}
-  .node__role{display:block;color:var(--sub);font-size:11px;line-height:1.5;margin-top:4px}
+  .node-canvas{position:relative;min-width:0;max-width:100%;min-height:760px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  #flow-react-root{position:absolute;inset:0}
   .node-detail{max-height:700px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
   .node-detail__empty{color:var(--sub);font-size:12.5px;line-height:1.7}
   .node-detail .detail-head h3{font-size:16px}
   .node-detail .detail-grid{grid-template-columns:1fr}
   .node-detail .mini{margin:4px 0 0}
 </style>
+<link rel="stylesheet" href="/pipeline/flow-map.css">
 </head>
 <body>
 <div class="layout">
@@ -238,17 +227,10 @@
 <section class="page" id="flow-map">
   <h2>0-1. 노드로 보는 파이프라인 지도 <span class="tag a">클릭 가능</span></h2>
   <p class="lead">프레임 안에서 각 단계가 선으로 연결돼 있어요. 노드를 누르면 역할·입력·처리·출력·코드 위치와 그 단계의 수정 요청을 볼 수 있습니다.</p>
-  <div class="banner"><b>보는 법:</b> 한 줄은 하나의 화면 흐름(A 갤러리 / B 물건 찾기 / C 직접 찾기 / D 공통 / E 개별 알고리즘)입니다. <b>점선</b>은 공통 단계가 사진 분석에 참고로 들어가는 길이에요. 상세의 <b>알고리즘 상세 페이지에서 보기</b>를 누르면 E 화면으로 이동합니다.</div>
+  <div class="banner"><b>보는 법:</b> A~D는 화면 흐름(A 갤러리 / B 물건 찾기 / C 직접 찾기 / D 공통), E는 개별 AI 모델·검색 방식·알고리즘 목록입니다. 노드를 끌어 옮기고 마우스 휠로 확대·축소할 수 있어요. <b>점선</b>은 공통 단계가 사진 분석에 참고로 들어가는 길이에요. 상세의 <b>알고리즘 상세 페이지에서 보기</b>를 누르면 E 화면으로 이동합니다.</div>
   <div class="node-frame">
     <div class="node-canvas" id="node-canvas">
-      <div class="node-lanes" id="node-lanes"><div class="card"><p>노드 지도를 만드는 중…</p></div></div>
-      <svg class="node-links" id="node-links" aria-hidden="true">
-        <defs>
-          <marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3f6f8f" /></marker>
-          <marker id="flow-arrow-common" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7dd3fc" /></marker>
-        </defs>
-        <g id="flow-links"></g>
-      </svg>
+      <div id="flow-react-root"><div class="card"><p>노드 지도를 만드는 중…</p></div></div>
     </div>
     <aside class="node-detail" id="flow-detail" aria-live="polite"><p class="node-detail__empty">노드를 선택하면 이 자리에 개별 역할과 정보가 나타납니다. AI 모델·검색 방식·알고리즘은 E 줄에서도 하나씩 열 수 있어요.</p></aside>
   </div>
@@ -606,7 +588,6 @@ function go(id, algo){
   const target = id==='algo-detail' ? '#'+id+':'+currentAlgo : '#'+id;
   if(location.hash.slice(1)!==target.slice(1)) history.replaceState(null,'',target);
   if(id==='algo-detail') renderDetail(currentAlgo);
-  if(id==='flow-map') requestAnimationFrame(drawFlowLinks);
   renderTodo(id);
   window.scrollTo(0,0);
 }
@@ -688,9 +669,7 @@ function renderDetail(id){
 }
 function selectFlowNode(node){
   selectedFlowNodeId=node.id;
-  document.querySelectorAll('.node.selected').forEach(item=>item.classList.remove('selected'));
-  const button=document.getElementById('node-'+node.id);
-  if(button) button.classList.add('selected');
+  // 노드 선택 강조는 React Flow가 처리한다. 여기서는 상세 패널만 채운다.
   const host=document.getElementById('flow-detail');
   if(!host) return;
   host.replaceChildren();
@@ -723,79 +702,6 @@ function selectFlowNode(node){
     host.appendChild(open);
   }
   host.appendChild(makeRequestForm(node.pipeline || (algo&&algo.pipeline) || 'audit', algo?algo.id:'', node.scopes || (algo&&algo.scopes) || ['전체'], '이 단계 수정 요청'));
-}
-function drawFlowLinks(){
-  const canvas=document.getElementById('node-canvas');
-  const group=document.getElementById('flow-links');
-  if(!canvas||!group) return;
-  const base=canvas.getBoundingClientRect();
-  if(!base.width||!base.height) return;
-  group.replaceChildren();
-  const NS='http://www.w3.org/2000/svg';
-  function connect(from,to,common){
-    const first=from.getBoundingClientRect(), second=to.getBoundingClientRect();
-    const x1=first.right-base.left, y1=first.top+first.height/2-base.top;
-    const x2=second.left-base.left, y2=second.top+second.height/2-base.top;
-    if(!common && x2<=x1) return;
-    const path=document.createElementNS(NS,'path');
-    if(common){
-      const bend=Math.min(x1,x2)-20;
-      path.setAttribute('d','M '+x1+' '+y1+' C '+bend+' '+y1+', '+bend+' '+y2+', '+x2+' '+y2);
-      path.setAttribute('stroke','#7dd3fc');
-      path.setAttribute('stroke-dasharray','5 4');
-      path.setAttribute('marker-end','url(#flow-arrow-common)');
-    }else{
-      const mid=(x1+x2)/2;
-      path.setAttribute('d','M '+x1+' '+y1+' C '+mid+' '+y1+', '+mid+' '+y2+', '+x2+' '+y2);
-      path.setAttribute('stroke','#3f6f8f');
-      path.setAttribute('marker-end','url(#flow-arrow)');
-    }
-    path.setAttribute('fill','none');
-    path.setAttribute('stroke-width','2');
-    group.appendChild(path);
-  }
-  document.querySelectorAll('.lane__nodes').forEach(row=>{
-    const nodes=[...row.querySelectorAll('.node')];
-    for(let index=0;index<nodes.length-1;index++) connect(nodes[index],nodes[index+1],false);
-  });
-  [['d0','b2'],['d0','c2']].forEach(pair=>{
-    const from=document.getElementById('node-'+pair[0]), to=document.getElementById('node-'+pair[1]);
-    if(from&&to) connect(from,to,true);
-  });
-}
-function renderFlowMap(){
-  const lanes=document.getElementById('node-lanes');
-  if(!lanes) return;
-  lanes.replaceChildren();
-  const groups=[...FLOW_GROUPS];
-  if(algoById.size) groups.push(algorithmLane());
-  groups.forEach(group=>{
-    const lane=el('div','lane');
-    lane.appendChild(el('div','lane__label',group.label));
-    const row=el('div','lane__nodes');
-    row.dataset.flowLane=group.id;
-    group.nodes.forEach(node=>{
-      const button=el('button','node');
-      button.type='button';
-      button.id='node-'+node.id;
-      button.appendChild(el('span','node__step',node.step));
-      button.appendChild(el('span','node__title',node.title));
-      button.appendChild(el('span','node__role',node.role));
-      button.addEventListener('click',()=>selectFlowNode(node));
-      row.appendChild(button);
-    });
-    lane.appendChild(row);
-    lanes.appendChild(lane);
-  });
-  // replaceChildren으로 행이 바뀌므로 스크롤 감시는 매 렌더마다 새 행에 붙이고, 창 크기 감시는 한 번만 붙인다.
-  lanes.querySelectorAll('.lane__nodes').forEach(row=>row.addEventListener('scroll',drawFlowLinks,{passive:true}));
-  if(!lanes.dataset.bound){
-    lanes.dataset.bound='1';
-    window.addEventListener('resize',drawFlowLinks);
-  }
-  const previous=document.getElementById('node-'+selectedFlowNodeId);
-  if(previous) previous.classList.add('selected');
-  requestAnimationFrame(drawFlowLinks);
 }
 function renderAlgoGrid(){
   const grid=document.getElementById('algo-grid');
@@ -1068,7 +974,6 @@ async function loadAlgorithms(){
     const data=await res.json();
     (data.items||[]).forEach(a=>algoById.set(a.id,a));
     renderAlgoGrid();
-    renderFlowMap();
     const h=hashParts();
     if(h.id==='algo-detail') renderDetail(h.algo||currentAlgo);
   }catch(e){
@@ -1082,6 +987,16 @@ loadRequests();
 loadIssues();
 const initial=hashParts();
 go(initial.id,initial.algo);
+
+// React Flow 노드를 누르면 상세 패널을 기존 selectFlowNode로 채운다.
+window.addEventListener('pipeline-node-select',event=>{
+  const detail=event.detail;
+  if(!detail||!detail.id) return;
+  const allNodes=[...FLOW_GROUPS.flatMap(group=>group.nodes),...algorithmLane().nodes];
+  const found=allNodes.find(node=>node.id===detail.id);
+  selectFlowNode(found ? {...found,...detail} : detail);
+});
 </script>
+<script src="/pipeline/flow-map.js"></script>
 </body>
 </html>
