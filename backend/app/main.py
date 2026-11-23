@@ -4,14 +4,17 @@ import hashlib
 import json
 import re
 import sqlite3
+import threading
 import time
 from contextlib import asynccontextmanager, closing
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 
 from . import ai_api, config, db, geo, kakao, police_api, recovery, security
 from .schemas import (
@@ -41,6 +44,26 @@ from .schemas import (
 )
 
 SAFE_RETURN = re.compile(r"^/(gallery|lost-found|history|valuables|settings|account)(/|\?|$)")
+
+# 파이프라인 확인용 로컬 문서/요청함. 서버 코드와 같은 저장소에 두고 HTML에서 직접 불러온다.
+PIPELINE_DIR = Path(__file__).resolve().parents[2] / "파이프라인"
+PIPELINE_FILE = re.compile(r"^[A-Za-z0-9가-힣_\-.]+$")
+PIPELINE_IDS = {
+    "search-prepare",
+    "public-visual-match",
+    "candidate-compare",
+    "context-rank",
+    "direct-search",
+    "data-collect",
+    "audit",
+}
+PIPELINE_REQUEST_LOCK = threading.Lock()
+
+
+class PipelineRequestPayload(BaseModel):
+    pipeline: str = Field(min_length=1, max_length=60)
+    scope: str = Field(default="전체", max_length=120)
+    message: str = Field(min_length=1, max_length=4000)
 
 
 def utc_now() -> str:
@@ -99,7 +122,11 @@ async def handle_validation_error(_: Request, exc: RequestValidationError) -> JS
 
 @app.middleware("http")
 async def check_origin(request: Request, call_next):
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.url.path.startswith("/api/"):
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path.startswith("/api/")
+        and not request.url.path.startswith("/api/pipeline/")
+    ):
         origin = request.headers.get("origin")
         if origin and origin not in config.ALLOWED_ORIGINS:
             return JSONResponse(
@@ -211,6 +238,67 @@ def health() -> dict:
 @app.get("/health", include_in_schema=False)
 def root_health() -> dict:
     return health()
+
+
+def _pipeline_file(filename: str) -> Path:
+    if not PIPELINE_FILE.fullmatch(filename):
+        raise api_error(400, "invalid_pipeline_file", "파일 이름을 확인해 주세요.")
+    path = (PIPELINE_DIR / filename).resolve()
+    if path.parent != PIPELINE_DIR.resolve() or not path.is_file():
+        raise api_error(404, "pipeline_file_not_found", "파일을 찾을 수 없어요.")
+    return path
+
+
+@app.get("/pipeline", include_in_schema=False)
+def pipeline_index() -> FileResponse:
+    return FileResponse(_pipeline_file("index.html"), media_type="text/html; charset=utf-8")
+
+
+@app.get("/pipeline/{filename}", include_in_schema=False)
+def pipeline_asset(filename: str) -> FileResponse:
+    return FileResponse(_pipeline_file(filename))
+
+
+def _read_pipeline_requests() -> list[dict]:
+    path = PIPELINE_DIR / "requests.json"
+    if not path.is_file():
+        return []
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return rows if isinstance(rows, list) else []
+
+
+@app.get("/api/pipeline/requests", include_in_schema=False)
+def pipeline_requests() -> dict:
+    return {"items": _read_pipeline_requests()}
+
+
+@app.post("/api/pipeline/request", include_in_schema=False)
+def create_pipeline_request(payload: PipelineRequestPayload) -> dict:
+    """파이프라인 화면의 수정 요청을 로컬 파일에 적는다. 비밀값은 받지 않는다."""
+    pipeline = payload.pipeline.strip()
+    if pipeline not in PIPELINE_IDS:
+        raise api_error(400, "invalid_pipeline", "알 수 없는 파이프라인이에요.")
+    item = {
+        "id": f"req-{int(time.time() * 1000)}",
+        "createdAt": utc_now(),
+        "status": "pending",
+        "pipeline": pipeline,
+        "scope": payload.scope.strip() or "전체",
+        "message": payload.message.strip(),
+    }
+    with PIPELINE_REQUEST_LOCK:
+        PIPELINE_DIR.mkdir(parents=True, exist_ok=True)
+        path = PIPELINE_DIR / "requests.json"
+        rows = _read_pipeline_requests()
+        rows.append(item)
+        path.write_text(
+            json.dumps(rows[-200:], ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return {"ok": True, "id": item["id"], "savedAt": item["createdAt"]}
 
 
 @app.post("/api/auth/signup", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
