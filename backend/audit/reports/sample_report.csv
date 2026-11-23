@@ -1,0 +1,2 @@
+﻿id,category,mode,query,use_yolo,total,returned,rule_check,judge_score,failure_stage,failure_reason,preprocess_yolo_ms,clip_ms,filter_ms,vlm_ms,total_stage_ms,wall_ms,error
+S20,regression,basic,카드,ON,258,20,PASS,98,none,검색어와 일치하는 카드 후보가 상위 결과에 포함되어 있습니다.,0.0,0.0,3024.2,0.0,3024.2,3115.6,
