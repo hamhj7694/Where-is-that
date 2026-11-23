@@ -11,7 +11,7 @@ import type { Candidate } from '../search/catalog-model'
 import { dedupeLostFound, REGIONS, searchLostFound, toCandidate, type FoundItem, type LostSearchHints } from '../search/lostfound-api'
 import { matchPublicItemImages, rankLostContextCandidates, type AiContextRankCandidate, type AiContextRankedCandidate, type AiLocationRelation, type AiVisualMatchResult } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaToHints, criteriaLabels, hasSearchCriteria, matchPublicItem, resolveApiKeyword, type AiSearchCriteria } from '../search/ai-match-model'
-import { EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
+import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
 import { localPhotoId, OFFICIAL_SEARCH_URL } from './data'
 import GalleryQuerySummary from './GalleryQuerySummary'
 import GallerySearchAssistant from './GallerySearchAssistant'
@@ -470,7 +470,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
         <button type="button" className="button button--secondary" disabled={visualBusy} onClick={() => startVisualRanking(visualRankScope)}><Sparkles aria-hidden="true" />{activeVisual ? '다시 비교' : '사진 특징으로 비교'}</button>
         <span>현재 공개 후보 {visualCandidates.length}건 · 참고 사진이 없으면 설명으로 비교해요</span>
       </div>}
-      {status === 'loading' || waitingForMore ? <div className="gallery-result-grid" aria-busy="true" aria-label={titles[which] + ' 로딩 상태'}>{Array.from({ length: GALLERY_PREVIEW_LIMIT }, (_, index) => <div className="gallery-result-skeleton" key={index} />)}</div>
+      {status === 'loading' || waitingForMore ? <AiSearching compact label={'AI가 ' + titles[which] + ' 후보를 뒤지고 있어요'} />
         : status === 'error' ? <EmptyState title="이 기준의 후보를 불러오지 못했어요" description="다른 검색 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry()} /></EmptyState>
           : status === 'confirmation' ? <EmptyState title="검색 내용을 확인해 주세요" description="입력 확인이 필요한 상태의 화면 예시예요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><RetryButton onClick={() => retry()} /></EmptyState>
             : status === 'empty' || !shown.length ? <EmptyState title="이 조건에 맞는 후보가 없어요" description="공개 정보가 없거나 부족할 수 있어요."><button type="button" className="button button--secondary" onClick={() => startEditing()}>검색 수정</button><a className="button button--secondary" href={OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">공식 검색 안내</a></EmptyState>

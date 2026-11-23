@@ -7,7 +7,7 @@ import { validateSearch, type GallerySource, type SearchDraft } from '../search/
 import { copy } from '../search/copy'
 import SearchComposer from '../search/SearchComposer'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
-import { DemoNotice, EmptyState, NoPhoto, PageHeading, Pagination, PhotoImage, RetryButton } from './components'
+import { AiSearching, DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, RetryButton } from './components'
 import GallerySearchAssistant from './GallerySearchAssistant'
 import GalleryQuerySummary from './GalleryQuerySummary'
 import Modal from '../../components/Modal'
@@ -228,12 +228,10 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
         {!full && state === 'preview' && photos.length > GALLERY_PREVIEW_LIMIT && <Link className="gallery-result-section__more" to={linkTo(which)}>{text.more}<ArrowRight aria-hidden="true" /></Link>}
       </div>
       {state === 'error' ? <EmptyState title="이 검색 기준을 불러오지 못했어요" description="다른 기준도 살펴볼 수 있어요." error><RetryButton onClick={() => retry(which)} /></EmptyState>
-        : state === 'loading' ? <div className="gallery-result-grid" aria-busy="true" aria-label={text.title + ' 로딩 화면 미리보기'}>{Array.from({ length: GALLERY_PREVIEW_LIMIT }, (_, index) => <div className="gallery-result-skeleton" key={index} />)}</div>
+        : state === 'loading' ? <AiSearching compact label={'AI가 ' + text.title + ' 결과를 뒤지고 있어요'} />
         : state === 'empty' || !shown.length ? <EmptyState title="미리볼 이미지가 없어요" description="검색 조건이나 연결한 갤러리를 확인해 주세요." />
         : <>{full && totalPages > 1 && <Pagination page={page} pages={totalPages} onChange={changePage} inputId={'gallery-' + which + '-page-top'} position="top" />}
-          <div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} />)}
-          {!full && Array.from({ length: Math.max(0, GALLERY_PREVIEW_LIMIT - shown.length) }, (_, index) => <div className="gallery-result-placeholder" key={'empty-' + index}><div className="gallery-result-card__image"><NoPhoto /></div></div>)}
-        </div>
+          <div className="gallery-result-grid">{shown.map(photo => <GalleryResultCard photo={photo} key={photo.id} to={photoLink(photo)} />)}</div>
           {full && totalPages > 1 && <Pagination page={page} pages={totalPages} onChange={changePage} inputId={'gallery-' + which + '-page-bottom'} />}
         </>}
     </section>

@@ -1,0 +1,134 @@
+/* 검색 중 빈 칸 대신 보여주는 'AI가 물건을 뒤지는' 장면과 사진 없는 카드의 아이콘. */
+
+.ai-search {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px;
+  border: 1px dashed var(--control-line);
+  border-radius: 12px;
+  background: var(--raised);
+}
+.ai-search__scene {
+  position: relative;
+  width: min(100%, 420px);
+  height: 132px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--surface);
+}
+.ai-search__shelf {
+  position: absolute;
+  inset: 24px 18px 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  border-bottom: 2px solid var(--line);
+}
+.ai-search__item {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--raised);
+  color: var(--text-muted);
+  animation: ai-search-item 2.5s ease-in-out infinite;
+}
+.ai-search__item svg { width: 20px; height: 20px; stroke-width: 1.6; }
+.ai-search__item:nth-child(2) { animation-delay: 0.35s; }
+.ai-search__item:nth-child(3) { animation-delay: 0.7s; }
+.ai-search__item:nth-child(4) { animation-delay: 1.05s; }
+.ai-search__item:nth-child(5) { animation-delay: 1.4s; }
+.ai-search__bot {
+  position: absolute;
+  left: 6%;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--control-line);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  animation: ai-search-roam 4.4s ease-in-out infinite;
+}
+.ai-search__bot > svg { width: 34px; height: 34px; stroke-width: 1.5; }
+.ai-search__lens {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface);
+  animation: ai-search-lens 1.1s ease-in-out infinite;
+}
+.ai-search__lens svg { width: 13px; height: 13px; stroke-width: 2.2; }
+.ai-search__caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+.ai-search__dots { display: inline-flex; gap: 3px; }
+.ai-search__dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ai-search-dot 1.1s ease-in-out infinite;
+}
+.ai-search__dots i:nth-child(2) { animation-delay: 0.15s; }
+.ai-search__dots i:nth-child(3) { animation-delay: 0.3s; }
+.ai-search--compact { padding: 12px; }
+.ai-search--compact .ai-search__scene { height: 104px; }
+
+@keyframes ai-search-roam {
+  0%, 100% { left: 6%; transform: translateY(0) rotate(-4deg); }
+  25% { left: 32%; transform: translateY(-3px) rotate(3deg); }
+  50% { left: 58%; transform: translateY(0) rotate(-3deg); }
+  75% { left: 34%; transform: translateY(-2px) rotate(4deg); }
+}
+@keyframes ai-search-item {
+  0%, 60%, 100% { color: var(--text-muted); border-color: var(--line); transform: translateY(0); }
+  30% { color: var(--accent); border-color: var(--accent); transform: translateY(-4px); }
+}
+@keyframes ai-search-lens {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+@keyframes ai-search-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* 사진 없는 물건: 글 설명 없이 하얀 박스에 품목 아이콘만 크게 보여준다. */
+.no-photo.no-photo { gap: 0; background: #fff; color: #334155; }
+.no-photo--category > svg {
+  width: 96px;
+  height: 96px;
+  stroke-width: 1.1;
+  color: #334155;
+}
+.no-photo.no-photo--category > svg { width: 96px; height: 96px; color: #334155; }
+.no-photo:not(.no-photo--category) > svg { width: 64px; height: 64px; color: #334155; }
+.detail-photo > .no-photo.no-photo--category > svg { width: 128px; height: 128px; }
+.found-card__image > .no-photo.no-photo--category > svg,
+.gallery-result-card__image > .no-photo.no-photo--category > svg { width: 88px; height: 88px; }
+.context-card__image > .no-photo.no-photo--category > svg,
+.context-card > .no-photo.no-photo--category > svg { width: 52px; height: 52px; }
+.direct-search__grid .found-card__image > .no-photo.no-photo--category > svg { width: 72px; height: 72px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-search__bot, .ai-search__item, .ai-search__lens, .ai-search__dots i { animation: none; }
+}

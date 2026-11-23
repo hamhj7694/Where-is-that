@@ -8,7 +8,7 @@ import {
 } from '../search/lostfound-api'
 import { prepareAiSearch } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaLabels, criteriaToHints, EMPTY_SEARCH_CRITERIA, hasSearchCriteria, type AiSearchCriteria } from '../search/ai-match-model'
-import { EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
+import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
 import LostResultFilters from './LostResultFilters'
 import '../../styles/gallery-search.css'
 import '../../styles/lost-results.css'
@@ -399,9 +399,7 @@ export default function DirectSearchPage() {
       {TIER_LEGEND.map(tier => <span key={tier.label} className={'direct-search__tier direct-search__tier--' + tier.className}>{tier.label}</span>)}
     </div>}
     {live.partial && <p className="lost-results__partial" role="status">일부 공개 정보를 불러오지 못했어요. 확인 가능한 결과를 보여드려요.</p>}
-    {live.loading ? <div className="gallery-result-grid direct-search__grid" aria-busy="true" aria-label="목록 로딩 상태">
-      {Array.from({ length: 8 }, (_, index) => <div className="gallery-result-skeleton" key={index} />)}
-    </div> : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={() => setReloadToken(token => token + 1)} /></EmptyState>
+    {live.loading ? <AiSearching label="AI가 공개 습득물 속에서 물건을 뒤지고 있어요" /> : live.error ? <EmptyState title="목록을 불러오지 못했어요" description={live.error + ' 잠시 뒤 다시 시도해 주세요.'} error><RetryButton onClick={() => setReloadToken(token => token + 1)} /></EmptyState>
       : <>
         <div className="direct-search__pagination-top">
           {(pages > 1 || live.total > API_ROWS) && <Pagination page={page} pages={pages} onChange={goToPage} inputId="direct-page-jump-top" position="top" />}

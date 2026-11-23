@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, ImageOff, Info, MapPin, RotateCcw, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bot, Check, CreditCard, ImageOff, Info, KeyRound, MapPin, RotateCcw, Search, ShieldCheck, Smartphone, Wallet, Watch } from 'lucide-react'
+import '../../styles/ai-searching.css'
 import Modal from '../../components/Modal'
 import { usePhotoPreview } from '../search/SearchComposer'
 import { MAX_LOST_REFERENCE_PHOTOS, REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from '../search/model'
@@ -77,13 +78,27 @@ export function PhotoViewer({ photo, open, onClose, footer, className = '' }: { 
   return <Modal open={open} title={photo.name} focusKey={'viewer-' + photo.id} className={'photo-viewer ' + className} onClose={onClose} footer={footer}><div className="viewer-photo"><PhotoImage photo={photo} /></div></Modal>
 }
 
+/** 사진이 없는 물건은 긴 설명 대신 품목 아이콘만 크게 보여준다. 설명은 스크린리더 라벨로만 남긴다. */
 export function NoPhoto({ message = '등록된 사진 없음', category }: { message?: string; category?: string | null }) {
-  const hasCategory = !!category?.trim()
-  const Icon = hasCategory ? categoryIcon(category) : ImageOff
-  return <div className={hasCategory ? 'no-photo no-photo--category' : 'no-photo'}>
+  const label = category?.trim() ? category.trim() + ' 품목 아이콘' : message
+  const Icon = category?.trim() ? categoryIcon(category) : ImageOff
+  return <div className={category?.trim() ? 'no-photo no-photo--category' : 'no-photo'} role="img" aria-label={label}>
     <Icon aria-hidden="true" />
-    <span>{message}</span>
-    {hasCategory && <small className="no-photo__category">{category}</small>}
+  </div>
+}
+
+const AI_SEARCH_ITEMS = [CreditCard, Smartphone, Wallet, Watch, KeyRound]
+
+/** 검색 중 빈칸 대신: 로봇이 선반의 물건을 돋보기로 훑으며 뒤지는 장면. */
+export function AiSearching({ label = 'AI가 물건을 뒤지고 있어요', compact = false }: { label?: string; compact?: boolean }) {
+  return <div className={compact ? 'ai-search ai-search--compact' : 'ai-search'} role="status" aria-live="polite">
+    <div className="ai-search__scene" aria-hidden="true">
+      <div className="ai-search__shelf">
+        {AI_SEARCH_ITEMS.map((Icon, index) => <span className="ai-search__item" key={index}><Icon /></span>)}
+      </div>
+      <div className="ai-search__bot"><Bot /><span className="ai-search__lens"><Search /></span></div>
+    </div>
+    <p className="ai-search__caption">{label}<span className="ai-search__dots" aria-hidden="true"><i /><i /><i /></span></p>
   </div>
 }
 
