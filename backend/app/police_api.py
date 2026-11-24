@@ -6,7 +6,8 @@ import math
 import re
 import unicodedata
 import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
@@ -30,6 +31,7 @@ DETAIL_PATHS = {
     "portal": "/LosPtfundInfoInqireService/getPtLosfundDetailInfo",
 }
 SOURCES = ("police", "portal")
+PHOTO_SEARCH_RECENT_DAYS = 3
 IMAGE_BASE = "https://www.lost112.go.kr"
 MAX_XML_BYTES = 2_000_000
 # 요청마다 새 커넥션을 만들면 TLS 핸드셰이크 때문에 전체 스캔이 몇 배 느려진다.
@@ -307,13 +309,15 @@ def text_signal_score(item: dict, criteria: dict[str, list[str]], keyword: str) 
             score += 2
         elif _term_matches(term, category):
             score += 1
+    if any(_term_matches(term, _item_text(item)) for term in criteria.get("exclude", [])):
+        score -= 6
     return score
 
 
 def score_criteria(item: dict, criteria: dict[str, list[str]]) -> dict:
     """공개 API 항목의 전체 텍스트에 AND/OR/NOT과 사진 특징을 적용한다.
 
-    include/any/imageFeatures는 관련도 점수로 반영하고, exclude는 명시적 NOT이므로 제외한다.
+    AI 단서를 점수로 돌려주고, 제외 단서에 해당해도 호출자가 후보 전체를 유지할 수 있게 한다.
     조건이 없으면 원래 공개 API 순서를 유지한다.
     """
     result = {"score": 0.0, "hits": [], "allInclude": False, "excluded": None}
@@ -378,16 +382,8 @@ def search_filtered(source: str, params: dict[str, str], page: int, rows: int) -
     return {"items": items, "totalCount": total or len(items)}
 
 
-def _keyword_item_match(item: dict, keyword: str) -> bool:
-    """전용 필터 API에는 PRDT_NM이 없으므로 물품명·내용·분류로 로컬 매칭한다."""
-    if not keyword:
-        return True
-    text = " ".join(str(item.get(field) or "") for field in ("name", "subject", "category")).lower()
-    return _term_matches(keyword.lower(), text)
-
-
 def criteria_pass(item: dict, criteria: dict[str, list[str]]) -> bool:
-    """AI 조건을 점수가 아닌 하드 필터로 적용한다(직접 찾기는 순위를 재정렬하지 않는다)."""
+    """공개 설명이 AI 단서와 일치하는지 확인한다."""
     if not criteria:
         return True
     text = _item_text(item)
@@ -476,8 +472,6 @@ def _browse_dedupe_key(item: dict) -> str:
 
 def _browse_filtered(
     param_sets: list[dict[str, str]],
-    cleaned: str,
-    page: int,
     rows: int,
     max_pages: int | None,
     visual_need: int = 0,
@@ -534,7 +528,8 @@ def _browse_filtered(
                     results.setdefault(source, []).extend(payload["items"])
                     pages_scanned += 1
             number += 4
-            if not cleaned or sum(len(rows_for_source) for rows_for_source in results.values()) >= needed:
+            if sum(len(rows_for_source) for rows_for_source in results.values()) >= needed:
+                limit_reached = limit_reached or number <= available
                 break
     return results, errors, total_reported, pages_scanned, limit_reached
 
@@ -547,15 +542,20 @@ def browse_all(
     hints: dict | None = None,
     max_pages: int | None = None,
     visual_need: int = 0,
+    search_mode: str | None = None,
 ) -> dict:
     """직접 찾기용: 필터가 있으면 전용 API로, 없으면 이름 검색으로 여러 페이지를 스캔한다."""
     cleaned = _keyword(keyword)
-    criteria = _normalize_criteria(hints)
+    criteria = {} if search_mode == "basic" else _normalize_criteria(hints)
+    has_ai = search_mode == "ai" or bool(criteria)
+    has_keyword = bool(cleaned)
+    has_filters = any(str(value or "").strip() for value in (filters or {}).values())
     param_sets = lostfound_codes.filter_param_sets(filters, _api_date)
     api_keywords: list[str] = []
     reported_totals: dict[str, int] = {}
     pages_scanned = 0
     limit_reached = False
+    photo_priority: list[str] = []
     use_codes = bool(param_sets)
     # 지역 텍스트 검사를 건너뛸 수 있는 건 공식 코드로 지역을 실제 좁혔을 때뿐이다.
     # 코드 없는 지역값(구·동 등)은 다른 필터가 코드로 가도 텍스트 검사를 유지한다.
@@ -563,7 +563,7 @@ def browse_all(
 
     if use_codes:
         results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(
-            param_sets, cleaned, page, rows, max_pages, visual_need,
+            param_sets, rows, max_pages, visual_need,
         )
         reported_totals["filtered"] = total_reported
     else:
@@ -576,12 +576,11 @@ def browse_all(
         results: dict[str, list[dict]] = {}
         errors: list[dict] = []
 
-        scanned_per_term = 1
+        scanned_by_term: dict[str, int] = {}
 
         def scan_terms(terms: list[str]) -> int:
-            nonlocal scanned_per_term
             per_term = max(1, cap // len(terms)) if cap else 1
-            scanned_per_term = per_term
+            scanned_by_term.update(dict.fromkeys(terms, per_term))
             with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
                 futures = {
                     (term, source, number): executor.submit(search, source, term, number, rows)
@@ -600,76 +599,72 @@ def browse_all(
                     reported_totals[term] = max(reported_totals.get(term, 0), payload["totalCount"])
             return per_term * len(terms)
 
-        # 좁은 탐색어만 쓰면 공개 원문에 없는 이름·사진 특징을 놓친다.
-        # 같은 페이지 예산 안에서 빈 탐색어로 최신 항목도 함께 훑는다.
-        scan_terms_list = list(dict.fromkeys([*api_keywords, ""])) if cleaned else api_keywords
+        # AI 검색은 이름 조회 결과에 최근 공개 목록을 추가해 사진과 설명도 비교한다.
+        scan_terms_list = list(dict.fromkeys([*api_keywords, ""])) if has_ai else api_keywords
         pages_scanned = scan_terms(scan_terms_list)
-        # 이름처럼 공개 원문에 그대로 없는 검색어는 0건이 나온다.
-        # 이때 한 번 더 넓게 훑어 가려진 이름('류*진')이나 사진 속 특징을 찾을 수 있게 한다.
-        if cleaned and not any(results.values()):
-            results = {}
-            reported_totals = {}
-            pages_scanned = scan_terms([""])
-            api_keywords = []
-        limit_reached = cap > 0 and any(value > scanned_per_term * rows for value in reported_totals.values())
+        # 일반 검색의 이름 조회가 빗나가면 최근 공개 설명에서도 입력어를 확인한다.
+        if not has_ai and has_keyword and not any(
+            _term_matches(cleaned.lower(), _item_text(item))
+            for source_items in results.values() for item in source_items
+        ):
+            pages_scanned += scan_terms([""])
+        limit_reached = cap > 0 and any(value > scanned_by_term[term] * rows for term, value in reported_totals.items())
 
-    # 어떤 신호가 맞았는지 등급으로 표시하고 전부 보여준다. NOT는 명시적으로 제외하고,
-    # '지갑'·'노트북'처럼 공식 분류명 그대로의 품목어도 카테고리 하드 필터로 적용한다.
-    # 장소어는 이미 prefer로 옮겨졌고, 수식어가 붙은 문구·색상은 순위에만 반영한다.
-    hard_include = [term for term in criteria.get("include", []) if lostfound_codes.is_category_term(term)]
-    hard_criteria = {key: value for key, value in criteria.items() if key == "exclude"}
-    if hard_include:
-        hard_criteria["include"] = hard_include
-    has_ai = bool(criteria)
-    has_keyword = bool(cleaned)
-    has_filters = any(str(value or "").strip() for value in (filters or {}).values())
+        if search_mode == "ai" and has_keyword and not has_filters:
+            # 분실물 찾기와 같은 날짜·품목 목록에서 이름과 별도로 사진을 가져온다.
+            with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
+                jobs = _recent_photo_pages(executor, [*cleaned.split(), *api_keywords], "", 1, rows)
+                for (source, _day), future in jobs.items():
+                    try:
+                        payload = future.result()
+                    except PoliceError as error:
+                        if not any(entry["source"] == source for entry in errors):
+                            errors.append({"source": source, "code": error.code, "message": error.message})
+                        continue
+                    rows_for_day = payload["items"]
+                    results.setdefault(source, []).extend(rows_for_day)
+                    photo_priority.extend(item["id"] for item in rows_for_day if item.get("imageUrl"))
+                    pages_scanned += 1
+                    limit_reached = limit_reached or payload["totalCount"] > rows
+
+    # 사용자가 고른 필터와 일반 검색어만 후보 범위를 결정한다.
     active_signals = has_ai + has_keyword + has_filters
-    def collect(hard: dict) -> dict[str, dict]:
-        merged: dict[str, dict] = {}
-        deduped: dict[str, dict] = {}
-        for source in SOURCES:
-            for row in results.get(source, []):
-                if row["id"] in merged:
-                    continue
-                if not criteria_pass(row, hard):
-                    continue
-                merged[row["id"]] = row
-                key = _browse_dedupe_key(row)
-                if key in deduped:
-                    continue
-                match = score_criteria(row, criteria)
-                ai_ok = criteria_pass(row, criteria) if has_ai else False
-                keyword_ok = _term_matches(cleaned.lower(), _item_text(row)) if has_keyword else False
-                filter_ok = metadata_pass(row, filters, skip_region=use_codes and region_applied) if has_filters else False
-                matched_signals = int(ai_ok) + int(keyword_ok) + int(filter_ok)
-                if active_signals >= 2 and matched_signals == active_signals:
-                    tier = 0
-                elif ai_ok:
-                    tier = 1
-                elif keyword_ok:
-                    tier = 2
-                elif filter_ok:
-                    tier = 3
-                elif match["hits"]:
-                    tier = 4
-                else:
-                    tier = 5
-                row["matchTier"] = tier
-                if tier == 0:
-                    matched = [name for name, ok in (("AI", ai_ok), ("검색어", keyword_ok), ("조건 필터", filter_ok)) if ok]
-                    row["matchLabel"] = "+".join(matched) + " 일치"
-                else:
-                    row["matchLabel"] = MATCH_TIERS[tier]
-                row["matchScore"] = _score(row, cleaned)
-                row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
-                deduped[key] = row
-        return deduped
-
-    deduped = collect(hard_criteria)
-    if not deduped and hard_include:
-        # 분류명 그대로의 품목어가 하나도 없으면 화면을 비우지 않는다.
-        # 이때도 NOT는 유지하고, 품목어는 다른 단서와 함께 순위에만 반영한다.
-        deduped = collect({key: value for key, value in criteria.items() if key == "exclude"})
+    seen_ids: set[str] = set()
+    deduped: dict[str, dict] = {}
+    for source in SOURCES:
+        for row in results.get(source, []):
+            if row["id"] in seen_ids:
+                continue
+            if has_filters and not metadata_pass(row, filters, skip_region=use_codes and region_applied):
+                continue
+            keyword_ok = has_keyword and _term_matches(cleaned.lower(), _item_text(row))
+            if has_keyword and not has_ai and not keyword_ok:
+                continue
+            seen_ids.add(row["id"])
+            key = _browse_dedupe_key(row)
+            if key in deduped:
+                continue
+            match = score_criteria(row, criteria)
+            ai_ok = bool(criteria) and criteria_pass(row, criteria)
+            signals = (("AI", ai_ok), ("검색어", keyword_ok), ("조건 필터", has_filters))
+            matched = [name for name, ok in signals if ok]
+            if active_signals >= 2 and len(matched) == active_signals:
+                tier = 0
+            elif ai_ok:
+                tier = 1
+            elif keyword_ok:
+                tier = 2
+            elif has_filters:
+                tier = 3
+            elif match["hits"] and not match["excluded"]:
+                tier = 4
+            else:
+                tier = 5
+            row["matchTier"] = tier
+            row["matchLabel"] = "+".join(matched) + " 일치" if tier == 0 else MATCH_TIERS[tier]
+            row["matchScore"] = _score(row, cleaned)
+            row["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
+            deduped[key] = row
     items = sorted(deduped.values(), key=lambda row: (row["foundDate"], row["id"]), reverse=True)
     # 같은 등급 안에서도 제목·본문에 맞은 말이 많은 물건부터 보여준다.
     # 사진 점수는 텍스트 신호×10과 합산해 텍스트 우선 순위를 유지한다(최종 정렬도 같은 규칙).
@@ -687,6 +682,7 @@ def browse_all(
         # 사진 분석은 페이지에 잘려 나간 항목도 봐야 하므로 전체 후보를 함께 넘긴다.
         # 응답 모델에서는 제외되고, 서버 안에서만 재정렬·재페이지네이션에 쓴다.
         "allItems": items,
+        "photoPriority": list(dict.fromkeys(photo_priority)),
         "errors": errors,
         "page": page,
         "rows": rows,
@@ -699,36 +695,88 @@ def browse_all(
     }
 
 
-def search_all(keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = False, hints: dict | None = None) -> dict:
+def _photo_params(terms: list[str], category_hint: str) -> dict[str, str]:
+    # 원문 품목을 우선한다. 어느 쪽이든 별도 조회에만 사용한다.
+    for term in [*terms, category_hint]:
+        params = lostfound_codes.category_params(term)
+        if params:
+            return params
+    return {}
+
+
+def _recent_photo_pages(
+    executor: ThreadPoolExecutor, terms: list[str], category_hint: str, page: int, rows: int,
+) -> dict[tuple[str, str], Future[dict]]:
+    category = _photo_params(terms, category_hint)
+    today = datetime.now(timezone(timedelta(hours=9))).date()
+    days = [(today - timedelta(days=offset)).strftime("%Y%m%d") for offset in range(PHOTO_SEARCH_RECENT_DAYS)]
+    return {
+        (source, day): executor.submit(
+            search_filtered, source, {**category, "START_YMD": day, "END_YMD": day}, page, rows,
+        )
+        for source in SOURCES for day in days
+    }
+
+
+def search_all(
+    keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = False, hints: dict | None = None,
+    *, original_query: str = "", photo_search: bool = False, photo_category: str = "",
+) -> dict:
     cleaned = _keyword(keyword)
-    if not cleaned and not allow_empty:
+    original = _keyword(original_query)
+    if not cleaned and not original and not (allow_empty or photo_search):
         raise PoliceError("lostfound_invalid_query", "검색할 물품명을 입력해 주세요.")
     criteria = _normalize_criteria(hints)
-    # 자연어 문장 전체를 PRDT_NM에 넣으면 0건이므로 browse_all과 같은 규칙으로 낱말을 쪼갠다.
-    raw_keywords = criteria.get("apiKeywords") or ([cleaned] if cleaned else [""])
-    split_keywords: list[str] = []
-    for term in raw_keywords:
-        split_keywords.extend(term.split())
-    api_keywords = list(dict.fromkeys(split_keywords))[:3] or [""]
+    ai_terms = [word for term in criteria.get("apiKeywords", []) for word in term.split()]
+    name_terms = ai_terms or cleaned.split()
+    # 원문 단서와 AI가 찾은 탐색어를 모두 이름 조회에 사용한다.
+    api_keywords = list(dict.fromkeys([*original.split()[:2], *name_terms]))[:3]
+    if not api_keywords and not photo_search:
+        api_keywords = [""]
 
     results: dict[str, list[dict]] = {}
+    photo_results: dict[str, dict] = {}
+    context_results: dict[str, dict] = {}
+    available_sources: set[str] = set()
     errors: list[dict] = []
     totals: dict[str, int] = {}
+    has_more = False
     with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
         futures = {
-            (term, source): executor.submit(search, source, term, page, rows)
+            (False, term, source): executor.submit(search, source, term, page, rows)
             for term in api_keywords
             for source in SOURCES
         }
-        for (term, source), future in futures.items():
+        if photo_search:
+            recent = _recent_photo_pages(executor, original.split() + cleaned.split() + ai_terms, photo_category, page, rows)
+            for source in SOURCES:
+                for (recent_source, day), job in recent.items():
+                    if recent_source == source:
+                        futures[True, day, source] = job
+                # 최신 일자와 함께 전체 공개 목록도 이어서 볼 수 있다.
+                futures[True, "", source] = executor.submit(search, source, "", page, rows)
+        for (is_photo, term, source), future in futures.items():
             try:
                 payload = future.result()
             except PoliceError as error:
                 if not any(error_item["source"] == source for error_item in errors):
                     errors.append({"source": source, "code": error.code, "message": error.message})
                 continue
-            results.setdefault(source, []).extend(payload["items"])
-            totals[term] = max(totals.get(term, 0), payload["totalCount"])
+            available_sources.add(source)
+            if is_photo:
+                for item in payload["items"]:
+                    if item.get("imageUrl"):
+                        photo_results.setdefault(item["id"], item)
+                    # 설명이 구체적인 항목은 사진이 없어도 맥락 후보에 들어간다.
+                    literal = (original or cleaned).lower()
+                    if _term_matches(literal, _item_text(item)) or score_criteria(item, criteria)["hits"]:
+                        context_results.setdefault(item["id"], item)
+            else:
+                results.setdefault(source, []).extend(payload["items"])
+                totals[term] = max(totals.get(term, 0), payload["totalCount"])
+            # Each source and term paginates independently. The merged item count can
+            # exceed an individual source's total even when it has more pages.
+            has_more = has_more or page * rows < payload["totalCount"]
 
     merged: dict[str, dict] = {}
     for source in SOURCES:
@@ -737,11 +785,12 @@ def search_all(keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = 
     items = []
     for item in merged.values():
         match = score_criteria(item, criteria)
-        if match["excluded"]:
-            continue
         base_score = _score(item, cleaned)
-        item["matchScore"] = round(base_score + match["score"], 2)
-        item["aiMatch"] = {"hits": match["hits"], "allInclude": match["allInclude"]}
+        item["matchScore"] = round(base_score + (0 if match["excluded"] else match["score"]), 2)
+        item["aiMatch"] = {
+            "hits": [] if match["excluded"] else match["hits"],
+            "allInclude": bool(not match["excluded"] and match["allInclude"]),
+        }
         items.append(item)
     items.sort(key=lambda item: item["id"])
     items.sort(key=lambda item: item["foundDate"], reverse=True)
@@ -750,9 +799,13 @@ def search_all(keyword: str, page: int = 1, rows: int = 20, allow_empty: bool = 
         "query": cleaned,
         "apiKeywords": api_keywords,
         "matched": sum(1 for item in items if item["aiMatch"]["hits"]),
-        "sources": [source for source in SOURCES if source in results],
+        "sources": [source for source in SOURCES if source in available_sources],
         "total": max(totals.values()) if totals else 0,
+        "hasMore": has_more and page < config.LOSTFOUND_SEARCH_MAX_PAGES,
+        "scanLimitReached": has_more and page >= config.LOSTFOUND_SEARCH_MAX_PAGES,
         "items": items,
+        "photoItems": list(photo_results.values()),
+        "contextItems": [item for item_id, item in context_results.items() if item_id not in merged],
         "errors": errors,
     }
 

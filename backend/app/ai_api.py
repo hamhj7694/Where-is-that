@@ -46,7 +46,7 @@ def ai_match_public_images(request: AiVisualMatchRequest) -> dict:
     말로만 모르는 캐릭터는 웹에서 찾은 참고 사진·특징을 중간 단계에서 추가한다.
     """
     try:
-        if request.webReferenceApplied:
+        if request.webReferenceApplied or request.localOnly:
             return match_visual_features(request).model_dump()
         features, references = web_reference.enrich(
             list(request.imageFeatures), list(request.references)
@@ -54,6 +54,9 @@ def ai_match_public_images(request: AiVisualMatchRequest) -> dict:
         enriched = request.model_copy(update={
             "imageFeatures": features, "references": references,
             "webReferenceApplied": True,
+            "preferSemantic": request.photoOnly and not request.localOnly and (
+                request.preferSemantic or not request.references
+            ),
         })
         return match_visual_features(enriched).model_dump()
     except AiPipelineError as error:

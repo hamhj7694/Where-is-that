@@ -4,7 +4,8 @@ import json
 import re
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator, model_validator
+from .config import LOSTFOUND_SEARCH_MAX_PAGES
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 IMAGE_DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$")
@@ -213,10 +214,19 @@ class ContentPayload(BaseModel):
 
 
 class LostFoundSearchRequest(BaseModel):
-    keyword: str = Field(min_length=1, max_length=100)
-    page: int = Field(default=1, ge=1, le=100)
+    keyword: str = Field(default="", max_length=100)
+    page: int = Field(default=1, ge=1, le=LOSTFOUND_SEARCH_MAX_PAGES)
     rows: int = Field(default=20, ge=1, le=40)
     hints: dict[str, Any] | None = None
+    originalQuery: str = Field(default="", max_length=100)
+    photoSearch: bool = False
+    photoCategory: str = Field(default="", max_length=100)
+
+    @model_validator(mode="after")
+    def validate_search_input(self) -> LostFoundSearchRequest:
+        if not self.keyword.strip() and not self.originalQuery.strip() and not self.photoSearch:
+            raise ValueError("검색할 물품명이나 참고 사진이 필요해요.")
+        return self
 
     @field_validator("hints")
     @classmethod
@@ -239,6 +249,7 @@ class LostFoundBrowseRequest(BaseModel):
     rows: int = Field(default=40, ge=1, le=40)
     maxPages: int = Field(default=200, ge=1, le=1000)
     hints: dict[str, Any] | None = None
+    searchMode: Literal["basic", "ai"] | None = None
     filters: dict[str, str] = Field(default_factory=dict)
     # 더 찾아보기: 이미 분석한 최신 사진 수만큼 건너뛰고 오래된 사진을 본다.
     skipVisual: int = Field(default=0, ge=0, le=600)
@@ -324,7 +335,11 @@ class LostFoundSearchResponse(BaseModel):
     query: str
     sources: list[str] = Field(default_factory=list)
     total: int = 0
+    hasMore: bool | None = None
+    scanLimitReached: bool = False
     items: list[FoundItem] = Field(default_factory=list)
+    photoItems: list[FoundItem] = Field(default_factory=list)
+    contextItems: list[FoundItem] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
     apiKeywords: list[str] = Field(default_factory=list)
     matched: int = 0
@@ -336,7 +351,6 @@ class LostFoundBrowseResponse(LostFoundSearchResponse):
     scanned: int = 0
     pagesScanned: int = 0
     filterApi: bool = False
-    scanLimitReached: bool = False
     criteriaApplied: bool = False
     filtersApplied: dict[str, str] = Field(default_factory=dict)
     visualAnalyzed: bool = False
@@ -365,6 +379,7 @@ class BrowseJobStatus(BaseModel):
     visualScanned: int = 0
     visualTotal: int = 0
     visualMore: bool = False
+    photoMatches: list[FoundItem] = Field(default_factory=list)
 
 
 class MapConfigResponse(BaseModel):

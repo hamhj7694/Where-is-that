@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from urllib.parse import urlparse
+from xml.etree import ElementTree
 
 import pytest
 from fastapi.testclient import TestClient
@@ -192,6 +193,37 @@ def test_list_queries_both_sources_without_keyword(client):
     assert all(params["PRDT_NM"] == "" for _, params in FakeClient.calls)
 
 
+def test_search_continues_until_each_source_is_exhausted(client, monkeypatch):
+    def paged_response(path, params):
+        portal = path.startswith("/LosPtfundInfoInqireService/")
+        root = ElementTree.fromstring(PORTAL_SEARCH_XML if portal else POLICE_SEARCH_XML)
+        root.find(".//totalCount").text = "1" if portal else "2"
+        if portal and params["pageNo"] > 1:
+            root.find(".//items").clear()
+        return root
+
+    monkeypatch.setattr(police_api, "_request", paged_response)
+    first = client.post("/api/lostfound/search", json={"keyword": "지갑", "rows": 1}).json()
+    assert len(first["items"]) == first["total"] == 2
+    assert first["hasMore"] is True
+    second = client.post("/api/lostfound/search", json={"keyword": "지갑", "rows": 1, "page": 2}).json()
+    assert [item["source"] for item in second["items"]] == ["police"]
+    assert second["hasMore"] is False
+
+
+def test_search_reports_upstream_items_beyond_request_limit(client, monkeypatch):
+    monkeypatch.setattr(police_api.config, "LOSTFOUND_SEARCH_MAX_PAGES", 1)
+    def unscanned_response(_path, _params):
+        root = ElementTree.fromstring(POLICE_SEARCH_XML)
+        root.find(".//totalCount").text = "2"
+        return root
+
+    monkeypatch.setattr(police_api, "_request", unscanned_response)
+    result = client.post("/api/lostfound/search", json={"keyword": "지갑", "rows": 1}).json()
+    assert result["hasMore"] is False
+    assert result["scanLimitReached"] is True
+
+
 def test_browse_reports_filtered_total_and_scan_metadata(client):
     response = client.post("/api/lostfound/browse", json={
         "keyword": "", "page": 1, "rows": 40, "maxPages": 3,
@@ -199,11 +231,11 @@ def test_browse_reports_filtered_total_and_scan_metadata(client):
     })
     assert response.status_code == 200
     body = response.json()
-    # 색상이 안 맞는 건도 공개 원문 등급으로 함께 표시한다.
-    assert body["total"] == 2
+    # 사용자가 고른 색상과 일치하는 후보만 표시한다.
+    assert body["total"] == 1
     tiers = {item["atcId"]: item["matchTier"] for item in body["items"]}
     assert tiers["F2018113000002322"] == 3  # 블랙 → 조건 필터 일치
-    assert tiers["V0007722L11170002"] == 5  # 은색 → 공개 원문
+    assert "V0007722L11170002" not in tiers
     assert body["page"] == 1
     assert body["rows"] == 40
     assert body["scanned"] >= 1
@@ -361,7 +393,7 @@ def test_partial_failure_is_not_cached(client, monkeypatch):
     assert len(calls) == 2
 
 
-def test_ai_hints_filter_the_full_public_json(client):
+def test_ai_hints_rank_the_full_public_json(client):
     response = client.post("/api/lostfound/search", json={
         "keyword": "검은 가죽 지갑을 찾습니다",
         "hints": {
@@ -378,8 +410,7 @@ def test_ai_hints_filter_the_full_public_json(client):
     # 자연어 원문이 아니라 분리된 핵심 명사만 PRDT_NM으로 전달된다.
     assert all(params["PRDT_NM"] == "지갑" for url, params in FakeClient.calls
                if "getLosfundInfoAccTpNmCstdyPlace" in url or "getPtLosfundInfoAccTpNmCstdyPlace" in url)
-    # 블랙(검정) 남성용 반지갑만 조건을 만족한다(포털의 은색지갑은 제외).
-    assert [item["source"] for item in body["items"]] == ["police"]
+    assert [item["source"] for item in body["items"]] == ["police", "portal"]
     item = body["items"][0]
     assert item["aiMatch"]["allInclude"] is True
     assert "블랙" in item["aiMatch"]["hits"]
@@ -388,7 +419,7 @@ def test_ai_hints_filter_the_full_public_json(client):
     assert body["matched"] == 1
 
 
-def test_ai_hints_not_excludes_and_broad_keywords_are_queried(client):
+def test_ai_hints_demote_exclusions_and_query_broad_keywords(client):
     response = client.post("/api/lostfound/search", json={
         "keyword": "지갑",
         "hints": {"apiKeywords": ["지갑", "가방"], "exclude": ["은색"]},
@@ -396,7 +427,7 @@ def test_ai_hints_not_excludes_and_broad_keywords_are_queried(client):
     assert response.status_code == 200
     body = response.json()
     assert body["apiKeywords"] == ["지갑", "가방"]
-    assert [item["source"] for item in body["items"]] == ["police"]
+    assert {item["source"] for item in body["items"]} == {"police", "portal"}
     keywords = {params["PRDT_NM"] for _, params in FakeClient.calls}
     assert keywords == {"지갑", "가방"}
     assert body["matched"] == 0

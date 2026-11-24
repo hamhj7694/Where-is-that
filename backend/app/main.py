@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import ai_api, config, db, geo, kakao, local_vision, name_terms, police_api, recovery, security
+from . import ai_api, config, db, geo, kakao, name_terms, police_api, public_photo_api, recovery, security
 from .schemas import (
     ACCOUNT_DELETE_CONFIRMATION,
     BrowseJobStart,
@@ -57,12 +57,8 @@ VISUAL_BATCH_SIZE = 8
 VISUAL_MATCH_MIN = 40
 # 40점부터 사진 점수를 남기고, 50점부터 '사진 특징이 맞음'으로 등급도 올린다.
 VISUAL_STRONG_MIN = 50
-# 조기 종료는 엄격하게 유지한다. 50점 하나로 멈추면 오래된 사진을 못 보기 때문이다.
-VISUAL_EARLY_STOP_MIN = 90
-VISUAL_EARLY_STOP_HITS = 3
-VISUAL_EARLY_STOP_HIT_MIN = 70
 # 정렬 키·임계값·웹 참고 정책을 바꿀 때만 올린다. 캐시가 옛 규칙을 계속 쓰지 않게 한다.
-BROWSE_ALGO_VERSION = 16
+BROWSE_ALGO_VERSION = 18
 
 
 def _browse_page_cap(payload: "LostFoundBrowseRequest") -> int:
@@ -81,33 +77,13 @@ def _normalize_prior_scores(payload: "LostFoundBrowseRequest") -> dict[str, int]
     }
 
 
-def _color_mismatched_ids(pool: list[dict], requested: tuple[str, ...]) -> set[str]:
-    """색상을 직접 말했을 때 공식 색상이 정면으로 어긋난 후보 ID를 모은다.
-
-    사진 모델이 브랜드·물건 종류만 보고 점수를 올려도, 공식 기록에 흰색이 아닌
-    카드로 등록된 항목은 '하얀 카드' 결과에서 사진 일치로 올라오지 않게 한다.
-    색상 정보가 없는 항목은 사진 판단에 맡긴다.
-    """
-    if not requested:
-        return set()
-    wanted = set(requested)
-    return {
-        item["id"]
-        for item in pool
-        if (colors := set(local_vision.colors_from_label(item.get("color"))))
-        if colors.isdisjoint(wanted)
-    }
-
-
-def _restore_visual_scores(
-    result: dict, scores: dict[str, int], mismatched: set[str] | None = None
-) -> None:
+def _restore_visual_scores(result: dict, scores: dict[str, int]) -> None:
     """사전 점수를 전체 후보에 다시 붙인다. 같은 문구가 중복 쌓이지 않게 정리한다."""
     if not scores:
         return
     for item in (result.get("allItems") or result.get("items") or []):
         score = scores.get(item["id"])
-        if not score or (mismatched and item["id"] in mismatched):
+        if not score:
             continue
         ai = item.get("aiMatch") or {"hits": [], "allInclude": False}
         hits = [hit for hit in (ai.get("hits") or []) if not str(hit).startswith("사진 특징 ")]
@@ -467,6 +443,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 app.include_router(ai_api.router)
+app.include_router(public_photo_api.router)
 
 
 def api_error(status_code: int, code: str, message: str) -> HTTPException:
@@ -874,11 +851,14 @@ def _lostfound_search_key(payload: LostFoundSearchRequest) -> str:
             "page": payload.page,
             "rows": payload.rows,
             "hints": payload.hints or {},
+            "originalQuery": payload.originalQuery.strip(),
+            "photoSearch": payload.photoSearch,
+            "photoCategory": payload.photoCategory.strip(),
         },
         sort_keys=True,
         ensure_ascii=False,
     )
-    return "search:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return "search:v3:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _lostfound_list_key(payload: LostFoundListRequest) -> str:
@@ -898,6 +878,7 @@ def _lostfound_browse_key(payload: LostFoundBrowseRequest) -> str:
             "skipVisual": payload.skipVisual,
             "priorVisualScores": _normalize_prior_scores(payload),
             "hints": payload.hints or {},
+            "searchMode": payload.searchMode,
             "filters": payload.filters,
         },
         sort_keys=True,
@@ -967,6 +948,7 @@ def _apply_visual_hints(
     result: dict,
     payload: LostFoundBrowseRequest,
     progress: Callable[[int, int], None] | None = None,
+    preview: Callable[[list[dict]], None] | None = None,
 ) -> dict:
     """직접 찾기도 공개 API 사진을 AI로 보고 시각 특징이 맞으면 등급을 올린다.
 
@@ -976,22 +958,21 @@ def _apply_visual_hints(
     """
     result.setdefault("visualScanned", 0)
     result.setdefault("visualMore", False)
-    hints = payload.hints or {}
+    search_mode = getattr(payload, "searchMode", None)
+    hints = {} if search_mode == "basic" else payload.hints or {}
     # 사람 이름은 공개 원문의 텍스트 단서다. 사진에서 그 글자를 읽은 근거가 없으므로
     # 시각 특징·웹 참고·사진 비교 프롬프트에서 모두 제외한다.
     features = name_terms.without_person_names([
         term for term in (hints.get("imageFeatures") or []) if isinstance(term, str) and term.strip()
     ])
     visual_query = name_terms.strip_person_names(payload.keyword)
-    requested = local_vision.requested_colors([*features, visual_query])
-    prior = _normalize_prior_scores(payload)
+    prior = {} if search_mode == "basic" else _normalize_prior_scores(payload)
     if not visual_query:
         # 이름만 검색한 경우 예전 작업에 남은 사진 점수도 되살리지 않는다.
         prior = {}
     pool = result.get("allItems") or result.get("items") or []
-    mismatched = _color_mismatched_ids(pool, requested)
     # AI 조건이 비었거나 후보가 없어도 이전에 찾은 점수는 되살리고 정렬은 한다.
-    _restore_visual_scores(result, prior, mismatched)
+    _restore_visual_scores(result, prior)
 
     def ranked() -> dict:
         # 현재 페이지에 없어도 '더 찾아보기'가 점수를 이어받을 수 있도록 전체 맵을 돌려준다.
@@ -1002,7 +983,7 @@ def _apply_visual_hints(
         }
         return _rank_browse_result(result, hints, payload.keyword, payload.page, payload.rows)
 
-    if not features or not pool:
+    if not pool or not visual_query or (not features and search_mode != "ai") or search_mode == "basic":
         result["visualMore"] = False
         return ranked()
 
@@ -1016,11 +997,14 @@ def _apply_visual_hints(
     # 잃어버린 지 얼마 안 된 물건을 찾을 확률이 훨씬 높기 때문이다.
     ordered = sorted(pool, key=lambda row: row.get("matchTier", 5))
     ordered.sort(key=lambda row: row.get("foundDate", ""), reverse=True)
+    priority = {item_id: index for index, item_id in enumerate(result.get("photoPriority") or [])}
+    if priority:
+        ordered.sort(key=lambda row: priority.get(row["id"], len(priority)))
     # '더 찾아보기'는 이미 본 최신 사진을 건너뛰고 그 다음 오래된 묶음을 분석한다.
     skip = max(0, getattr(payload, "skipVisual", 0))
     with_photos = [item for item in ordered if item.get("imageUrl")]
     photo_items = with_photos[skip:skip + VISUAL_SCAN_CAP]
-    scan_key = {"skip": skip, "features": features[:8]}
+    scan_key = {"skip": skip, "query": visual_query, "features": features[:8]}
     if result.get("visualScanKey") == scan_key:
         # 같은 응답을 다시 처리할 때는 AI를 또 부르지 않는다. 단, 점수 복원·정렬은 위에서 했다.
         return ranked()
@@ -1034,9 +1018,9 @@ def _apply_visual_hints(
     if progress:
         progress(0, len(photo_items))
 
-    # 조기 종료는 '이번 탐색에서 새로 찾은 점수'만 기준으로 삼는다.
-    # 이전 탐색의 높은 점수가 섞이면 더 찾아보기가 첫 배치에서 멈춰 버린다.
+    # 현재 탐색에 배정된 사진은 모두 확인해야 뒤에 있는 더 닮은 후보도 찾을 수 있다.
     scores: dict[str, int] = {}
+    photo_by_id = {item["id"]: item for item in photo_items}
     analyzed = 0
     for start in range(0, len(photo_items), VISUAL_BATCH_SIZE):
         batch = photo_items[start:start + VISUAL_BATCH_SIZE]
@@ -1065,6 +1049,8 @@ def _apply_visual_hints(
                 candidates=candidates,
                 externalProcessingConfirmed=True,
                 webReferenceApplied=True,
+                photoOnly=True,
+                preferSemantic=True,
             ))
         except Exception:
             # 한 묶음이 실패해도 나머지 묶음과 공개 원문 목록은 유지한다.
@@ -1076,14 +1062,13 @@ def _apply_visual_hints(
         for row in matched.results:
             if row.basis == "photo" and row.imageSimilarity >= VISUAL_MATCH_MIN:
                 for item_id in [row.id, *aliases.get(row.id, [])]:
-                    if item_id in mismatched:
-                        continue
                     scores[item_id] = max(scores.get(item_id, 0), row.imageSimilarity)
-        # 최신 것부터 봤을 때 이미 충분히 맞는 것이 나오면 오래된 것은 건너뛴다.
-        if max(scores.values(), default=0) >= VISUAL_EARLY_STOP_MIN:
-            break
-        if sum(1 for value in scores.values() if value >= VISUAL_EARLY_STOP_HIT_MIN) >= VISUAL_EARLY_STOP_HITS:
-            break
+        if preview and scores:
+            best = sorted(scores, key=scores.__getitem__, reverse=True)[:4]
+            preview([
+                {**photo_by_id[item_id], "visualScore": scores[item_id], "matchLabel": "AI 사진 일치"}
+                for item_id in best if scores[item_id] >= VISUAL_STRONG_MIN
+            ])
 
     result["visualAnalyzed"] = skip + analyzed >= len(with_photos)
     result["visualScanned"] = analyzed
@@ -1092,7 +1077,7 @@ def _apply_visual_hints(
     # 이번에 새로 찾은 점수와 이전 탐색에서 이어받은 점수를 합쳐 화면에 되살린다.
     combined = dict(prior)
     combined.update(scores)
-    _restore_visual_scores(result, combined, mismatched)
+    _restore_visual_scores(result, combined)
     return ranked()
 
 
@@ -1118,6 +1103,7 @@ def lostfound_browse(payload: LostFoundBrowseRequest) -> dict:
             filters=payload.filters,
             hints=payload.hints,
             max_pages=_browse_page_cap(payload),
+            search_mode=payload.searchMode,
             # 필터를 걸어도 사진 60장을 볼 만큼은 읽는다. 페이지 분량만 읽으면
             # 공식 코드 필터를 쓴 순간 사진 분석과 더 찾아보기가 조용히 꺼진다.
             visual_need=_browse_page_cap(payload) * payload.rows,
@@ -1159,13 +1145,19 @@ def _run_browse_job(job_id: str, payload: LostFoundBrowseRequest) -> None:
             hints=payload.hints,
             max_pages=_browse_page_cap(payload),
             visual_need=_browse_page_cap(payload) * payload.rows,
+            search_mode=payload.searchMode,
         )
         def report_visual(scanned: int, total: int) -> None:
             with _browse_jobs_lock:
                 if job_id in _browse_jobs:
                     _browse_jobs[job_id].update(visualScanned=scanned, visualTotal=total)
 
-        result = _apply_visual_hints(result, payload, report_visual)
+        def report_matches(items: list[dict]) -> None:
+            with _browse_jobs_lock:
+                if job_id in _browse_jobs:
+                    _browse_jobs[job_id]["photoMatches"] = items
+
+        result = _apply_visual_hints(result, payload, report_visual, report_matches)
         if not result["sources"]:
             first = result["errors"][0] if result["errors"] else None
             raise police_api.PoliceError(
@@ -1236,6 +1228,7 @@ def get_lostfound_browse_job(job_id: str) -> dict:
         "visualScanned": job.get("visualScanned", 0),
         "visualTotal": job.get("visualTotal", 0),
         "visualMore": job.get("visualMore", False),
+        "photoMatches": job.get("photoMatches", []),
     }
 
 
@@ -1253,7 +1246,13 @@ def lostfound_search(payload: LostFoundSearchRequest) -> dict:
     if cached is not None:
         return cached
     try:
-        result = police_api.search_all(payload.keyword, payload.page, payload.rows, hints=payload.hints)
+        options = {}
+        if payload.photoSearch or payload.originalQuery:
+            options = {
+                "original_query": payload.originalQuery, "photo_search": payload.photoSearch,
+                "photo_category": payload.photoCategory,
+            }
+        result = police_api.search_all(payload.keyword, payload.page, payload.rows, hints=payload.hints, **options)
     except police_api.PoliceError as error:
         raise api_error(400 if "invalid" in error.code else 502, error.code, error.message)
     if not result["sources"]:

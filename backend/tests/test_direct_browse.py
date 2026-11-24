@@ -60,6 +60,75 @@ def test_browse_scans_broad_when_keyword_returns_nothing(monkeypatch):
     assert result["items"][0]["matchTier"] == 2  # 가려진 이름이라도 검색어 일치로 올라온다
 
 
+def test_quick_search_keeps_only_public_text_matches_without_ai(monkeypatch):
+    match = row("police:target", "2026-11-24", notes="별무늬")
+    unrelated = row("police:other", "2026-11-23", name="안경")
+    monkeypatch.setattr(police_api, "search", lambda *_: {"items": [match, unrelated], "totalCount": 2})
+    result = police_api.browse_all("별무늬", rows=10, max_pages=1)
+    assert [item["id"] for item in result["items"]] == ["police:target"]
+    assert result["criteriaApplied"] is False
+
+
+def test_lost_search_can_find_independent_photo_and_description_candidates(monkeypatch):
+    photo = row("police:photo", "2026-11-22", name="교통카드", notes="", imageUrl="https://www.lost112.go.kr/a.jpg")
+    description = row("police:text", "2026-11-22", name="습득 물건", notes="별무늬와 고리")
+    unrelated = row("police:other", "2026-11-22", name="장갑", notes="")
+    calls = []
+
+    def name_search(source, keyword, page, rows):
+        calls.append(keyword)
+        return {"items": [], "totalCount": 0}
+
+    def date_search(source, filters, page, rows):
+        assert filters["START_YMD"] == filters["END_YMD"]
+        return {"items": [photo, description, unrelated] if source == "police" else [], "totalCount": 3}
+
+    monkeypatch.setattr(police_api, "search", name_search)
+    monkeypatch.setattr(police_api, "search_filtered", date_search)
+    result = police_api.search_all(
+        "별무늬", original_query="별무늬 카드", photo_search=True,
+        hints={"apiKeywords": ["교통카드"], "imageFeatures": ["별무늬"]},
+    )
+    assert result["items"] == []
+    assert [item["id"] for item in result["photoItems"]] == ["police:photo"]
+    assert [item["id"] for item in result["contextItems"]] == ["police:text"]
+    assert set(calls) == {"별무늬", "카드", "교통카드", ""}
+
+
+def test_explicit_ai_browse_prioritizes_independently_found_photo_even_without_ai_hints(monkeypatch):
+    named = row("police:named", "2026-11-24", name="카드", imageUrl="https://www.lost112.go.kr/named.jpg")
+    photo = row("police:photo", "2026-11-22", name="등록 물건", imageUrl="https://www.lost112.go.kr/photo.jpg")
+    monkeypatch.setattr(police_api, "search", lambda *_: {"items": [named], "totalCount": 1})
+
+    def recent_cards(source, filters, page, rows):
+        assert filters["PRDT_CL_CD_01"]
+        return {"items": [photo] if source == "police" else [], "totalCount": 1}
+
+    monkeypatch.setattr(police_api, "search_filtered", recent_cards)
+    result = police_api.browse_all("별무늬 카드", rows=10, max_pages=1, search_mode="ai")
+    assert result["photoPriority"] == ["police:photo"]
+    assert {item["id"] for item in result["items"]} == {"police:named", "police:photo"}
+
+    monkeypatch.setattr(main, "VISUAL_BATCH_SIZE", 1)
+    call_order = []
+    def match(request):
+        candidate = request.candidates[0]
+        call_order.append(candidate.id)
+        assert request.query == "별무늬 카드"
+        return SimpleNamespace(results=[SimpleNamespace(
+            id=candidate.id, imageSimilarity=95 if candidate.id == photo["id"] else 10, basis="photo",
+        )])
+
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", match)
+    previews = []
+    payload = LostFoundBrowseRequest(keyword="별무늬 카드", searchMode="ai")
+    ranked = main._apply_visual_hints(result, payload, preview=lambda items: previews.append((len(call_order), items)))
+    assert call_order == ["police:photo", "police:named"]
+    assert previews[0][0] == 1
+    assert previews[0][1][0]["id"] == photo["id"]
+    assert ranked["items"][0]["id"] == photo["id"]
+
+
 def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
     payload = SimpleNamespace(
         keyword="치이카와", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
@@ -82,8 +151,7 @@ def test_visual_hints_boost_a_photo_item_outside_the_current_page(monkeypatch):
     assert updated["visualAnalyzed"] is True
 
 
-def test_officially_mismatched_color_does_not_get_photo_boost(monkeypatch):
-    """'하얀 신한카드'에서 공식 색상이 검정·청록인 카드는 사진 일치로 올라오지 않는다."""
+def test_official_color_does_not_erase_scores_from_photos(monkeypatch):
     payload = SimpleNamespace(
         keyword="하얀 신한카드", hints={"imageFeatures": ["하얀색"]}, page=1, rows=3,
     )
@@ -111,9 +179,7 @@ def test_officially_mismatched_color_does_not_get_photo_boost(monkeypatch):
     monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
     updated = main._apply_visual_hints(result, payload)
 
-    assert updated["visualScores"] == {"police:white": 60}
-    assert black.get("visualScore") is None
-    assert teal.get("visualScore") is None
+    assert updated["visualScores"] == {"police:black": 88, "police:teal": 80, "police:white": 60}
     assert white["visualScore"] == 60
     assert white["matchTier"] == 1
     assert white["matchLabel"] == "AI 사진 일치"
@@ -170,7 +236,7 @@ def test_person_name_is_stripped_from_visual_query(monkeypatch):
     assert seen == {"query": "지갑", "features": ["지갑"]}
 
 
-def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):
+def test_visual_scan_starts_with_newest_and_checks_the_remaining_batch(monkeypatch):
     payload = SimpleNamespace(
         keyword="카드", hints={"imageFeatures": ["치이카와"]}, page=1, rows=1,
     )
@@ -191,9 +257,9 @@ def test_visual_scan_starts_with_newest_and_stops_when_confident(monkeypatch):
 
     monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
     main._apply_visual_hints(result, payload)
-    assert len(batches) == 1  # 90점 이상이 나오면 더 오래된 묶음은 보지 않는다.
-    assert batches[0][0] == "police:10"
+    assert len(batches) == 2
     assert batches[0] == [f"police:{index}" for index in range(10, 2, -1)]
+    assert batches[1] == ["police:2", "police:1"]
 
 
 def test_visual_match_at_50_counts_without_stopping_older_photos(monkeypatch):
@@ -442,12 +508,12 @@ def test_browse_applies_ai_criteria_across_pages_and_dedupes(monkeypatch):
 
     assert result["criteriaApplied"] is True
     assert result["apiKeywords"] == ["지갑"]
-    assert [item["id"] for item in result["items"]] == ["police:keep"]
-    assert result["total"] == 1
+    assert [item["id"] for item in result["items"]] == ["police:keep", "police:broken"]
+    assert result["total"] == 2
     assert result["items"][0]["aiMatch"]["hits"] == ["가죽"]
 
 
-def test_browse_category_term_filters_out_other_categories(monkeypatch):
+def test_inferred_category_ranks_ahead_without_filtering_other_categories(monkeypatch):
     def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
         return {
             "items": [
@@ -464,9 +530,8 @@ def test_browse_category_term_filters_out_other_categories(monkeypatch):
         max_pages=1,
     )
 
-    # 지갑은 공식 분류명이므로 하드 필터로 적용되고, 장소어·색상은 순위에만 반영된다.
-    assert [item["id"] for item in result["items"]] == ["police:wallet"]
-    assert result["total"] == 1
+    assert [item["id"] for item in result["items"]] == ["police:wallet", "police:phone"]
+    assert result["total"] == 2
 
 
 def test_browse_falls_back_when_category_term_has_no_match(monkeypatch):
@@ -517,7 +582,7 @@ def test_browse_shows_unmatched_item_as_public_tier(monkeypatch):
     assert result["items"][0]["matchLabel"] == "공개 원문"
 
 
-def test_browse_keeps_exclude_even_when_showing_all_tiers(monkeypatch):
+def test_inferred_exclusion_demotes_but_preserves_public_candidates(monkeypatch):
     def fake_search(source: str, keyword: str, page: int = 1, rows: int = 20) -> dict:
         return {
             "items": [
@@ -530,7 +595,7 @@ def test_browse_keeps_exclude_even_when_showing_all_tiers(monkeypatch):
     monkeypatch.setattr(police_api, "search", fake_search)
     result = police_api.browse_all("", 1, 10, hints={"include": ["없는단어"], "exclude": ["파손"]}, max_pages=1)
 
-    assert [item["id"] for item in result["items"]] == ["police:keep"]
+    assert [item["id"] for item in result["items"]] == ["police:keep", "police:drop"]
 
 
 def test_browse_orders_by_match_tier_and_keeps_public_order_in_tier(monkeypatch):
@@ -599,10 +664,9 @@ def test_browse_keeps_text_region_check_when_region_has_no_official_code(monkeyp
         max_pages=1,
     )
 
-    # 분류는 코드로 좁혀졌지만 지역은 코드가 없으므로 텍스트 검사 결과가 등급에 반영된다.
+    # 명시한 지역은 코드가 없어도 지역 텍스트로 검사한다.
     assert result["filterApi"] is True
-    assert result["total"] == 1
-    assert result["items"][0]["matchTier"] == 2  # 지역 불일치 → 조건 필터 등급이 아님
+    assert result["total"] == 0
 
 
 def test_filtered_browse_reads_enough_pages_for_the_visual_pool(monkeypatch):
@@ -659,8 +723,9 @@ def test_same_result_is_not_scanned_twice(monkeypatch):
 
     monkeypatch.setattr(ai_pipeline, "match_visual_features", fake_match)
     main._apply_visual_hints(result, payload)
+    batch_count = len(batches)
     main._apply_visual_hints(result, payload)
-    assert len(batches) == 1
+    assert len(batches) == batch_count == 2
 
 
 def test_prefer_terms_rank_higher_without_filtering_out_others():

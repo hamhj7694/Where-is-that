@@ -234,10 +234,13 @@ class AiVisualMatchRequest(BaseModel):
     externalProcessingConfirmed: bool = False
     # 서버 내부에서 이미 웹 참고를 붙였으면 중복 검색하지 않는다.
     webReferenceApplied: bool = False
+    photoOnly: bool = False
+    localOnly: bool = False
+    preferSemantic: bool = False
 
     @model_validator(mode="after")
     def validate_visual_match_input(self) -> AiVisualMatchRequest:
-        if not self.externalProcessingConfirmed:
+        if not self.externalProcessingConfirmed and not self.localOnly:
             raise ValueError("외부 AI 전송에 동의해 주세요.")
         features = [term.strip()[:40] for term in self.imageFeatures if isinstance(term, str) and term.strip()]
         if not features and not self.query.strip() and not self.references:

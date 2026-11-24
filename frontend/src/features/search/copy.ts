@@ -20,6 +20,7 @@ export const copy = {
   emptyInput: '내용을 적거나 사진을 첨부해 주세요.',
   missingGallery: '먼저 갤러리를 연결해 주세요.',
   aiNotice: '결과는 참고용으로 확인해 주세요.',
-  publicLimit: '공개 정보가 부족하면 찾지 못할 수 있어요.',
+  publicScope: '경찰청·포털기관 공개 습득물',
+  publicLimit: '공개 목록에 등록되지 않은 물건은 조회할 수 없어요.',
   bothInputs: '글만 적거나 사진만 추가해도 검색할 수 있어요. 함께 입력해도 좋아요.',
 } as const

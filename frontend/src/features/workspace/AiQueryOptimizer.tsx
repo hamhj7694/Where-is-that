@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
 import type { AiPipelineMode } from '../search/ai-search-api'
 import type { GalleryAssistantState } from '../search/gallery-search-model'
@@ -11,10 +11,11 @@ interface Props {
   onChange: (patch: Partial<GalleryAssistantState>) => void
   onApply: (state: GalleryAssistantState) => void
   disabled?: boolean
+  renderInline?: (action: ReactNode, feedback: ReactNode) => ReactNode
 }
 
 /** 검색 결과 화면 본문에 두는 AI 문구 생성기. 도우미 패널 안에는 해석 버튼·결과를 두지 않는다. */
-export default function AiQueryOptimizer({ mode, baseQuery, state, onChange, onApply, disabled = false }: Props) {
+export default function AiQueryOptimizer({ mode, baseQuery, state, onChange, onApply, disabled = false, renderInline }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -31,18 +32,24 @@ export default function AiQueryOptimizer({ mode, baseQuery, state, onChange, onA
     }
   }
 
-  return <section className="query-optimizer" aria-label="검색어 다듬기">
-    <div className="query-optimizer__head">
-      <div><strong>검색어 다듬기</strong><p>기억나는 특징을 적어둔 내용과 함께 자연스럽게 정리해 줘요.</p></div>
-      <button type="button" className="button button--secondary" disabled={busy || disabled} onClick={() => void optimize()}>
-        <Sparkles aria-hidden="true" />{busy ? '다듬는 중…' : '다듬어 보기'}
-      </button>
-    </div>
+  const action = <button type="button" className={renderInline ? 'text-button query-optimizer__action' : 'button button--secondary'} disabled={busy || disabled} onClick={() => void optimize()}>
+    <Sparkles aria-hidden="true" />{busy ? '다듬는 중…' : renderInline ? 'AI로 검색어 다듬기' : '다듬어 보기'}
+  </button>
+  const feedback = (state.optimizedQuery || error) ? <>
     {state.optimizedQuery && <div className="query-optimizer__result" role="status">
       <strong>다듬은 검색 문구</strong>
       <p>{state.optimizedQuery}</p>
       <button type="button" className="button button--primary" disabled={disabled} onClick={() => onApply(state)}>이 문구로 다시 검색</button>
     </div>}
     {error && <p className="form-error" role="alert">{error}</p>}
+  </> : null
+
+  if (renderInline) return renderInline(action, feedback)
+  return <section className="query-optimizer" aria-label="검색어 다듬기">
+    <div className="query-optimizer__head">
+      <div><strong>검색어 다듬기</strong><p>기억나는 특징을 적어둔 내용과 함께 자연스럽게 정리해 줘요.</p></div>
+      {action}
+    </div>
+    {feedback}
   </section>
 }

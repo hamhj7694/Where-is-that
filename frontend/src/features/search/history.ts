@@ -26,12 +26,16 @@ export interface LostResultsSnapshot {
   hintsKey: string
   params: string
   raw: FoundItem[]
+  photoRaw?: FoundItem[]
+  contextRaw?: FoundItem[]
   fetched: number
   total: number
   apiPage: number
+  hasMore?: boolean
+  scanLimitReached?: boolean
   partial: boolean
   rank?: { scope: string; results: AiContextRankedCandidate[] }
-  visual?: { scope: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' }
+  visual?: { scope: string; searchKey?: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' }
   textScores?: [string, number][]
   /** 새로고침에서 신규 여부를 판단할 기준 id 목록. */
   baselineIds: string[]
@@ -52,6 +56,8 @@ export function saveLostResultsSnapshot(key: string, snapshot: LostResultsSnapsh
       window.localStorage.setItem(LOST_RESULTS_KEY + key, JSON.stringify({
         ...snapshot,
         raw: snapshot.raw.slice(0, 120),
+        photoRaw: snapshot.photoRaw?.slice(0, 120),
+        contextRaw: snapshot.contextRaw?.slice(0, 120),
         newRaw: snapshot.newRaw.slice(0, 40),
       }))
     } catch { /* 저장 불가면 스냅샷 없이 조건만 남긴다. */ }

@@ -14,6 +14,7 @@ def _state():
             imageFeatures=["지갑"],
             query="지갑",
             candidates=[],
+            localOnly=False,
         ),
         "photo_images": {},
         "description_texts": {},
@@ -141,7 +142,7 @@ def test_embed_passes_vlm_flags_to_local_clip(monkeypatch):
     monkeypatch.setattr(image_similarity, "crop_notes", lambda *_args, **_kwargs: {})
     state = _state()
     state["request"].references = []
-    state["scoped"] = {"one": IMAGE}
+    state["photo_images"] = {"one": IMAGE}
     state["vlm_multi"] = {IMAGE: True}
 
     ai_graph._visual_embed(state)

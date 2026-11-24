@@ -16,11 +16,25 @@
 .direct-search__form, .direct-search__filters { min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .direct-search__form {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 0 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
-.direct-search__form .search-section-title { margin: 0; white-space: nowrap; }
+.direct-search__mode-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.direct-search__modes {
+  display: inline-flex; min-width: 0; gap: 3px; margin: 0; padding: 3px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+}
+.direct-search__modes label { position: relative; cursor: pointer; }
+.direct-search__modes label span {
+  display: grid; place-items: center; min-height: 36px; padding-inline: 13px;
+  border-radius: 6px; color: var(--text-secondary); font-size: 13px; font-weight: 650; white-space: nowrap;
+}
+.direct-search__modes input:checked + span { background: var(--ink); color: var(--surface); }
+.direct-search__modes input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.direct-search__mode-help, .direct-search__enter {
+  margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5;
+}
+.direct-search__enter kbd { font: inherit; font-weight: 650; }
 .direct-search__form-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
 .direct-search__form input[type='search'] {
   width: 100%; min-width: 0; height: 40px; padding: 0 12px;
@@ -99,7 +113,7 @@
 .direct-search__filters .filter-accordion__footer { justify-content: flex-end; margin-top: 8px; padding-top: 8px; }
 .direct-search__filters .filter-accordion__actions { gap: 6px; }
 .direct-search__filters .filter-accordion .button { min-height: 36px; padding-inline: 14px; font-size: 13px; }
-.direct-search__ai-hint, .direct-search__ai-note { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.direct-search__ai-note { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .direct-search__ai-note { color: var(--text-muted); }
 .direct-search .lost-ai-criteria { margin-top: 12px; }
 .direct-search__scope { margin: 10px 0 0; color: var(--text-muted); font-size: 12px; }
@@ -122,10 +136,12 @@
   .direct-search__pagination-top { flex-wrap: wrap; gap: 8px; }
   .direct-search__summary { width: 100%; }
   .direct-search__controls { top: 4px; padding: 8px; }
-  .direct-search__form { grid-template-columns: max-content minmax(0, 1fr); gap: 0 8px; }
-  .direct-search__form .search-section-title { font-size: 13px; }
-  .direct-search__form-row { gap: 6px; }
-  .direct-search__form .button { padding-inline: 9px; }
+  .direct-search__form { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .direct-search__modes label span { min-height: 44px; }
+  .direct-search__form-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .direct-search__form-actions { flex-wrap: wrap; }
+  .direct-search__form-actions .button { flex: 1 1 auto; min-width: 0; }
+  .direct-search__form .button { min-height: 44px; padding-inline: 9px; }
   .direct-search__grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .direct-search__grid .found-card {
     display: grid;
@@ -155,7 +171,9 @@
   .direct-search__grid .found-card__body p,
   .direct-search__grid .found-card__body small { margin-top: 3px; font-size: 11px; line-height: 1.5; }
   .direct-search__filters .filter-bar__actions { gap: 4px; }
-  .direct-search__filters .filter-bar__actions .button { padding-inline: 8px; }
+  .direct-search__filters .filter-bar__actions .button { min-height: 44px; padding-inline: 8px; }
+  .direct-search__filters .filter-chip--accordion,
+  .direct-search__filters .filter-accordion .button { min-height: 44px; }
   .direct-search__filters .filter-accordion__form { padding: 9px; }
   .direct-search__filters .filter-accordion__grid { grid-template-columns: minmax(0, 1fr); }
 }
@@ -167,16 +185,7 @@
   .direct-search__filters .filter-date-range { gap: 6px; }
 }
 
-/* 일반 검색은 AI 해석이 없으므로 원형 스피너만 보여준다. */
-.direct-search__basic-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 180px;
-}
-.direct-search__basic-loading .direct-search__spinner { width: 22px; height: 22px; }
-
-/* 오래 걸리는 검색:_progress 문구와 움직이는 모션 */
+/* 검색 진행 메시지와 상태 표시 */
 .direct-search__progress {
   display: flex;
   align-items: center;

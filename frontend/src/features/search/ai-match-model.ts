@@ -167,7 +167,7 @@ export function criteriaFromPlan(plan: AiSearchPlan | null | undefined, fallback
 
 /** 경찰청에 처음 보낼 단일 PRDT_NM. 여러 탐색어는 서버가 OR로 병합 조회한다. */
 export function resolveApiKeyword(criteria: AiSearchCriteria, fallback: string): string {
-  return criteria.apiKeywords[0] || fallback.trim()
+  return (criteria.apiKeywords[0] || fallback.trim()).slice(0, 100)
 }
 
 export function hasSearchCriteria(criteria: AiSearchCriteria): boolean {
@@ -276,9 +276,9 @@ export function matchPublicItem(item: TextSource, criteria: AiSearchCriteria): C
 
 export const criteriaLabels = {
   apiKeywords: '찾는 말',
-  include: '꼭 포함',
-  any: '하나라도 포함',
-  exclude: '빼는 말',
+  include: '중요한 단서',
+  any: '다른 단서',
+  exclude: '가능성을 낮추는 단서',
   prefer: '우선 반영',
   imageFeatures: '사진 특징',
 } as const

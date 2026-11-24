@@ -219,6 +219,9 @@ export async function matchPublicItemImages(input: {
   imageFeatures: readonly string[]
   references: readonly File[]
   candidates: readonly { id: string; imageUrl?: string; text?: string }[]
+  photoOnly?: boolean
+  localOnly?: boolean
+  preferSemantic?: boolean
 }): Promise<AiVisualMatchResponse> {
   if (!input.candidates.length || input.candidates.length > 12) throw new Error('비교할 공개 후보는 1~12건이어야 해요.')
   const references = await Promise.all(input.references.slice(0, 6).map(fileToDataUrl))
@@ -238,7 +241,10 @@ export async function matchPublicItemImages(input: {
         imageFeatures: input.imageFeatures,
         references,
         candidates,
-        externalProcessingConfirmed: true,
+        ...(input.photoOnly ? { photoOnly: true } : {}),
+        ...(input.localOnly ? { localOnly: true } : {}),
+        ...(input.preferSemantic ? { preferSemantic: true } : {}),
+        externalProcessingConfirmed: !input.localOnly,
       }),
     })
   } catch {

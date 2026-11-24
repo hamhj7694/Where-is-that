@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CalendarDays, ChevronDown, SlidersHorizontal, X } from 'lucide-react'
 import { REFERENCE_PHOTO_VIEWS } from '../search/model'
@@ -171,6 +171,7 @@ interface Props {
   colorOptions?: readonly string[]
   showDirection?: boolean
   customDropdowns?: boolean
+  toolbarActions?: ReactNode
 }
 
 export default function LostResultFilters({
@@ -179,6 +180,7 @@ export default function LostResultFilters({
   colorOptions,
   showDirection = true,
   customDropdowns = false,
+  toolbarActions,
 }: Props) {
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -234,8 +236,16 @@ export default function LostResultFilters({
   function reset() {
     setValues(empty())
     setError('')
-    if (!alwaysOpen && !open) setOpen(true)
-    setTimeout(() => (customDropdowns ? firstCustomSelect.current : firstSelect.current)?.focus(), 0)
+    const next = new URLSearchParams(params)
+    for (const key of keys) next.delete(key)
+    next.delete('page')
+    setParams(next)
+    if (alwaysOpen) {
+      setTimeout(() => (customDropdowns ? firstCustomSelect.current : firstSelect.current)?.focus(), 0)
+      return
+    }
+    setOpen(false)
+    setTimeout(() => trigger.current?.focus(), 0)
   }
   function apply(event: FormEvent) {
     event.preventDefault()
@@ -315,7 +325,7 @@ export default function LostResultFilters({
 
   return <>
     {alwaysOpen && <p className="search-section-title">검색 조건</p>}
-    {(!alwaysOpen || active.length > 0) && <div className={'filter-bar' + (isOpen ? ' filter-bar--with-panel' : '')}>
+    {(!alwaysOpen || active.length > 0 || toolbarActions) && <div className={'filter-bar' + (isOpen ? ' filter-bar--with-panel' : '')}>
       {!alwaysOpen && <button ref={trigger} type="button" className="filter-chip filter-chip--accordion" aria-expanded={isOpen} aria-controls={panelId} onClick={toggle}>
         <SlidersHorizontal aria-hidden="true" />검색 조건{active.length > 0 && <span>{active.length}</span>}
         <ChevronDown className={'filter-chevron' + (isOpen ? ' is-open' : '')} aria-hidden="true" />
@@ -325,6 +335,7 @@ export default function LostResultFilters({
         <button type="submit" form={formId} className="button button--primary">조건 적용</button>
       </div>}
       {active.map(key => <button type="button" className="filter-chip" key={key} onClick={() => remove(key)} aria-label={labelOf(key, compact) + ' ' + activeValueLabel(key) + ' 해제'}>{activeValueLabel(key)}<X aria-hidden="true" /></button>)}
+      {toolbarActions}
     </div>}
     <section id={panelId} className="filter-accordion" data-open={isOpen} aria-label="검색 조건" inert={!isOpen}>
       <div className="filter-accordion__inner">

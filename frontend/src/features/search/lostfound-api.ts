@@ -136,7 +136,11 @@ interface SearchPayload {
   query: string
   sources: string[]
   total: number
+  hasMore?: boolean | null
+  scanLimitReached?: boolean
   items: FoundItem[]
+  photoItems?: FoundItem[]
+  contextItems?: FoundItem[]
   errors: { source: string; code: string; message: string }[]
   apiKeywords?: string[]
   matched?: number
@@ -215,11 +219,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-/** AI가 분리한 탐색어·AND/OR/NOT·사진 특징을 hints로 함께 보낸다. */
-export function searchLostFound(keyword: string, page = 1, rows = 40, hints?: LostSearchHints): Promise<SearchPayload> {
+export interface LostPhotoSearchOptions {
+  originalQuery: string
+  photoSearch: boolean
+  photoCategory: string
+}
+
+/** 이름 조회와 별도로 사진이 있는 공개 목록을 조회할 수 있다. */
+export function searchLostFound(keyword: string, page = 1, rows = 40, hints?: LostSearchHints, options?: LostPhotoSearchOptions): Promise<SearchPayload> {
   return request<SearchPayload>('/lostfound/search', {
     method: 'POST',
-    body: JSON.stringify({ keyword, page, rows, ...(hints ? { hints } : {}) }),
+    body: JSON.stringify({ keyword: keyword.slice(0, 100), page, rows, ...(hints ? { hints } : {}), ...options }),
   })
 }
 
@@ -266,6 +276,7 @@ export interface BrowseJobStatus {
   /** 서버가 공개 사진을 몇 장까지 봤는지. */
   visualScanned?: number
   visualTotal?: number
+  photoMatches?: FoundItem[]
   /** 더 찾아보기로 이어볼 오래된 사진이 있는지. */
   visualMore?: boolean
 }
@@ -274,12 +285,14 @@ function browseBody(
   keyword: string, page: number, rows: number,
   hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
   priorVisualScores?: Record<string, number>,
+  searchMode?: 'basic' | 'ai',
 ): string {
   return JSON.stringify({
-    keyword, page, rows, maxPages, skipVisual,
+    keyword: keyword.slice(0, 100), page, rows, maxPages, skipVisual,
     ...(hints ? { hints } : {}),
     ...(filters ? { filters } : {}),
     ...(priorVisualScores && Object.keys(priorVisualScores).length ? { priorVisualScores } : {}),
+    ...(searchMode ? { searchMode } : {}),
   })
 }
 
@@ -288,10 +301,11 @@ export function startBrowseJob(
   keyword: string, page = 1, rows = 40,
   hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
   priorVisualScores?: Record<string, number>,
+  searchMode?: 'basic' | 'ai',
 ): Promise<BrowseJobStart> {
   return request<BrowseJobStart>('/lostfound/browse/jobs', {
     method: 'POST',
-    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores),
+    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores, searchMode),
   })
 }
 
@@ -331,7 +345,7 @@ function normalizeLostTitle(value: string | null): string {
 }
 
 /** 사진 경로는 추적용 쿼리만 빼고 비교한다. 사진이 없으면 이 키를 쓰지 않는다(서로 다른 물건 과잉 병합 방지). */
-function normalizeLostImage(value: string | null): string {
+export function normalizeLostImage(value: string | null): string {
   const raw = (value ?? '').trim()
   if (!raw || /no_img/i.test(raw)) return ''
   try {
@@ -346,6 +360,15 @@ function normalizeLostImage(value: string | null): string {
   } catch {
     return raw.toLowerCase()
   }
+}
+
+export async function fetchLostPhotoFingerprints(urls: readonly string[], signal: AbortSignal): Promise<Record<string, string>> {
+  const result = await request<{ fingerprints: Record<string, string> }>('/lostfound/photos/fingerprints', {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
+    signal,
+  })
+  return result.fingerprints
 }
 
 /**

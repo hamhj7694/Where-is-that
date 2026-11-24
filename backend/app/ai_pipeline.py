@@ -342,14 +342,14 @@ def _multimodal_visual_scores(
     references: list[str],
     images: dict[str, str],
 ) -> dict[str, int]:
-    """전용 비전이 없을 때 멀티모달이 공개 사진을 시각 특징과 대조한다."""
+    """멀티모달 모델이 공개 사진에서 입력한 묘사 또는 참고 사진의 특징을 직접 확인한다."""
     content: list[dict[str, Any]] = [{
         "type": "text",
         "text": json.dumps({
             "query": query,
             "imageFeatures": features,
             "candidateIdsInOrder": list(images),
-            "task": "각 공개 사진이 imageFeatures에 얼마나 잘 맞는지 imageSimilarity를 0~100 정수로 매기고 reasoning은 짧게 적으세요. 모든 id를 한 번씩 포함하세요. 예: {\"results\":[{\"id\":\"...\",\"imageSimilarity\":0}]}",
+            "task": "각 공개 사진이 글의 시각적 단서와 참고 사진의 물건에 얼마나 잘 맞는지 0~100 정수로 매기세요. 모든 id를 한 번씩 포함하세요.",
         }, ensure_ascii=False),
     }]
     for image in references:
@@ -378,7 +378,6 @@ def _multimodal_visual_scores(
 
 def match_visual_features(request: AiVisualMatchRequest) -> AiVisualMatchResponse:
     """참고 사진 유무와 무관하게 공개 항목의 사진·설명을 모두 분석해 우선순위를 만든다."""
-    # LangGraph가 사진 수집 → 카테고리 범위 → 로컬 임베딩 → 멀티모달 폴백을 분기한다.
     return ai_graph.match_visual_features(request)
 
 

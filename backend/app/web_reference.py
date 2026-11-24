@@ -64,7 +64,7 @@ def is_generic(term: str) -> bool:
 
 
 def _cache_key(term: str) -> str:
-    return "webref3:" + hashlib.sha256(term.strip().lower().encode("utf-8")).hexdigest()
+    return "webref4:" + hashlib.sha256(term.strip().lower().encode("utf-8")).hexdigest()
 
 
 def _get(url: str, *, headers: dict | None = None, **kwargs) -> httpx.Response | None:
@@ -100,15 +100,10 @@ def _pick_image(markdown: str) -> str:
     useful = [(url, urlparse(url).path.rsplit("/", 1)[-1].lower()) for url in urls]
     useful = [(url, name) for url, name in useful if urlparse(url).hostname in IMAGE_HOSTS]
     good = [url for url, name in useful if not any(word in name for word in SKIP_IMAGE_WORDS) and "logo" not in name]
-    if good:
-        return good[0]
-    logos = [url for url, name in useful if "logo" in name]
-    if logos:
-        return logos[0]
-    return useful[0][0] if useful else ""
+    return good[0] if good else ""
 
 
-def _summary_lines(markdown: str) -> str:
+def _summary_lines(markdown: str, term: str) -> str:
     lines: list[str] = []
     for raw in markdown.splitlines():
         line = raw.strip()
@@ -119,6 +114,9 @@ def _summary_lines(markdown: str) -> str:
         line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)  # 링크 → 글자만
         line = re.sub(r"[*`>_]", "", line).strip()
         if len(line) < 8 or line.startswith("![") or "|" in line:
+            continue
+        # 본문 앞의 사이트 메뉴와 언어 안내가 캐릭터 설명으로 들어가지 않게 한다.
+        if not lines and (term.lower() not in line.lower() or "[alt-" in line or "언어로는" in line):
             continue
         lines.append(line)
         if len(" ".join(lines)) >= 220:
@@ -139,7 +137,7 @@ def _fetch_wiki(term: str) -> dict:
         if "Markdown Content:" not in text:
             continue
         markdown = text.split("Markdown Content:", 1)[1]
-        summary = _summary_lines(markdown)
+        summary = _summary_lines(markdown, term)
         if not summary:
             continue
         title_match = re.search(r"^Title:\s*(.+)$", text, re.MULTILINE)
@@ -198,9 +196,7 @@ def _naver_image_urls(term: str) -> list[str]:
 
 
 def _fetch(term: str) -> dict:
-    result = _fetch_wiki(term) or _fetch_duckduckgo(term)
-    if not result:
-        return {}
+    result = _fetch_wiki(term) or _fetch_duckduckgo(term) or {"term": term, "features": [term]}
     images = [result["image"]] if result.get("image") else []
     for url in _naver_image_urls(term):
         if len(images) >= config.WEB_REFERENCE_MAX_IMAGES:
@@ -210,7 +206,7 @@ def _fetch(term: str) -> dict:
             images.append(thumbnail)
     result["images"] = images
     result["image"] = images[0] if images else ""
-    return result
+    return result if images or result.get("summary") else {}
 
 
 def _thumbnail(url: str) -> str:

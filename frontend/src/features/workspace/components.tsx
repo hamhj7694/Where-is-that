@@ -117,13 +117,14 @@ const friendlyMatchLabels: Record<string, string> = {
 
 const tierFallbackLabels = ['내용·사진·조건이 모두 맞아요', '적어둔 특징이 맞아요', '적어둔 말이 맞아요', '조건이 맞아요', '일부 내용이 맞아요', '공개 정보에서 찾았어요']
 
-export function FoundCard({ item, to, context = false }: { item: Candidate; to: string; context?: boolean }) {
+export function FoundCard({ item, to, context = false, hideSourceBadge = false }: { item: Candidate; to: string; context?: boolean; hideSourceBadge?: boolean }) {
   const [failed, setFailed] = useState(false)
   const photo = item.photoStatus === 'verified_photo' && item.image && !failed
-  const matchLabel = item.matchLabel ? friendlyMatchLabels[item.matchLabel] ?? tierFallbackLabels[item.matchTier ?? 5] ?? '공개 정보에서 찾았어요' : ''
+  const matchLabel = item.matchLabel ? friendlyMatchLabels[item.matchLabel] ?? tierFallbackLabels[item.matchTier ?? 5] ?? friendlyMatchLabels['공개 원문'] : ''
+  const showMatchLabel = !context && matchLabel && (!hideSourceBadge || matchLabel !== friendlyMatchLabels['공개 원문'])
   return <Link to={to} className={context ? 'context-card' : 'found-card'}>
     <div className={context ? 'context-card__image' : 'found-card__image'}>{photo ? <img src={item.image!} alt={item.title + ' 사진'} loading="lazy" onError={() => setFailed(true)} /> : <NoPhoto message={failed ? '사진 표시 오류' : undefined} category={item.category} />}</div>
-    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{!context && matchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{matchLabel}</span>}{!context && typeof item.visualScore === 'number' && <span className="found-card__visual">사진 특징 반영</span>}{!context && <p>{item.color} · {item.category}</p>}
+    <div className={context ? 'context-card__body' : 'found-card__body'}><h3>{item.title}</h3>{showMatchLabel && <span className={'found-card__tier found-card__tier--' + (item.matchTier ?? 5)}>{matchLabel}</span>}{!context && typeof item.visualScore === 'number' && <span className="found-card__visual">사진 특징 반영</span>}{!context && <p>{item.color} · {item.category}</p>}
       {context && <><div className="match-reasons">{item.matchReasons.map(reason => <span key={reason}>{reason}</span>)}</div><p>{item.foundPlace}</p></>}
       <small>{item.foundAt}</small></div>
     {context && <ArrowRight className="context-card__actions" aria-label="상세 보기" />}

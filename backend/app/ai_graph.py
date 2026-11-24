@@ -1,14 +1,15 @@
 """LangGraph 기반 AI 호출 오케스트레이션.
 
 텍스트만 필요하면 LLM 역할, 사진만 필요하면 VLM 역할, 둘 다 필요하면 joint
-멀티모달 역할만 호출한다. 공개 사진 비교는 로컬 임베딩이 가능하면 멀티모달
-폴백을 생략하고, 카테고리 범위 안에서만 CLIP 비교를 한다.
+멀티모달 역할만 호출한다. 공개 사진 비교는 로컬 임베딩을 먼저 쓰고,
+후보의 품목명과 관계없이 요청에 들어온 사진을 비교한다.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
@@ -38,7 +39,6 @@ class VisualState(TypedDict, total=False):
     description_texts: dict[str, str]
     target_hints: str
     basis: dict[str, str]
-    scoped: dict[str, str]
     vlm_multi: dict[str, bool]
     computed: dict[str, int]
     notes: dict[str, str]
@@ -126,11 +126,12 @@ def _visual_fetch(state: VisualState) -> dict:
     description_texts: dict[str, str] = {}
     # 같은 사진 경로를 가진 후보는 한 번만 내려받는다. 점수 대상 ID는 그대로 남겨
     # 표시 결과가 줄어들거나 순위가 달라지지 않게 한다.
-    fetched: dict[str, str | None] = {}
-    for candidate in request.candidates:
-        image_key = _image_key(candidate.imageUrl)
-        if image_key and image_key not in fetched:
-            fetched[image_key] = ai_pipeline._fetch_public_image(candidate.imageUrl)
+    images = [(_image_key(candidate.imageUrl), candidate) for candidate in request.candidates]
+    urls = {key: candidate.imageUrl for key, candidate in images if key}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {key: executor.submit(ai_pipeline._fetch_public_image, url) for key, url in urls.items()}
+        fetched = {key: future.result() for key, future in futures.items()}
+    for image_key, candidate in images:
         photo = fetched.get(image_key) if image_key else None
         if photo:
             photo_images[candidate.id] = photo
@@ -155,6 +156,10 @@ def _vlm_available() -> bool:
 def _visual_route_after_fetch(state: VisualState) -> str:
     if not state["photo_images"]:
         return "describe"
+    if getattr(state.get("request"), "localOnly", False):
+        return "select"
+    if getattr(state.get("request"), "preferSemantic", False) and _vlm_available():
+        return "fallback"
     if not image_similarity.is_configured():
         return "fallback"
     # 크롭이 실제로 쓰이는 로컬 CLIP 경로에서만 VLM 판정을 한 번 호출한다.
@@ -233,23 +238,17 @@ def _visual_route_after_census(state: VisualState) -> str:
     return "fallback" if not image_similarity.is_configured() else "select"
 
 
-def _visual_select(state: VisualState) -> dict:
-    texts = {candidate.id: candidate.text for candidate in state["request"].candidates}
-    return {"scoped": local_vision.scope_candidates(state["photo_images"], texts, state["target_hints"])}
-
-
 def _visual_embed(state: VisualState) -> dict:
     request = state["request"]
     hints = state.get("vlm_multi") or {}
+    photos = state["photo_images"]
+    engine = local_vision if request.localOnly else image_similarity
     if request.references:
-        computed = image_similarity.score_similarity(
-            request.references, state["scoped"], state["target_hints"], hints
-        )
+        computed = engine.score_similarity(request.references, photos, state["target_hints"], hints)
     else:
-        computed = image_similarity.score_text_image_similarity(
-            request.imageFeatures, state["scoped"], state["target_hints"], hints
-        )
-    notes = image_similarity.crop_notes(state["target_hints"], state["scoped"], hints) if computed else {}
+        features = request.imageFeatures or [request.query]
+        computed = engine.score_text_image_similarity(features, photos, state["target_hints"], hints)
+    notes = image_similarity.crop_notes(state["target_hints"], photos, hints) if computed and not request.localOnly else {}
     return {
         "computed": computed,
         "notes": notes,
@@ -276,6 +275,8 @@ def _low_confidence_reference_scores(scores: dict[str, int]) -> bool:
 
 
 def _visual_route_after_embed(state: VisualState) -> str:
+    if getattr(state.get("request"), "localOnly", False):
+        return "describe"
     if not state["computed"]:
         return "fallback"
     if state["request"].references:
@@ -294,9 +295,18 @@ def _visual_fallback(state: VisualState) -> dict:
     from . import ai_pipeline
 
     request = state["request"]
-    computed = ai_pipeline._multimodal_visual_scores(
-        request.query, request.imageFeatures, request.references, state["photo_images"]
-    )
+    try:
+        computed = ai_pipeline._multimodal_visual_scores(
+            request.query, request.imageFeatures, request.references, state["photo_images"]
+        )
+    except ai_pipeline.AiPipelineError:
+        if not request.photoOnly:
+            raise
+        computed = {}
+    if not computed and request.photoOnly:
+        if state.get("computed"):
+            return {"computed": state["computed"], "source": state["source"]}
+        return _visual_embed(state)
     return {"computed": computed, "source": "multimodal"}
 
 
@@ -306,13 +316,16 @@ def _visual_describe(state: VisualState) -> dict:
     request = state["request"]
     scores = dict(state.get("computed", {}))
     basis = dict(state.get("basis", {}))
+    if request.photoOnly:
+        return {"scores": scores, "basis": basis, "source": state.get("source", "multimodal")}
     for candidate_id, text in state["description_texts"].items():
         scores[candidate_id] = ai_pipeline._text_feature_score(request.imageFeatures, text)
         basis[candidate_id] = "description"
-    # 범위에서 제외된 사진 후보는 값싼 텍스트 점수만 붙여 순서를 유지한다.
+    # 사진 비교에 실패했으면 설명 점수를 사진 점수로 표시하지 않는다.
     for candidate in request.candidates:
         if candidate.id in state["photo_images"] and candidate.id not in scores:
             scores[candidate.id] = ai_pipeline._text_feature_score(request.imageFeatures, candidate.text)
+            basis[candidate.id] = "description"
     return {"scores": scores, "basis": basis, "source": state.get("source", "multimodal")}
 
 
@@ -330,11 +343,12 @@ def _visual_finish(state: VisualState) -> dict:
             reason=notes.get(candidate.id)
             or (
                 "공개 사진과 시각 특징을 비교했어요."
-                if candidate.id in state["photo_images"]
+                if state["basis"].get(candidate.id) == "photo"
                 else "설명에 시각 특징이 있는지 확인했어요."
             ),
         )
         for candidate in request.candidates
+        if not request.photoOnly or (candidate.id in state["scores"] and state["basis"].get(candidate.id) == "photo")
     ]
     results.sort(key=lambda item: item.imageSimilarity, reverse=True)
     return {
@@ -350,7 +364,6 @@ def _build_visual_graph():
     builder = StateGraph(VisualState)
     builder.add_node("fetch", _visual_fetch)
     builder.add_node("census", _visual_census)
-    builder.add_node("select", _visual_select)
     builder.add_node("embed", _visual_embed)
     builder.add_node("fallback", _visual_fallback)
     builder.add_node("describe", _visual_describe)
@@ -361,7 +374,7 @@ def _build_visual_graph():
         _visual_route_after_fetch,
         {
             "census": "census",
-            "select": "select",
+            "select": "embed",
             "fallback": "fallback",
             "describe": "describe",
         },
@@ -369,9 +382,8 @@ def _build_visual_graph():
     builder.add_conditional_edges(
         "census",
         _visual_route_after_census,
-        {"select": "select", "fallback": "fallback"},
+        {"select": "embed", "fallback": "fallback"},
     )
-    builder.add_edge("select", "embed")
     builder.add_conditional_edges(
         "embed", _visual_route_after_embed, {"describe": "describe", "fallback": "fallback"}
     )
