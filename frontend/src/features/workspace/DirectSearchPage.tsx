@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Search } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { readLostResultFilters } from '../search/lost-result-model'
 import {
@@ -491,36 +490,35 @@ export default function DirectSearchPage() {
     <PageHeading title="직접 찾기" />
     <div className="direct-search__controls">
       <form className="direct-search__form" role="search" onSubmit={event => submitSearch(event, selectedMode)}>
-        <div className="direct-search__mode-row">
-          <fieldset className="direct-search__modes">
-            <legend className="visually-hidden">검색 방식</legend>
-            <label><input type="radio" name="direct-search-mode" value="basic" className="visually-hidden"
-              checked={!isAiSelected} onChange={() => setSelectedMode('basic')} /><span>일반 검색</span></label>
-            <label><input type="radio" name="direct-search-mode" value="ai" className="visually-hidden"
-              checked={isAiSelected} onChange={() => setSelectedMode('ai')} /><span>AI 검색</span></label>
-          </fieldset>
-          <p id="direct-search-mode-help" className="direct-search__mode-help">
-            {isAiSelected ? '공개 사진과 설명에서 단서를 찾아요.' : '검색어가 포함된 공개 정보를 찾아요.'}
-          </p>
-        </div>
+        <fieldset className="direct-search__modes">
+          <legend className="visually-hidden">검색 방식</legend>
+          <label><input type="radio" name="direct-search-mode" value="basic" className="visually-hidden"
+            checked={!isAiSelected} onChange={() => setSelectedMode('basic')} /><span>일반 검색</span></label>
+          <label><input type="radio" name="direct-search-mode" value="ai" className="visually-hidden"
+            checked={isAiSelected} onChange={() => setSelectedMode('ai')} /><span>AI 검색</span></label>
+        </fieldset>
         <label className="visually-hidden" htmlFor="direct-keyword">물건 검색</label>
-        <div className="direct-search__form-row">
-          <input
-            id="direct-keyword"
-            type="search"
-            aria-describedby="direct-search-mode-help direct-search-enter"
-            value={input}
-            onChange={event => setInput(event.target.value)}
-            onKeyDown={event => { if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault() }}
-            placeholder={isAiSelected ? '예: 금색 장식이 달린 검정 지갑' : '예: 가죽 지갑'}
-            maxLength={100}
-          />
-          <div className="direct-search__form-actions">
-            <button type="submit" className="button button--primary" disabled={aiBusy}><Search aria-hidden="true" />{aiBusy ? '정리 중…' : isAiSelected ? 'AI로 찾기' : '검색'}</button>
-            {keyword && <button type="button" className="button button--secondary" onClick={showAll}>전체 보기</button>}
-          </div>
+        <input
+          id="direct-keyword"
+          type="search"
+          enterKeyHint="search"
+          aria-describedby="direct-search-mode-help"
+          value={input}
+          onChange={event => setInput(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault() }}
+          placeholder={isAiSelected ? '예: 금색 장식이 달린 검정 지갑' : '예: 가죽 지갑'}
+          maxLength={100}
+        />
+        <div className="direct-search__form-actions">
+          <button type="submit" className="button button--primary direct-search__submit" disabled={aiBusy}>
+            {aiBusy ? '정리 중…' : isAiSelected ? 'AI로 찾기' : '검색'}
+            <kbd aria-hidden="true">Enter</kbd>
+          </button>
+          {keyword && <button type="button" className="button button--secondary" onClick={showAll}>전체 보기</button>}
         </div>
-        <p id="direct-search-enter" className="direct-search__enter"><kbd>Enter</kbd>로 {isAiSelected ? 'AI 검색' : '일반 검색'}</p>
+        <p id="direct-search-mode-help" className="visually-hidden">{isAiSelected
+          ? 'Enter를 누르면 공개 사진과 설명에서 단서를 찾아요.'
+          : 'Enter를 누르면 검색어가 포함된 공개 정보를 찾아요.'}</p>
       </form>
       <div className="direct-search__filters"><LostResultFilters compact colorOptions={colorOptions} showDirection={false} customDropdowns /></div>
     </div>
