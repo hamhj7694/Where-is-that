@@ -1,7 +1,7 @@
 import type { PublicSearchCoverage } from '../search/lostfound-api'
 
 export default function PublicSearchScope({ coverage }: { coverage: PublicSearchCoverage }) {
-  return <details className="lost-ai-criteria">
+  return <details className="lost-ai-criteria public-search-scope">
     <summary>{coverage.from} ~ {coverage.to} · {coverage.complete ? '공개 목록 확인 완료' : '공개 목록 일부 확인'}</summary>
     <p>경찰청 {coverage.sources.police.pagesRead}페이지 · 포털기관 {coverage.sources.portal.pagesRead}페이지 확인</p>
     <p>{coverage.basis === 'explicit' ? '선택한 기간' : coverage.basis === 'inferred' ? '입력에서 확인한 기간' : '기본 최근 2개월'}

@@ -332,7 +332,7 @@ export default function LostResultFilters({
       </button>}
       {compact && !alwaysOpen && <div className="filter-bar__actions">
         <button type="button" className="button button--secondary" onClick={reset}>초기화</button>
-        <button type="submit" form={formId} className="button button--primary">조건 적용</button>
+        <button type="submit" form={formId} className={'button ' + (isOpen ? 'button--primary' : 'button--secondary')}>조건 적용</button>
       </div>}
       {active.map(key => <button type="button" className="filter-chip" key={key} onClick={() => remove(key)} aria-label={labelOf(key, compact) + ' ' + activeValueLabel(key) + ' 해제'}>{activeValueLabel(key)}<X aria-hidden="true" /></button>)}
       {toolbarActions}

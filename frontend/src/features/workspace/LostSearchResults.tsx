@@ -741,8 +741,10 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     <p className="gallery-query-status" role="status">{editNotice}</p>
     {refreshNotice && <p className={refreshNotice.error ? 'lost-context-rank-status lost-context-rank-status--error' : 'lost-context-rank-status'} role={refreshNotice.error ? 'alert' : 'status'}>{refreshNotice.message}</p>}
     {live.partial && !live.loading && <p className="lost-results__partial" role="status">일부 공개 목록을 불러오지 못했어요. <button type="button" disabled={live.loadingMore} onClick={live.periodCursor && hasMore ? loadNextPage : retry}>다시 시도</button></p>}
-    {live.coverage && <PublicSearchScope coverage={live.coverage} />}
-    {live.coverage && hasMore && !channel && <button type="button" className="button button--secondary" disabled={live.loadingMore} onClick={loadNextPage}>{live.loadingMore ? '공개 목록 확인 중…' : '공개 목록 더 확인'}</button>}
+    {live.coverage && <div className="lost-results__coverage">
+      <PublicSearchScope coverage={live.coverage} />
+      {hasMore && !channel && <button type="button" className="button button--secondary" disabled={live.loadingMore} onClick={loadNextPage}>{live.loadingMore ? '공개 목록 확인 중…' : '공개 목록 더 확인'}</button>}
+    </div>}
     {live.scanLimitReached && (!live.coverage || !hasMore) && <p className="field__help">더 오래된 기록은 <a href={OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">공식 습득물 검색</a>에서 확인해 주세요.</p>}
     {rankBusy && <p className="lost-context-rank-status" role="status">공개 후보의 설명과 장소 정보를 비교해 순서를 정하고 있어요.</p>}
     {rankError && <p className="lost-context-rank-status lost-context-rank-status--error" role="alert">{rankError}{contextPageCandidates.length > 0 && <> <button type="button" onClick={retryContextRanking}>다시 시도</button></>}</p>}

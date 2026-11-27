@@ -9,9 +9,9 @@
   margin-top: 16px;
   padding: 8px 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--raised);
-  box-shadow: 0 8px 20px rgb(0 0 0 / 8%);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgb(37 43 38 / 6%);
 }
 .direct-search__form, .direct-search__filters { min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .direct-search__form {
@@ -22,14 +22,14 @@
 }
 .direct-search__modes {
   display: inline-flex; min-width: 0; gap: 3px; margin: 0; padding: 3px;
-  border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 9px; background: var(--raised);
 }
 .direct-search__modes label { position: relative; cursor: pointer; }
 .direct-search__modes label span {
   display: grid; place-items: center; min-height: 32px; padding-inline: 13px;
   border-radius: 6px; color: var(--text-secondary); font-size: 13px; font-weight: 650; white-space: nowrap;
 }
-.direct-search__modes input:checked + span { background: var(--ink); color: var(--surface); }
+.direct-search__modes input:checked + span { background: var(--accent-soft); color: var(--accent-hover); box-shadow: inset 0 0 0 1px var(--accent); }
 .direct-search__modes input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .direct-search__form input[type='search'] {
   width: 100%; min-width: 0; height: 40px; padding: 0 12px;

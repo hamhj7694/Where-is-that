@@ -17,7 +17,7 @@ export default function PhotoGuide({ mode, children }: { mode: SearchMode; child
     { title: '스크린샷도 가능', detail: '글자를 읽을 수 있게 준비해요.', image: null, alt: '', crop: false },
   ] : [
     { title: '분실 전 사진', detail: '물건이 나온 예전 사진도 좋아요.', image: '/images/wallet.jpg', alt: '물건 전체가 담긴 참고 사진 예시', crop: false },
-    { title: '특징이 선명하게', detail: '색상·모양·로고가 보이게 골라요.', image: '/images/card.jpg', alt: '지갑의 색상과 형태가 보이는 예시', crop: false },
+    { title: '특징이 선명하게', detail: '색상, 무늬, 손잡이처럼 구별되는 부분을 담아요.', image: '/brand/umbrella-detail.webp', alt: '접이식 우산의 손잡이와 천을 가까이 찍은 예시', crop: false, generated: true },
     { title: '필요한 부분만', detail: '사진을 고른 뒤 영역을 선택해요.', image: '/images/wallet.jpg', alt: '검색할 지갑 부분에 잘라낼 영역을 표시한 예시', crop: true },
     { title: '물건이 잘 보이게', detail: '형태를 알아볼 수 있는 사진이 좋아요.', image: '/images/detail.jpg', alt: '열쇠고리 전체의 모양이 보이는 사진 예시', crop: false },
   ]
@@ -30,7 +30,7 @@ export default function PhotoGuide({ mode, children }: { mode: SearchMode; child
         {item.image ? <img src={item.image} alt={item.alt} width="400" height="300" /> : <SchedulePreview />}
         {item.crop && <span className="crop-target" aria-hidden="true" />}
       </div>
-      <figcaption><strong>{item.title}</strong><p>{item.detail}</p></figcaption>
+      <figcaption><strong>{item.title}</strong><p>{item.detail}</p>{'generated' in item && item.generated && <small className="photo-guide__provenance">AI로 만든 예시 사진</small>}</figcaption>
     </figure>)}</div>
     <p className="photo-guide__note">준비를 돕는 샘플 · 검색 결과가 아니에요</p>
   </section>

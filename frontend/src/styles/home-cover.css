@@ -1,0 +1,204 @@
+@font-face {
+  font-family: 'Cover Serif';
+  src: url('/brand/cover-noto-serif-kr.ttf') format('truetype');
+  font-weight: 650;
+  font-display: swap;
+}
+
+.app-shell--cover {
+  --cover-ink: #252b26;
+  --cover-paper: #f9f5ed;
+  --cover-accent: #a63b27;
+  --cover-muted: #59584d;
+  --cover-edge: var(--shell-edge);
+  color: var(--cover-ink);
+  background: var(--cover-paper);
+}
+
+.app-shell--cover .site-footer { border-top: 0; }
+
+.home-cover {
+  position: relative;
+  display: grid;
+  align-items: center;
+  flex: 1;
+  isolation: isolate;
+}
+
+.home-cover::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -86px 0 0;
+  background:
+    radial-gradient(ellipse at 91% 94%, #d97950 0%, #efb38d 27%, #f9f5ed00 62%),
+    radial-gradient(ellipse at 85% 41%, #f3ddbc 0%, #f9f5ed00 52%);
+  pointer-events: none;
+}
+
+.home-cover__inner {
+  width: min(var(--shell-width), calc(100% - var(--cover-edge) * 2));
+  margin: 0 auto;
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.13fr) minmax(0, 1fr);
+  gap: clamp(40px, 7vw, 112px);
+  align-items: center;
+  padding: 48px 24px 56px;
+}
+
+.home-cover__intro h1 {
+  font-family: 'Cover Serif', 'Noto Serif KR', Batang, 'AppleMyungjo', serif;
+  font-size: clamp(44px, 5.2vw, 74px);
+  font-weight: 650;
+  line-height: 1.24;
+  letter-spacing: -.045em;
+  word-break: keep-all;
+}
+
+.home-cover__intro h1 span { display: block; }
+
+.home-cover__intro > p {
+  margin-top: 24px;
+  max-width: 31em;
+  color: var(--cover-muted);
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+.home-cover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.home-cover__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 10px 19px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: keep-all;
+}
+
+.home-cover__action svg { flex: 0 0 auto; }
+.home-cover__action--primary { background: var(--cover-accent); color: #fff; }
+.home-cover__action--primary:hover { background: #853020; }
+.home-cover__action--secondary { border-color: #817a6d; background: #fffcf7; }
+.home-cover__action--secondary:hover { background: #f3e7db; }
+
+.home-cover__visual {
+  position: relative;
+  justify-self: center;
+  width: min(100%, 340px);
+}
+
+.cover-phone {
+  padding: 8px;
+  border: 1px solid #6b6e62;
+  border-radius: 38px;
+  background: #343a32;
+  box-shadow: 0 24px 48px #5d32263d;
+}
+
+.cover-phone__screen {
+  padding: 27px 20px 24px;
+  border-radius: 30px;
+  color: #f9f5ed;
+  background: #252b26;
+}
+
+.cover-phone__app-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cover-phone__question {
+  margin-top: 22px;
+  max-inline-size: 9.5em;
+  font-size: clamp(22px, 2.15vw, 30px);
+  font-weight: 650;
+  line-height: 1.36;
+  letter-spacing: -.03em;
+  word-break: keep-all;
+}
+
+.cover-phone__photo {
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #dbc1a1;
+}
+
+.cover-phone__photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.cover-phone__query {
+  margin-top: 16px;
+  padding: 13px 14px;
+  border: 1px solid #73796d;
+  border-radius: 11px;
+  background: #333a31;
+}
+
+.cover-phone__query span { color: #d5d8cb; font-size: 12px; }
+.cover-phone__query p { margin-top: 4px; font-size: 16px; line-height: 1.5; }
+
+.home-cover__visual figcaption {
+  display: table;
+  margin: 15px auto 0;
+  padding: 4px 9px;
+  border-radius: 5px;
+  color: #504237;
+  background: #fff9ee;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.app-shell--cover .site-footer {
+  width: min(var(--shell-width), calc(100% - var(--cover-edge) * 2));
+  padding: 12px 24px;
+}
+
+@media (max-width: 980px) {
+  .home-cover__inner { padding-inline: 0; }
+}
+
+@media (max-width: 760px) {
+  .home-cover__inner {
+    min-height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding-block: 48px 40px;
+  }
+  .home-cover__intro h1 { font-size: clamp(32px, 9.3vw, 59px); }
+  .home-cover__visual { width: min(100%, 310px); }
+  .home-cover__action { min-height: 48px; }
+  .home-cover::before {
+    background: radial-gradient(ellipse at 95% 83%, #eaa57d 0%, #f4d3b6 35%, #f9f5ed00 68%);
+  }
+}
+
+@media (max-width: 600px) {
+  .home-cover__inner { padding-top: 42px; }
+  .home-cover__intro > p { margin-top: 16px; }
+  .home-cover__actions { margin-top: 22px; gap: 8px; }
+  .home-cover__action { font-size: 14px; padding-inline: 12px; }
+  .app-shell--cover .site-footer { padding-inline: 0; }
+}

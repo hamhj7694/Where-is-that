@@ -75,7 +75,7 @@ export function LoginPage({ session }: AccountProps) {
           </form>}
         <Link className="button button--secondary" to={signupTo}>회원가입</Link>
       </>}
-    <Link className="button button--ink" to="/">검색으로 돌아가기</Link>
+    <Link className="text-button login-panel__back" to="/">검색으로 돌아가기</Link>
     <p className="field__help">로그인 전에 찾은 기록도 이 브라우저에서 계속 볼 수 있어요.</p>
   </div></main>
 }
@@ -281,7 +281,7 @@ export function AccountPage({ session, items, onLogout }: AccountProps) {
     }
   }
 
-  return <main id="main-content" className="content-workspace">
+  return <main id="main-content" className="content-workspace account-workspace">
     <PageHeading title="내 계정" />
     <DemoNotice>{provider}으로 로그인했어요. 등록한 사진과 검색 기록은 이 계정에 저장돼요.</DemoNotice>
 
@@ -344,7 +344,7 @@ export function AccountPage({ session, items, onLogout }: AccountProps) {
 
 export function SettingsPage({ gallery, session, onOpenGallery, onDisconnect }: { gallery: GallerySource | null; session: boolean; onOpenGallery: () => void; onDisconnect: () => void }) {
   const [confirm, setConfirm] = useState(false)
-  return <main id="main-content" className="content-workspace"><PageHeading title="설정" />
+  return <main id="main-content" className="content-workspace account-workspace"><PageHeading title="설정" />
     <section className="settings-group"><h2>갤러리</h2><div className="settings-row"><div><strong>{gallery ? gallery.name + ' · ' + gallery.files.length + '장' : '연결한 갤러리 없음'}</strong><p>기기의 원본은 그대로 유지해요.</p></div><button className="button button--secondary" onClick={onOpenGallery}>{gallery ? '갤러리 관리' : '갤러리 연결'}</button></div>
       <div className="settings-row"><div><strong>검색정보</strong><p>현재 체험에서는 검색 인덱스를 저장하지 않아요.</p></div><span className="status-badge">미생성</span></div>
       {gallery && <div className="settings-row"><div><strong>갤러리 연결 해제</strong><p>원본 사진을 삭제하지 않아요.</p></div><button className="button button--secondary" onClick={() => setConfirm(true)}>연결 해제</button></div>}</section>
@@ -354,7 +354,7 @@ export function SettingsPage({ gallery, session, onOpenGallery, onDisconnect }: 
 }
 
 export function InfoPage({ page }: { page: 'privacy' | 'about' }) {
-  return <main id="main-content" className="content-workspace"><PageHeading title={page === 'privacy' ? '사진 처리 안내' : '화면 체험 안내'} back={{ to: '/', label: '검색으로' }} />
+  return <main id="main-content" className="content-workspace account-workspace"><PageHeading title={page === 'privacy' ? '사진 처리 안내' : '화면 체험 안내'} back={{ to: '/', label: '검색으로' }} />
     {page === 'privacy' ? <><section className="settings-group"><h2>현재 저장 범위</h2><dl className="detail-facts"><div><dt>비로그인 검색 기록·북마크</dt><dd>이 브라우저에 저장</dd></div><div><dt>로그인 후 검색 기록·등록 항목</dt><dd>로그인한 계정에 저장</dd></div><div><dt>기기 원본</dt><dd>변경·삭제하지 않음</dd></div></dl></section>
       <section className="settings-group"><h2>계정 탈퇴 시</h2><dl className="detail-facts"><div><dt>삭제 범위</dt><dd>계정의 검색 기록과 등록한 사진</dd></div><div><dt>남는 항목</dt><dd>기기에 있는 원본 사진</dd></div></dl><p className="field__help">갤러리 전체를 계정에 자동 등록하지 않아요. 등록한 자료는 목록·상세에서 확인하고 삭제해요.</p></section></>
       : <><DemoNotice>화면 체험용 안내예요. 실제 서비스와 다를 수 있어요.</DemoNotice><section className="settings-group"><h2>지금 해볼 수 있어요</h2><div className="settings-row"><div><strong>사진·입력·화면 이동</strong><p>샘플 후보와 임시 물건을 둘러보세요.</p></div><Link className="button button--secondary" to="/preview">화면 목록</Link></div></section>

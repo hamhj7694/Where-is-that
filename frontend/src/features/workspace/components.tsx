@@ -169,7 +169,7 @@ export function LocationCard({ item, location = item.location }: { item: Candida
   return <section className="institution-card" aria-labelledby="institution-heading"><div className="section-heading"><h2 id="institution-heading">보관기관 및 위치</h2><MapPin aria-hidden="true" /></div>
     <h3>{item.custodyName ?? '보관기관 정보 없음'}</h3>{location.address && <p>{location.address}</p>}
     {item.mapUrl ? <div className="location-fallback"><MapPin aria-hidden="true" /><p>아래 링크에서 실제 보관기관 위치를 확인해 주세요.</p></div>
-      : showMap ? <div className="mini-map" role="img" aria-label="샘플 지도 구성. 실제 기관 위치가 아닙니다."><svg viewBox="0 0 600 160" aria-hidden="true"><rect width="600" height="160" fill="#eff0eb" /><path d="M0 45H600M0 115H600M100 0V160M310 0V160M500 0V160" stroke="#fff" strokeWidth="18" /><circle cx="310" cy="80" r="12" fill="#222322" /><circle cx="310" cy="80" r="4" fill="#e5db72" /></svg><span>샘플 지도 · 실제 위치가 아니에요</span></div>
+      : showMap ? <div className="mini-map" role="img" aria-label="샘플 지도 구성. 실제 기관 위치가 아닙니다."><svg viewBox="0 0 600 160" aria-hidden="true"><rect width="600" height="160" fill="var(--raised)" /><path d="M0 45H600M0 115H600M100 0V160M310 0V160M500 0V160" stroke="var(--surface)" strokeWidth="18" /><circle cx="310" cy="80" r="12" fill="var(--accent)" /><circle cx="310" cy="80" r="4" fill="var(--surface)" /></svg><span>샘플 지도 · 실제 위치가 아니에요</span></div>
         : <div className="location-fallback"><MapPin aria-hidden="true" /><p>{locationMessages[location.status]}</p></div>}
     <p className="field__help">실제 보관 여부는 연락처로 문의 부탁드립니다.</p>
     <div className="button-row">

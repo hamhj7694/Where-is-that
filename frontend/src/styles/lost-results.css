@@ -3,7 +3,7 @@
 .lost-results__search {
   margin-bottom: var(--space-6);
   border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-panel);
   background: var(--surface);
 }
 .lost-results .lost-query-summary {
@@ -37,7 +37,7 @@
 .lost-query-summary__actions .query-optimizer__action svg { width: 15px; height: 15px; }
 .lost-query-summary__feedback { grid-column: 1 / -1; }
 .lost-query-summary__feedback > .form-error { margin: 0; }
-.lost-results__filters { border-top: 1px solid var(--line); padding: 6px var(--space-4); }
+.lost-results__filters { border-top: 1px solid var(--line); padding: 6px var(--space-4); background: var(--raised); border-radius: 0 0 calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px); }
 .lost-results__filters .filter-bar { margin: 0; }
 .lost-results__filters .filter-accordion[data-open='true'] { margin: var(--space-2) 0 0; }
 .lost-results__filters .filter-accordion__form { padding: var(--space-2) 0 var(--space-3); border: 0; border-radius: 0; box-shadow: none; }
@@ -45,7 +45,7 @@
 .lost-results__refresh:hover:not(:disabled) { color: var(--ink); }
 .lost-results__refresh:disabled { color: var(--text-muted); cursor: default; }
 .lost-results__search--editing { border: 0; background: transparent; }
-.lost-results__search--editing > .lost-results__filters { margin-top: var(--space-2); border: 0; padding-inline: 0; }
+.lost-results__search--editing > .lost-results__filters { margin-top: var(--space-2); border: 0; padding-inline: 0; background: transparent; }
 .lost-results > .gallery-query-status { margin-bottom: var(--space-3); }
 .lost-query-summary__photos { min-width: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .lost-query-summary__photo { min-width: 0; width: 72px; display: grid; gap: 4px; }
@@ -89,6 +89,13 @@ button.gallery-result-section__more { border: 0; background: none; cursor: point
 .lost-ai-criteria__chip--exclude strong { color: #a32d2d; }
 .lost-ai-criteria__chip--imageFeatures strong { color: #7a4ca3; }
 .lost-ai-criteria__note { margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.public-search-scope > summary { font-size: 13px; line-height: 1.65; color: var(--text-secondary); cursor: pointer; }
+.public-search-scope p { margin: 0 0 8px; font-size: 13px; line-height: 1.65; color: var(--text-secondary); overflow-wrap: anywhere; }
+.public-search-scope p:first-of-type { margin-top: 10px; }
+.lost-results__coverage { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 16px; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.lost-results__coverage > .public-search-scope { flex: 1 1 320px; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; }
+.lost-results__coverage summary { min-height: 44px; padding-block: 11px; }
+.lost-results__coverage > .button { min-height: 44px; padding-inline: 12px; font-size: 13px; }
 .lost-results__details { margin-top: var(--space-8); border-top: 1px solid var(--line); }
 .lost-results__details > details { margin: 0; padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .lost-results__details > details > summary { min-height: 44px; padding: 11px 0; color: var(--text-secondary); font-size: 13px; line-height: 1.65; cursor: pointer; list-style: revert; }
@@ -100,6 +107,8 @@ button.gallery-result-section__more { border: 0; background: none; cursor: point
 .lost-results__details + .result-disclaimer { margin-top: var(--space-3); padding-top: 0; border-top: 0; }
 @media (max-width: 600px) {
   .lost-ai-criteria { padding: 12px; }
+  .lost-results__coverage { gap: 0; }
+  .lost-results__coverage > .public-search-scope { flex-basis: 100%; }
   .lost-results .content-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
   .lost-results .content-heading h1 { font-size: 24px; }
   .lost-results .content-heading p { font-size: 12px; }
