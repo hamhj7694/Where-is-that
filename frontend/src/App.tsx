@@ -403,24 +403,51 @@ export default function App() {
   }
 
   const utilityNavigation = <><NavLink to="/history" onClick={() => setOverlay(null)}>찾은 기록</NavLink><NavLink to="/valuables" onClick={() => setOverlay(null)}>사진 등록해 두기</NavLink><NavLink to="/settings" onClick={() => setOverlay(null)}>설정</NavLink></>
-  return <div className={isHome ? 'app-shell app-shell--cover' : isInputPage ? 'app-shell' : 'app-shell app-shell--content'}><a className="skip-link" href="#main-content">본문으로 바로 가기</a>
+  return <div className={isHome ? 'app-shell app-shell--cover' : isInputPage ? 'app-shell app-shell--search' : 'app-shell app-shell--content'}><a className="skip-link" href="#main-content">본문으로 바로 가기</a>
     <header className="site-header"><div className="site-header__inner"><Link className="brand" to="/" aria-label="그거어디? 홈"><span>그거어디<span className="brand__question">?</span></span></Link><NavLink className={({ isActive }) => 'brand-description' + (isActive && !fromDirectSearch ? ' active' : '')} to={lastSearchPath} aria-label="내 사진 · 내 물건 찾기 검색으로 이동">내 사진 · 내 물건 찾기</NavLink><NavLink className={({ isActive }) => 'header-direct-link' + (isActive || fromDirectSearch ? ' active' : '')} to={lastDirectSearchPath}>직접 찾기</NavLink>
       <nav className="desktop-nav" aria-label="주 메뉴">{utilityNavigation}</nav><div className="header-actions"><Link className="login-link" to={session ? '/account' : '/auth/login'}>{session ? (user?.nickname ?? '내 계정') : '로그인'}</Link><button type="button" className="icon-button menu-toggle" aria-label="메뉴 열기" aria-haspopup="dialog" onClick={() => setOverlay('menu')}><Menu /></button></div></div></header>
     {isInputPage && <nav className="mode-bar" aria-label="검색 기능"><div className="mode-bar__inner"><div className="mode-tabs" role="tablist" aria-label="검색 방식 선택" onKeyDown={handleModeKeys}>
       {(['gallery', 'lost'] as const).map(item => <button type="button" key={item} id={'mode-' + item} role="tab" aria-selected={mode === item} aria-controls="search-panel" tabIndex={mode === item ? 0 : -1} onClick={() => changeMode(item)}>{item === 'gallery' ? <Images aria-hidden="true" /> : <SearchModeIcon />}<span className="mode-label">{copy[item].name}</span></button>)}
     </div></div></nav>}
-    {isHome ? <HomeCover /> : isInputPage ? <main id="main-content" className="search-workspace"><section className="search-area" aria-labelledby="page-heading"><div className="search-area__main"><div className="page-intro"><h1 id="page-heading">{needsGallery ? '사진을 연결해 주세요' : copy[mode].title}</h1><p>{needsGallery ? '연결하면 갤러리 전체에서 사진을 찾을 수 있어요.' : copy[mode].description}</p></div>
-      <div id="search-panel" role="tabpanel" aria-labelledby={'mode-' + mode}>{needsGallery ? <GalleryConnection gallery={gallery} error={galleryError} onConnect={connectGallery} onCancel={returnFromGallery} onDisconnect={() => setOverlay('disconnect')} /> : <>
-        <div className={mode === 'gallery' ? 'search-scope' : 'search-scope search-scope--public'}><div className="gallery-scope__header"><div className="search-scope__text"><span className="search-scope__label">검색 대상</span><strong>{mode === 'gallery' ? '연결한 갤러리 전체' : copy.publicScope}</strong>{mode === 'gallery' && gallery && <small>{gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</small>}</div>
-          {mode === 'gallery' && <div className="gallery-scope__actions"><button type="button" className="scope-action" onClick={openGallery}><FolderOpen aria-hidden="true" /><span>갤러리 관리</span><ChevronRight aria-hidden="true" /></button><button type="button" className="scope-action scope-action--quiet" onClick={() => setOverlay('disconnect')}>갤러리 해제</button></div>}
-        </div></div>
-        <SearchComposer mode={mode} draft={draft} textareaRef={textarea} error={error} onDraft={changeDraft} onSubmit={submit} onError={message => setErrors(previous => ({ ...previous, [mode]: message }))} />
-        {error && <p id="search-error" role="alert" className="form-error">{error}</p>}
-        <div className="search-notes"><p className="scope-note"><ShieldCheck aria-hidden="true" /><span>{mode === 'gallery' ? copy.aiNotice : copy.publicLimit}</span></p>
-          <details className="privacy-details"><summary>데이터 처리 자세히 보기</summary><p>{mode === 'lost' ? 'AI 검색 요청에 입력한 내용과 참고 사진을 사용해요. 공개된 습득물 기록과 비교해 후보를 보여줘요.' : 'AI 비교 요청에 입력한 내용과 비교할 사진을 사용해요. 기기에 있는 파일은 그대로 유지해요.'}</p></details>
+    {isHome ? <HomeCover /> : isInputPage ? <main id="main-content" className="search-workspace">
+      <section className="search-area" aria-labelledby="page-heading">
+        <div className="page-intro">
+          <h1 id="page-heading">{needsGallery ? '사진을 연결해 주세요' : copy[mode].title}</h1>
+          <p>{needsGallery ? '연결하면 갤러리 전체에서 사진을 찾을 수 있어요.' : copy[mode].description}</p>
         </div>
-        {mode === 'gallery' && <div className="search-gallery-preview"><GalleryPreview key={gallery?.files[0] ? localPhotoId(gallery.files[0]) : 'disconnected'} gallery={gallery} onAdd={addGallery} /></div>}</>}
-      </div><p className="announcement" role="status" aria-live="polite">{announcement}</p></div><SearchExample mode={mode} /></section></main>
+        <div id="search-panel" className="search-area__panel" role="tabpanel" aria-labelledby={'mode-' + mode}>
+          <div className="search-area__main">
+            {needsGallery ? <GalleryConnection gallery={gallery} error={galleryError} onConnect={connectGallery} onCancel={returnFromGallery} onDisconnect={() => setOverlay('disconnect')} /> : <>
+              <div className={mode === 'gallery' ? 'search-scope' : 'search-scope search-scope--public'}>
+                <div className="gallery-scope__header">
+                  <div className="search-scope__text">
+                    <span className="search-scope__label">검색 대상</span>
+                    <strong>{mode === 'gallery' ? '연결한 갤러리 전체' : copy.publicScope}</strong>
+                    {mode === 'gallery' && gallery && <small>{gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</small>}
+                  </div>
+                  {mode === 'gallery' && <div className="gallery-scope__actions">
+                    <button type="button" className="scope-action" onClick={openGallery}><FolderOpen aria-hidden="true" /><span>갤러리 관리</span><ChevronRight aria-hidden="true" /></button>
+                    <button type="button" className="scope-action scope-action--quiet" onClick={() => setOverlay('disconnect')}>갤러리 해제</button>
+                  </div>}
+                </div>
+              </div>
+              <SearchComposer mode={mode} draft={draft} textareaRef={textarea} error={error} onDraft={changeDraft} onSubmit={submit} onError={message => setErrors(previous => ({ ...previous, [mode]: message }))} />
+              {error && <p id="search-error" role="alert" className="form-error">{error}</p>}
+              <div className="search-notes">
+                <p className="scope-note"><ShieldCheck aria-hidden="true" /><span>{mode === 'gallery' ? copy.aiNotice : copy.publicLimit}</span></p>
+                <details className="privacy-details">
+                  <summary>데이터 처리 자세히 보기</summary>
+                  <p>{mode === 'lost' ? 'AI 검색 요청에 입력한 내용과 참고 사진을 사용해요. 공개된 습득물 기록과 비교해 후보를 보여줘요.' : 'AI 비교 요청에 입력한 내용과 비교할 사진을 사용해요. 기기에 있는 파일은 그대로 유지해요.'}</p>
+                </details>
+              </div>
+              {mode === 'gallery' && <div className="search-gallery-preview"><GalleryPreview key={gallery?.files[0] ? localPhotoId(gallery.files[0]) : 'disconnected'} gallery={gallery} onAdd={addGallery} /></div>}
+            </>}
+            <p className="announcement" role="status" aria-live="polite">{announcement}</p>
+          </div>
+          <SearchExample mode={mode} />
+        </div>
+      </section>
+    </main>
       : <WorkspaceRouter gallery={gallery} galleryReady={galleryRestored} historyReady={historyReady} authReady={ready} accountLoading={accountLoading} accountLoadError={accountLoadError} onRetryAccountLoad={retryAccountLoad} drafts={drafts} records={records} autoRankRecordId={autoRankRecordId} galleryRankSeed={galleryRankSeed} onConsumeAiRankConsent={recordId => setAutoRankRecordId(current => current === recordId ? null : current)} onDeleteRecord={deleteRecord} onEditRecord={record => { setDrafts(previous => ({ ...previous, [record.mode]: snapshotSearchDraft(record.mode, record.draft) })); navigate(modePaths[record.mode]) }} session={session} items={items} onOpenGallery={openGallery} onAddGallery={addGallery} onDisconnect={disconnectGallery}
         onAssistantChange={(id, patch) => updateRecord(id, previous => updateSearchAssistant(previous, id, patch))} onRefineRecord={(parent, assistant) => parent.mode === 'lost' ? refineLostSearch(parent, assistant) : refineGallerySearch(parent, assistant)}
         onCommitGallerySearch={commitGallerySearch} onCommitLostSearch={commitLostSearch}
