@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, ty
 import { ArrowUpRight, Bookmark, ChevronDown, ChevronUp, Images, RotateCcw, Search, Trash2, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Modal from '../../components/Modal'
+import { useBrowserScope } from '../auth/browser-scope'
 import { usePhotoPreview } from '../search/usePhotoPreview'
 import { galleryHistoryPreview, recordPath, type SearchRecord } from '../search/history'
 import { getReferencePhotos } from '../search/model'
@@ -106,7 +107,8 @@ export default function HistoryPage({ records, onDeleteRecord, session, onRetryA
   const startLinks = useRef(new Map<string, HTMLAnchorElement>())
   const bookmarkButtons = useRef(new Map<string, HTMLButtonElement>())
   const pending = records.find(record => record.id === pendingId)
-  const bookmarks = useBookmarks()
+  const scope = useBrowserScope()
+  const bookmarks = useBookmarks(scope)
 
   function confirmDelete() {
     if (!pending || deleteConfirmation !== '삭제') return
@@ -125,15 +127,16 @@ export default function HistoryPage({ records, onDeleteRecord, session, onRetryA
     })
   }
   function confirmBookmarkRemoval() {
-    if (!pendingBookmark) return
+    if (!scope || !pendingBookmark) return
     const id = pendingBookmark.id
-    requestBookmarkRemoval(id)
+    requestBookmarkRemoval(scope, id)
     setPendingBookmark(null)
     setMessage('북마크를 해제했어요. 실수였다면 목록에서 되돌릴 수 있어요.')
     requestAnimationFrame(() => document.getElementById('bookmark-undo-' + id)?.focus())
   }
   function undoBookmarkRemoval(entry: BookmarkView) {
-    restoreBookmark(entry.id)
+    if (!scope) return
+    restoreBookmark(scope, entry.id)
     setMessage('북마크를 되돌렸어요.')
     requestAnimationFrame(() => bookmarkButtons.current.get(entry.id)?.focus())
   }
@@ -148,7 +151,7 @@ export default function HistoryPage({ records, onDeleteRecord, session, onRetryA
   return <main id="main-content" className="content-workspace history-workspace">
     <PageHeading title="찾은 기록" description="검색 내용과 결과를 다시 볼 수 있어요." />
     <p className="history-retention">{session
-      ? '로그인 후 검색한 기록은 계정에, 비로그인 기록과 북마크는 이 브라우저에 저장해요.'
+      ? '계정에서 검색한 기록을 보여줘요. 북마크는 이 브라우저에 계정별로 저장해요.'
       : '검색 기록과 북마크는 이 브라우저에 저장해요.'}</p>
     {session && onRetryAccountLoad && <div className="inline-error" role="status"><p>계정 기록을 불러오지 못했어요.</p><RetryButton onClick={onRetryAccountLoad} label="다시 불러오기" /></div>}
     <p className="history-status" role="status" aria-live="polite">{message}</p>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useBrowserScope, type BrowserScope } from '../auth/browser-scope'
 import { readLostResultFilters } from '../search/lost-result-model'
 import {
   compactFoundItems, dedupeLostFound, getBrowseJob, startBrowseJob, toCandidate,
@@ -61,9 +62,10 @@ export function canResumeBrowseJob(
     && stored.searchKey === searchKey)
 }
 
-function readStoredJob(): StoredJob | null {
+function readStoredJob(scope: BrowserScope | null): StoredJob | null {
+  if (!scope) return null
   try {
-    const raw = window.localStorage.getItem(JOB_STORAGE_KEY)
+    const raw = window.localStorage.getItem(JOB_STORAGE_KEY + ':' + scope)
     if (!raw) return null
     const value = JSON.parse(raw) as Partial<StoredJob>
     return typeof value.jobId === 'string' && typeof value.keyword === 'string' ? value as StoredJob : null
@@ -72,12 +74,14 @@ function readStoredJob(): StoredJob | null {
   }
 }
 
-function writeStoredJob(job: StoredJob) {
-  try { window.localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(job)) } catch { /* 저장 불가면 무시 */ }
+function writeStoredJob(scope: BrowserScope | null, job: StoredJob) {
+  if (!scope) return
+  try { window.localStorage.setItem(JOB_STORAGE_KEY + ':' + scope, JSON.stringify(job)) } catch { /* 저장 불가면 무시 */ }
 }
 
-function clearStoredJob() {
-  try { window.localStorage.removeItem(JOB_STORAGE_KEY) } catch { /* 무시 */ }
+function clearStoredJob(scope: BrowserScope | null) {
+  if (!scope) return
+  try { window.localStorage.removeItem(JOB_STORAGE_KEY + ':' + scope) } catch { /* 무시 */ }
 }
 
 interface LiveState {
@@ -153,9 +157,10 @@ interface StoredSearch {
   visualProgress: { scanned: number; total: number }
 }
 
-function readStoredSearch(): StoredSearch | null {
+function readStoredSearch(scope: BrowserScope | null): StoredSearch | null {
+  if (!scope) return null
   try {
-    const raw = window.sessionStorage.getItem(LAST_SEARCH_KEY)
+    const raw = window.sessionStorage.getItem(LAST_SEARCH_KEY + ':' + scope)
     if (!raw) return null
     const value = JSON.parse(raw) as StoredSearch
     if (typeof value.keyword !== 'string' || !value.live || !Array.isArray(value.live.raw)) return null
@@ -166,17 +171,19 @@ function readStoredSearch(): StoredSearch | null {
   }
 }
 
-function writeStoredSearch(value: StoredSearch) {
-  try { window.sessionStorage.setItem(LAST_SEARCH_KEY, JSON.stringify(value)) } catch { /* 저장 불가면 무시 */ }
+function writeStoredSearch(scope: BrowserScope | null, value: StoredSearch) {
+  if (!scope) return
+  try { window.sessionStorage.setItem(LAST_SEARCH_KEY + ':' + scope, JSON.stringify(value)) } catch { /* 저장 불가면 무시 */ }
 }
 
-function clearStoredSearch() {
-  try { window.sessionStorage.removeItem(LAST_SEARCH_KEY) } catch { /* 무시 */ }
+function clearStoredSearch(scope: BrowserScope | null) {
+  if (!scope) return
+  try { window.sessionStorage.removeItem(LAST_SEARCH_KEY + ':' + scope) } catch { /* 무시 */ }
 }
 
 export default function DirectSearchPage() {
-  const restoredRef = useRef<StoredSearch | null>(readStoredSearch())
-  const restored = restoredRef.current
+  const scope = useBrowserScope()
+  const [restored] = useState(() => readStoredSearch(scope))
   const [params, setParams] = useSearchParams()
   const [input, setInput] = useState(restored?.input ?? '')
   const [keyword, setKeyword] = useState(restored?.keyword ?? '')
@@ -229,7 +236,7 @@ export default function DirectSearchPage() {
   // AI 분석은 검색어가 바뀔 때만 한다. 필터 변경은 서버 조회만 다시 트리거한다.
   useEffect(() => {
     if (!keyword) {
-      clearStoredSearch()
+      clearStoredSearch(scope)
       setCriteria(EMPTY_SEARCH_CRITERIA)
       setAiDates({ from: '', to: '' })
       setAiRegion('')
@@ -287,7 +294,7 @@ export default function DirectSearchPage() {
       })
       .finally(() => { if (!cancelled) setAiBusy(false) })
     return () => { cancelled = true }
-  }, [keyword, mode])
+  }, [keyword, mode, scope])
 
   const hints = useMemo<LostSearchHints>(() => ({
     ...criteriaToHints(mode === 'basic' ? EMPTY_SEARCH_CRITERIA : criteria),
@@ -317,7 +324,7 @@ export default function DirectSearchPage() {
     const offset = previous ? skipVisual : 0
     const pending = previous ? { ...previous, loading: true, extensionError: undefined } : initialLive(true)
     const remember = (value: LiveState, continuing = false) => {
-      writeStoredSearch({
+      writeStoredSearch(scope, {
         keyword, input, page, params: params.toString(), mode,
         live: { ...value, raw: compactFoundItems(value.raw) },
         policy: SEARCH_POLICY, criteria, aiDates, aiRegion, aiCategory, aiQuestions, answeredQuestions,
@@ -337,7 +344,7 @@ export default function DirectSearchPage() {
     setVisualProgress({ scanned: 0, total: 0 })
 
     const clearIfCurrent = (jobId: string) => {
-      if (readStoredJob()?.jobId === jobId) clearStoredJob()
+      if (readStoredJob(scope)?.jobId === jobId) clearStoredJob(scope)
     }
     const finish = (payload: BrowsePayload, jobId: string) => {
       if (cancelled) return
@@ -399,7 +406,7 @@ export default function DirectSearchPage() {
     }
     const begin = async () => {
       try {
-        const stored = readStoredJob()
+        const stored = readStoredJob(scope)
         // AI 해석 전 원문 조회 작업을 조건이 생긴 뒤에도 이어 쓰면 지갑 대신
         // 검은색 휴대폰·가방이 섞인다. 조회 조건이 같을 때만 작업을 재사용한다.
         const resumable = canResumeBrowseJob(stored, searchKey, keyword, mode, reloadToken, offset)
@@ -413,7 +420,7 @@ export default function DirectSearchPage() {
           : await startBrowseJob(keyword, 1, API_ROWS, hints, filters, 200, offset, priorVisualScores, mode, previous?.jobId,
             keyword || filters.from || filters.to ? { cursor: previous?.periodCursor } : undefined)
         if (cancelled) return
-        writeStoredJob({
+        writeStoredJob(scope, {
           jobId: job.jobId, keyword, reloadToken, skipVisual: offset, mode, searchKey,
           priorVisualScores,
         })
@@ -427,7 +434,7 @@ export default function DirectSearchPage() {
       cancelled = true
       if (timer) window.clearTimeout(timer)
     }
-  }, [keyword, reloadToken, skipVisual, hints, filters, searchKey, analyzedKeyword, mode, isAiSearch])
+  }, [keyword, reloadToken, skipVisual, hints, filters, searchKey, analyzedKeyword, mode, isAiSearch, scope])
 
   useEffect(() => {
     if (live.loading || live.error || aiBusy || resolvedResults.current !== resultSignature || pageParam === null) return
@@ -496,7 +503,7 @@ export default function DirectSearchPage() {
     restoreSearchRef.current = null
     continuationRef.current = null
     if (keywordChanged || modeChanged) {
-      clearStoredJob()
+      clearStoredJob(scope)
       setAnalyzedKeyword('')
       setSkipVisual(0)
     }
@@ -517,7 +524,7 @@ export default function DirectSearchPage() {
     restoreAiRef.current = null
     restoreSearchRef.current = null
     continuationRef.current = null
-    clearStoredJob()
+    clearStoredJob(scope)
     answeredRef.current = [...answeredRef.current, question.trim()]
     setAnsweredQuestions(answeredRef.current)
     setAiQuestions(current => current.filter(item => item !== question))
@@ -537,8 +544,8 @@ export default function DirectSearchPage() {
   }
 
   function showAll() {
-    clearStoredJob()
-    clearStoredSearch()
+    clearStoredJob(scope)
+    clearStoredSearch(scope)
     restoreAiRef.current = null
     restoreSearchRef.current = null
     continuationRef.current = null

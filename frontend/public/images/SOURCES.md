@@ -27,3 +27,9 @@ For mock found-item screens, retain a visible label such as `샘플 사진 · �
 ## Design process attribution
 
 The design review uses [unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky ([@heydamir](https://x.com/heydamir)), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Its quiet-interface and product-content principles are adapted to a Korean photo-search app; no generated marketing hero is used.
+
+## Gallery connection guide
+
+Codex ImageGen generated the still life in public/brand/gallery-folder-guide.webp. The 880 × 660 WebP illustrates a folder during gallery setup.
+
+> Create a text-free wide 4:3 editorial still-life photograph for the empty gallery connection state of a Korean app that searches the user's local photos. The unmistakable single subject is an open manila file folder with a visible raised tab, a light warm ochre folder with fine paper grain, holding three white-bordered personal photo prints. The prints fan out slightly from inside the folder, with a coastal snapshot, a neighborhood street snapshot, and a largely obscured third print. The folder is frontmost and prominent. Use a pale oat tabletop, one warm terracotta edge accent or divider within the folder, and soft daylight from upper left. Restrained tactile realism, lightly angled overhead composition, shadows like the existing app's editorial product photos. Neutral color grading with high legibility at 250–350 pixels wide. Center the entire object within the middle 66 percent of the composition so that a shallow landscape crop for mobile can keep the folder tab and visible photos. Single still life only. No letters, words, UI, icons, arrows, people, laptops, visible brands or watermark.

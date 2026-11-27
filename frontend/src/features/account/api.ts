@@ -35,10 +35,10 @@ async function request(path: string, init?: RequestInit): Promise<AccountContent
   return body as AccountContent
 }
 
-export function fetchContent(): Promise<AccountContent> {
-  return request('/me/content')
+export function fetchContent(userId: number): Promise<AccountContent> {
+  return request('/me/content', { headers: { 'X-Geugeo-Account-Id': String(userId) } })
 }
 
-export function saveContent(content: AccountContent): Promise<AccountContent> {
-  return request('/me/content', { method: 'PUT', body: JSON.stringify(content) })
+export function saveContent(userId: number, content: AccountContent): Promise<AccountContent> {
+  return request('/me/content', { method: 'PUT', body: JSON.stringify(content), headers: { 'X-Geugeo-Account-Id': String(userId) } })
 }

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import type { BrowserScope } from '../auth/browser-scope'
 
 export type BookmarkKind = 'gallery' | 'lost'
 
@@ -22,12 +23,6 @@ const STORAGE_KEY = 'geugeo-eodi:bookmarks'
 const MAX_BOOKMARKS = 200
 const EMPTY: BookmarkView[] = []
 
-let cache: BookmarkEntry[] | null = null
-let viewCache: BookmarkView[] | null = null
-/** 해제를 누른 북마크는 저장소에서 빼되, 페이지를 떠나기 전까지 화면에 남겨 둔다. */
-let pendingRemoved: BookmarkEntry[] = []
-const listeners = new Set<() => void>()
-
 function isEntry(value: unknown): value is BookmarkEntry {
   if (!value || typeof value !== 'object') return false
   const entry = value as Record<string, unknown>
@@ -40,58 +35,118 @@ function isEntry(value: unknown): value is BookmarkEntry {
     && typeof entry.createdAt === 'number'
 }
 
-function read(): BookmarkEntry[] {
-  if (cache) return cache
-  if (typeof window === 'undefined') return EMPTY
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : []
-    cache = Array.isArray(parsed) ? parsed.filter(isEntry).slice(0, MAX_BOOKMARKS) : []
-  } catch {
-    cache = []
+function createStore(key: string) {
+  let cache: BookmarkEntry[] | null = null
+  let viewCache: BookmarkView[] | null = null
+  let pendingRemoved: BookmarkEntry[] = []
+  const listeners = new Set<() => void>()
+
+  function read(): BookmarkEntry[] {
+    if (cache) return cache
+    if (typeof window === 'undefined') return EMPTY
+    try {
+      const raw = window.localStorage.getItem(key)
+      const parsed: unknown = raw ? JSON.parse(raw) : []
+      cache = Array.isArray(parsed) ? parsed.filter(isEntry).slice(0, MAX_BOOKMARKS) : []
+    } catch {
+      cache = []
+    }
+    return cache
   }
-  return cache
-}
 
-function getView(): BookmarkView[] {
-  if (viewCache) return viewCache
-  const pendingIds = new Set(pendingRemoved.map(entry => entry.id))
-  viewCache = [...pendingRemoved, ...read()]
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .map(entry => ({ ...entry, pendingRemoval: pendingIds.has(entry.id) }))
-  return viewCache
-}
+  function getView(): BookmarkView[] {
+    if (viewCache) return viewCache
+    const pendingIds = new Set(pendingRemoved.map(entry => entry.id))
+    viewCache = [...pendingRemoved, ...read()]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(entry => ({ ...entry, pendingRemoval: pendingIds.has(entry.id) }))
+    return viewCache
+  }
 
-function emit() { listeners.forEach(listener => listener()) }
+  function emit() { listeners.forEach(listener => listener()) }
 
-function write(next: BookmarkEntry[]) {
-  cache = next
-  viewCache = null
-  try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* Storage is optional. */ }
-  emit()
-}
+  function write(next: BookmarkEntry[]) {
+    cache = next
+    viewCache = null
+    try { window.localStorage.setItem(key, JSON.stringify(next)) } catch { /* Storage is optional. */ }
+    emit()
+  }
 
-function subscribe(listener: () => void) {
-  listeners.add(listener)
-  return () => { listeners.delete(listener) }
-}
+  function subscribe(listener: () => void) {
+    listeners.add(listener)
+    return () => { listeners.delete(listener) }
+  }
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', event => {
-    if (event.key !== STORAGE_KEY) return
+  function reload() {
     cache = null
     viewCache = null
     pendingRemoved = []
     emit()
+  }
+
+  function toggle(entry: NewBookmark) {
+    const restored = pendingRemoved.find(bookmark => bookmark.id === entry.id)
+    if (restored) { restore(entry.id); return }
+    const current = read()
+    if (current.some(bookmark => bookmark.id === entry.id)) {
+      write(current.filter(bookmark => bookmark.id !== entry.id))
+      return
+    }
+    write([{ ...entry, path: bookmarkPath(entry.path), createdAt: Date.now() }, ...current].slice(0, MAX_BOOKMARKS))
+  }
+
+  function remove(id: string) {
+    const current = read()
+    const entry = current.find(bookmark => bookmark.id === id)
+    if (!entry) return
+    pendingRemoved = [...pendingRemoved.filter(bookmark => bookmark.id !== id), entry]
+    write(current.filter(bookmark => bookmark.id !== id))
+  }
+
+  function restore(id: string) {
+    const entry = pendingRemoved.find(bookmark => bookmark.id === id)
+    if (!entry) return
+    pendingRemoved = pendingRemoved.filter(bookmark => bookmark.id !== id)
+    write([entry, ...read()].slice(0, MAX_BOOKMARKS))
+  }
+
+  function flush() {
+    if (!pendingRemoved.length) return
+    pendingRemoved = []
+    viewCache = null
+    emit()
+  }
+
+  return { getView, subscribe, reload, toggle, remove, restore, flush }
+}
+
+const stores = new Map<string, ReturnType<typeof createStore>>()
+const emptyView = () => EMPTY
+const emptyStore = { getView: emptyView, subscribe: () => () => undefined }
+
+function scopedStore(scope: BrowserScope) {
+  const key = STORAGE_KEY + ':' + scope
+  const cached = stores.get(key)
+  if (cached) return cached
+  const store = createStore(key)
+  stores.set(key, store)
+  return store
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.key === null) stores.forEach(store => store.reload())
+    else stores.get(event.key)?.reload()
   })
 }
 
-export function useBookmarks(): BookmarkView[] {
-  return useSyncExternalStore(subscribe, getView, () => EMPTY)
+export function useBookmarks(scope: BrowserScope | null): BookmarkView[] {
+  const store = scope ? scopedStore(scope) : emptyStore
+  return useSyncExternalStore(store.subscribe, store.getView, emptyView)
 }
 
-export function useBookmark(id: string): boolean {
-  const bookmarks = useBookmarks()
+export function useBookmark(scope: BrowserScope | null, id: string): boolean {
+  const bookmarks = useBookmarks(scope)
   return bookmarks.some(bookmark => bookmark.id === id && !bookmark.pendingRemoval)
 }
 
@@ -117,44 +172,22 @@ export function bookmarkLink(path: string, kind: BookmarkKind, title: string): s
   return pathname + (next ? '?' + next : '')
 }
 
-export function toggleBookmark(entry: NewBookmark) {
-  const path = bookmarkPath(entry.path)
-  const restored = pendingRemoved.find(bookmark => bookmark.id === entry.id)
-  if (restored) {
-    pendingRemoved = pendingRemoved.filter(bookmark => bookmark.id !== entry.id)
-    write([restored, ...read()].slice(0, MAX_BOOKMARKS))
-    return
-  }
-  const current = read()
-  if (current.some(bookmark => bookmark.id === entry.id)) {
-    write(current.filter(bookmark => bookmark.id !== entry.id))
-    return
-  }
-  write([{ ...entry, path, createdAt: Date.now() }, ...current].slice(0, MAX_BOOKMARKS))
+export function toggleBookmark(scope: BrowserScope, entry: NewBookmark) {
+  scopedStore(scope).toggle(entry)
 }
 
 /** 확인을 누른 뒤 호출한다. 저장소에서는 즉시 빼지만 화면에는 되돌릴 수 있게 남긴다. */
-export function requestBookmarkRemoval(id: string) {
-  const current = read()
-  const entry = current.find(bookmark => bookmark.id === id)
-  if (!entry) return
-  pendingRemoved = [...pendingRemoved.filter(bookmark => bookmark.id !== id), entry]
-  write(current.filter(bookmark => bookmark.id !== id))
+export function requestBookmarkRemoval(scope: BrowserScope, id: string) {
+  scopedStore(scope).remove(id)
 }
 
-export function restoreBookmark(id: string) {
-  const entry = pendingRemoved.find(bookmark => bookmark.id === id)
-  if (!entry) return
-  pendingRemoved = pendingRemoved.filter(bookmark => bookmark.id !== id)
-  write([entry, ...read()].slice(0, MAX_BOOKMARKS))
+export function restoreBookmark(scope: BrowserScope, id: string) {
+  scopedStore(scope).restore(id)
 }
 
 /** 페이지를 이동할 때 남아 있던 해제 예정 북마크를 정리한다. */
-export function flushPendingBookmarks() {
-  if (!pendingRemoved.length) return
-  pendingRemoved = []
-  viewCache = null
-  emit()
+export function flushPendingBookmarks(scope: BrowserScope) {
+  scopedStore(scope).flush()
 }
 
 /** 새로고침 후에도 미리보기가 유지되도록 blob 사진은 작은 썸네일로 바꾼다. */

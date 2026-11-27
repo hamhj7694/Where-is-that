@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loadGuestHistory, saveGuestHistory } from './guest-history-store'
 import type { SearchRecord } from './history'
 
-export default function useGuestHistory() {
+export default function useGuestHistory(enabled: boolean) {
   const [records, setRecords] = useState<SearchRecord[]>([])
   const [ready, setReady] = useState(false)
   const [storageError, setStorageError] = useState(false)
@@ -10,6 +10,7 @@ export default function useGuestHistory() {
   const writes = useRef(Promise.resolve())
 
   useEffect(() => {
+    if (!enabled) return
     let active = true
     void loadGuestHistory().then(restored => {
       if (!active) return
@@ -21,10 +22,10 @@ export default function useGuestHistory() {
       })
     }).catch(() => { if (active) setStorageError(true) }).finally(() => { if (active) setReady(true) })
     return () => { active = false }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
-    if (!ready || records === saved.current) return
+    if (!enabled || !ready || records === saved.current) return
     writes.current = writes.current.then(async () => {
       // Each transaction receives only the changed records. Searches added in another tab are retained.
       try {
@@ -35,7 +36,7 @@ export default function useGuestHistory() {
         setStorageError(true)
       }
     })
-  }, [ready, records])
+  }, [enabled, ready, records])
 
   return { records, setRecords, ready, storageError }
 }

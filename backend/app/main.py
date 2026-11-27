@@ -401,7 +401,7 @@ app.add_middleware(
     allow_origins=config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Geugeo-Account-Id"],
 )
 app.include_router(ai_api.router)
 app.include_router(public_photo_api.router)
@@ -798,9 +798,17 @@ def update_profile(payload: ProfileUpdateRequest, request: Request) -> dict:
     return user_payload(updated)
 
 
+def content_owner(request: Request) -> sqlite3.Row:
+    row = require_user(request)
+    expected_owner = request.headers.get("x-geugeo-account-id")
+    if expected_owner is not None and expected_owner != str(row["id"]):
+        raise api_error(409, "account_changed", "로그인 상태가 바뀌었어요. 페이지를 다시 열어 주세요.")
+    return row
+
+
 @app.get("/api/me/content", response_model=ContentPayload)
 def get_content(request: Request) -> dict:
-    row = require_user(request)
+    row = content_owner(request)
     with closing(db.connect()) as connection:
         stored = connection.execute(
             "SELECT payload_json FROM user_content WHERE user_id = ?", (row["id"],)
@@ -810,7 +818,7 @@ def get_content(request: Request) -> dict:
 
 @app.put("/api/me/content", response_model=ContentPayload)
 def put_content(payload: ContentPayload, request: Request) -> dict:
-    row = require_user(request)
+    row = content_owner(request)
     content = payload.model_dump()
     with closing(db.connect()) as connection:
         with connection:

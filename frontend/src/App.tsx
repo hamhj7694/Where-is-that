@@ -21,6 +21,7 @@ import { flushPendingBookmarks } from './features/workspace/bookmarks'
 import HomeCover from './features/landing/HomeCover'
 import WorkspaceRouter from './features/workspace/WorkspaceRouter'
 import { useAuth } from './features/auth/AuthContext'
+import { browserScope, type BrowserScope } from './features/auth/browser-scope'
 import { initialValuables, localPhotoId, type AppPhoto, type Valuable } from './features/workspace/data'
 import './styles/pages.css'
 
@@ -34,29 +35,38 @@ function readLastSearchPath(): '/gallery' | '/lost-found' {
   try { return window.localStorage.getItem(LAST_SEARCH_PATH_KEY) === '/lost-found' ? '/lost-found' : '/gallery' } catch { return '/gallery' }
 }
 
-function readLastDirectSearchPath(): string {
+function readLastDirectSearchPath(scope: BrowserScope | null): string {
+  if (!scope) return '/direct-search'
   try {
-    const value = window.localStorage.getItem(LAST_DIRECT_SEARCH_PATH_KEY)
+    const value = window.localStorage.getItem(LAST_DIRECT_SEARCH_PATH_KEY + ':' + scope)
     return value && value.startsWith('/direct-search') ? value : '/direct-search'
   } catch { return '/direct-search' }
 }
 
 export default function App() {
+  const { ready, user } = useAuth()
+  const { pathname } = useLocation()
+  // Keep the OAuth callback mounted until it redirects to the signed-in workspace.
+  const scope = ready && !pathname.startsWith('/auth/') ? browserScope(user?.id ?? null) : null
+  return <WorkspaceApp key={scope ?? 'auth'} scope={scope} />
+}
+
+function WorkspaceApp({ scope }: { scope: BrowserScope | null }) {
   const { pathname, search, key: locationKey } = useLocation()
   const navigate = useNavigate()
   const mode: SearchMode = pathname.startsWith('/lost-found') ? 'lost' : 'gallery'
   const [lastSearchPath, setLastSearchPath] = useState<'/gallery' | '/lost-found'>(readLastSearchPath)
-  const [lastDirectSearchPath, setLastDirectSearchPath] = useState(readLastDirectSearchPath)
+  const [lastDirectSearchPath, setLastDirectSearchPath] = useState(() => readLastDirectSearchPath(scope))
   const isHome = pathname === '/'
   const isInputPage = pathname === '/gallery' || pathname === '/lost-found'
   // 상세 페이지가 직접 찾기에서 열렸으면 헤더도 직접 찾기 흐름으로 표시한다.
   const fromDirectSearch = new URLSearchParams(search).get('back')?.startsWith('/direct-search') ?? false
   const [drafts, setDrafts] = useState<Record<SearchMode, SearchDraft>>({ gallery: { query: '', photo: null }, lost: { query: '', photo: null } })
   const [errors, setErrors] = useState<Record<SearchMode, string>>({ gallery: '', lost: '' })
-  const [gallery, setGallery] = useState<GallerySource | null>(null)
-  const [galleryRestored, setGalleryRestored] = useState(false)
-  const galleryRef = useRef<GallerySource | null>(null)
-  const guestHistory = useGuestHistory()
+  const [storedGallery, setStoredGallery] = useState<GallerySource | null | undefined>(undefined)
+  const [galleryLoaded, setGalleryLoaded] = useState(false)
+  const [galleryChanged, setGalleryChanged] = useState(false)
+  const guestHistory = useGuestHistory(scope === 'guest')
   const [accountRecords, setAccountRecords] = useState<SearchRecord[]>([])
   const searchSubmitted = useRef(false)
   const [autoRankRecordId, setAutoRankRecordId] = useState<string | null>(null)
@@ -77,15 +87,19 @@ export default function App() {
   const [settledUserId, setSettledUserId] = useState<number | null>(null)
   const accountReady = !!user && loadedAccount.current?.userId === user.id
   const accountLoading = !!user && settledUserId !== user.id
-  const historyReady = ready && guestHistory.ready && !accountLoading
-  const records = accountReady
-    ? [...guestHistory.records, ...accountRecords].sort((a, b) => b.createdAt - a.createdAt)
+  const historyReady = ready && (session ? !accountLoading : guestHistory.ready)
+  const records = session
+    ? accountReady ? [...accountRecords].sort((a, b) => b.createdAt - a.createdAt) : []
     : guestHistory.records
-  const addRecord = accountReady ? setAccountRecords : guestHistory.setRecords
+  const setRecords = session ? setAccountRecords : guestHistory.setRecords
+  const restoredGallery = records.find(record => record.mode === 'gallery' && record.gallery?.files.length)?.gallery ?? null
+  const galleryRestored = galleryLoaded && (storedGallery !== undefined || historyReady)
+  const gallery = galleryRestored ? storedGallery === undefined ? restoredGallery : storedGallery : null
   const textarea = useRef<HTMLTextAreaElement>(null)
   const draft = drafts[mode]
   const error = errors[mode]
   const needsGallery = mode === 'gallery' && (!gallery || showGalleryManager)
+  const showGalleryConnectionGuide = mode === 'gallery' && galleryRestored && !gallery
 
   useEffect(() => {
     if (isHome) document.title = '그거어디? — 내 사진 · 내 물건 찾기'
@@ -96,7 +110,7 @@ export default function App() {
   useEffect(() => { searchSubmitted.current = false }, [locationKey])
 
   // 해제 예정으로 남아 있던 북마크는 페이지를 떠날 때 정리한다.
-  useEffect(() => { flushPendingBookmarks() }, [pathname, search])
+  useEffect(() => { if (scope) flushPendingBookmarks(scope) }, [pathname, search, scope])
 
   useEffect(() => {
     const next = pathname.startsWith('/lost-found') ? '/lost-found' : pathname.startsWith('/gallery') ? '/gallery' : null
@@ -107,69 +121,57 @@ export default function App() {
 
   // 직접 찾기의 페이지·검색 조건을 기억해 헤더로 다시 들어와도 유지한다.
   useEffect(() => {
-    if (pathname !== '/direct-search') return
+    if (pathname !== '/direct-search' || !scope) return
     const next = pathname + search
     if (next === lastDirectSearchPath) return
     setLastDirectSearchPath(next)
-    try { window.localStorage.setItem(LAST_DIRECT_SEARCH_PATH_KEY, next) } catch { /* Storage is optional. */ }
-  }, [pathname, search, lastDirectSearchPath])
+    try { window.localStorage.setItem(LAST_DIRECT_SEARCH_PATH_KEY + ':' + scope, next) } catch { /* Storage is optional. */ }
+  }, [pathname, search, lastDirectSearchPath, scope])
 
   useEffect(() => { itemsRef.current = items }, [items])
   useEffect(() => { recordsRef.current = accountRecords }, [accountRecords])
-  useEffect(() => { galleryRef.current = gallery }, [gallery])
 
   // 연결한 폴더·사진은 브라우저에 보관해 페이지 이동과 새로고침 후에도 되살린다.
   useEffect(() => {
+    if (!scope) return
     let active = true
-    void loadGallery().then(source => {
+    void loadGallery(scope).then(source => {
       if (!active) return
-      if (source && !galleryRef.current) setGallery(source)
-      setGalleryRestored(true)
+      setStoredGallery(source)
+      setGalleryLoaded(true)
     })
     return () => { active = false }
-  }, [])
+  }, [scope])
 
   useEffect(() => {
-    if (!galleryRestored) return
-    void saveGallery(gallery)
-  }, [gallery, galleryRestored])
+    if (!scope || !galleryChanged || storedGallery === undefined) return
+    void saveGallery(scope, storedGallery)
+  }, [scope, galleryChanged, storedGallery])
 
   useEffect(() => {
-    if (!ready) return
-    if (!user) {
-      if (loadedAccount.current || settledUserId !== null) {
-        loadedAccount.current = null
-        setSettledUserId(null)
-        setItems(initialValuables)
-        setAccountRecords([])
-        setDrafts({ gallery: { query: '', photo: null }, lost: { query: '', photo: null } })
-        setErrors({ gallery: '', lost: '' })
-        setContentError('')
-        setAccountLoadError('')
-      }
-      return
-    }
+    if (!galleryRestored || storedGallery !== undefined || !restoredGallery) return
+    setStoredGallery(previous => previous === undefined ? restoredGallery : previous)
+    setGalleryChanged(true)
+  }, [galleryRestored, restoredGallery, storedGallery])
+
+  useEffect(() => {
+    if (!scope || !user) return
     let active = true
     loadedAccount.current = null
     setAccountLoadError('')
-    void fetchContent().then(account => {
+    void fetchContent(user.id).then(account => {
       if (!active) return
       const restored = deserializeContent(account)
       loadedAccount.current = { userId: user.id, items: restored.items, records: restored.records }
       setItems(restored.items)
       setAccountRecords(restored.records)
-      // 예전 계정 검색 기록에서도 연결했던 갤러리를 열 수 있다.
-      if (!galleryRef.current) {
-        const savedGallery = restored.records.find(record => record.gallery)?.gallery
-        if (savedGallery) setGallery(savedGallery)
-      }
       setContentError('')
     }).catch(reason => {
       if (!active) return
       setAccountLoadError(reason instanceof Error ? reason.message : '계정 내용을 불러오지 못했어요.')
     }).finally(() => { if (active) setSettledUserId(user.id) })
-    return () => { active = false }
-  }, [ready, user?.id, accountLoadAttempt])
+    return () => { active = false; loadedAccount.current = null }
+  }, [scope, user?.id, accountLoadAttempt])
 
   function retryAccountLoad() {
     setSettledUserId(null)
@@ -190,7 +192,7 @@ export default function App() {
       if (!updateItems && account.items === nextItems && account.records === recordsToSave) return
       const payload = await serializeContent(nextItems, recordsToSave)
       checkAccount()
-      await saveContent(payload)
+      await saveContent(account.userId, payload)
       checkAccount()
       account.items = nextItems
       account.records = recordsToSave
@@ -229,8 +231,7 @@ export default function App() {
   }, [items, accountRecords, user?.id])
 
   function updateRecord(id: string, update: (previous: SearchRecord[]) => SearchRecord[]) {
-    const updateRecords = guestHistory.records.some(record => record.id === id) ? guestHistory.setRecords : setAccountRecords
-    updateRecords(update)
+    if (records.some(record => record.id === id)) setRecords(update)
   }
 
   function deleteRecord(id: string) {
@@ -271,8 +272,8 @@ export default function App() {
 
   function submit(nextDraft: SearchDraft = draft, authorizeContextRank = false) {
     if (searchSubmitted.current) return
-    if (!ready || accountLoading) {
-      setErrors(previous => ({ ...previous, [mode]: '검색 기록을 불러오고 있어요. 잠시 뒤 다시 검색해 주세요.' }))
+    if (!historyReady || (session && !accountReady)) {
+      setErrors(previous => ({ ...previous, [mode]: accountLoadError || '검색 기록을 불러오고 있어요. 잠시 뒤 다시 검색해 주세요.' }))
       return
     }
     const problem = validateSearch(mode, nextDraft, gallery)
@@ -283,7 +284,7 @@ export default function App() {
     }
     const record = createSearchRecord(mode, nextDraft, gallery)
     searchSubmitted.current = true
-    addRecord(previous => [record, ...previous])
+    setRecords(previous => [record, ...previous])
     setDrafts(previous => ({ ...previous, [mode]: snapshotSearchDraft(mode, nextDraft) }))
     setAutoRankRecordId(mode === 'lost' && authorizeContextRank ? record.id : null)
     if (mode === 'gallery') setGalleryRankSeed(value => value + 1)
@@ -330,7 +331,8 @@ export default function App() {
     else {
       const next = createSearchRecord('lost', nextDraft, null)
       recordId = next.id
-      addRecord(previous => [next, ...previous]); navigate(recordPath(next))
+      if (!historyReady || (session && !accountReady)) return
+      setRecords(previous => [next, ...previous]); navigate(recordPath(next))
     }
     setDrafts(previous => ({ ...previous, lost: snapshotSearchDraft('lost', nextDraft) }))
     setAutoRankRecordId(authorizeContextRank ? recordId : null)
@@ -353,7 +355,7 @@ export default function App() {
     const connected = new Set(source.files)
     rememberFileLocations(locations.filter(location => connected.has(location.file)))
     rememberNativeFileLocations(options?.nativeLocations?.filter(location => connected.has(location.file)) ?? [])
-    setGalleryError(''); setGallery(source); setErrors(previous => ({ ...previous, gallery: '' }))
+    setGalleryError(''); setStoredGallery(source); setGalleryChanged(true); setErrors(previous => ({ ...previous, gallery: '' }))
     setAnnouncement(source.files.length.toLocaleString('ko-KR') + '장의 이미지를 연결했어요.' + (selection.duplicateCount ? ' 중복 ' + selection.duplicateCount.toLocaleString('ko-KR') + '장은 건너뛰었어요.' : '')); setShowGalleryManager(false)
     requestAnimationFrame(() => textarea.current?.focus())
     return { added: source.files.length, duplicateCount: selection.duplicateCount }
@@ -369,7 +371,8 @@ export default function App() {
     const added = new Set(selection.files)
     rememberFileLocations(locations.filter(location => added.has(location.file)))
     rememberNativeFileLocations(options?.nativeLocations?.filter(location => added.has(location.file)) ?? [])
-    setGallery(previous => appendGallery(previous, selection.files))
+    setStoredGallery(previous => appendGallery(previous === undefined ? gallery : previous, selection.files))
+    setGalleryChanged(true)
     setAnnouncement(selection.files.length.toLocaleString('ko-KR') + '장의 이미지를 추가했어요.' + (selection.duplicateCount ? ' 중복 ' + selection.duplicateCount.toLocaleString('ko-KR') + '장은 건너뛰었어요.' : ''))
     requestAnimationFrame(() => textarea.current?.focus())
     return { added: selection.files.length, duplicateCount: selection.duplicateCount }
@@ -377,9 +380,8 @@ export default function App() {
 
   function disconnectGallery() {
     for (const record of records) if (record.mode === 'gallery') clearGalleryRankSnapshot(record.id)
-    guestHistory.setRecords(disconnectGalleryHistory)
-    if (accountReady) setAccountRecords(disconnectGalleryHistory)
-    setGallery(null); setShowGalleryManager(false)
+    if (!session || accountReady) setRecords(disconnectGalleryHistory)
+    setStoredGallery(null); setGalleryChanged(true); setShowGalleryManager(false)
     setGalleryError(''); setOverlay(null)
     setAnnouncement('갤러리 연결과 갤러리 검색 기록을 지웠어요. 원본은 그대로예요.')
     requestAnimationFrame(() => document.getElementById('gallery-connect-heading')?.focus())
@@ -412,12 +414,13 @@ export default function App() {
     {isHome ? <HomeCover /> : isInputPage ? <main id="main-content" className="search-workspace">
       <section className="search-area" aria-labelledby="page-heading">
         <div className="page-intro">
-          <h1 id="page-heading">{needsGallery ? '사진을 연결해 주세요' : copy[mode].title}</h1>
+          <h1 id="page-heading">{needsGallery ? galleryRestored ? '사진을 연결해 주세요' : '갤러리에서 사진 찾기' : copy[mode].title}</h1>
           <p>{needsGallery ? '연결하면 갤러리 전체에서 사진을 찾을 수 있어요.' : copy[mode].description}</p>
         </div>
-        <div id="search-panel" className="search-area__panel" role="tabpanel" aria-labelledby={'mode-' + mode}>
+        <div id="search-panel" className={needsGallery && !showGalleryConnectionGuide ? 'search-area__panel search-area__panel--connect' : 'search-area__panel'} role="tabpanel" aria-labelledby={'mode-' + mode}>
           <div className="search-area__main">
-            {needsGallery ? <GalleryConnection gallery={gallery} error={galleryError} onConnect={connectGallery} onCancel={returnFromGallery} onDisconnect={() => setOverlay('disconnect')} /> : <>
+            {mode === 'gallery' && !galleryRestored ? <p role="status">연결한 갤러리를 불러오고 있어요.</p>
+              : needsGallery ? <GalleryConnection gallery={gallery} error={galleryError} onConnect={connectGallery} onCancel={returnFromGallery} onDisconnect={() => setOverlay('disconnect')} /> : <>
               <div className={mode === 'gallery' ? 'search-scope' : 'search-scope search-scope--public'}>
                 <div className="gallery-scope__header">
                   <div className="search-scope__text">
@@ -444,7 +447,11 @@ export default function App() {
             </>}
             <p className="announcement" role="status" aria-live="polite">{announcement}</p>
           </div>
-          <SearchExample mode={mode} />
+          {showGalleryConnectionGuide && <figure className="gallery-connection-guide">
+            <img src="/brand/gallery-folder-guide.webp" width={880} height={660} alt="인화 사진이 담긴 폴더" />
+            <figcaption>폴더를 연결하면 하위 폴더의 사진도 함께 찾아요.</figcaption>
+          </figure>}
+          {!needsGallery && <SearchExample mode={mode} />}
         </div>
       </section>
     </main>

@@ -1,9 +1,9 @@
 import { localPhotoId, rememberLocalPhotoId } from '../workspace/data'
+import type { BrowserScope } from '../auth/browser-scope'
 import type { GallerySource } from './model'
 
 const DB_NAME = 'geugeo-eodi'
 const STORE = 'gallery'
-const KEY = 'current'
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -37,11 +37,12 @@ async function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) 
 interface StoredGallery extends GallerySource { paths?: string[]; ids?: string[] }
 
 /** 연결한 갤러리의 File 목록을 브라우저에 보관해 새로고침 후에도 복원한다. */
-export async function loadGallery(): Promise<GallerySource | null> {
-  if (typeof indexedDB === 'undefined') return null
+export async function loadGallery(scope: BrowserScope): Promise<GallerySource | null | undefined> {
+  if (typeof indexedDB === 'undefined') return undefined
   try {
-    const value = await run<StoredGallery | undefined>('readonly', store => store.get(KEY))
-    if (!value?.files?.length) return null
+    // The old shared name "current" has no owner, so never restore it automatically.
+    const value = await run<StoredGallery | null | undefined>('readonly', store => store.get(scope))
+    if (!value?.files?.length) return value === null ? null : undefined
     value.files.forEach((file, index) => {
       const path = value.paths?.[index]
       if (path) Object.defineProperty(file, 'webkitRelativePath', { value: path, configurable: true })
@@ -49,15 +50,16 @@ export async function loadGallery(): Promise<GallerySource | null> {
       if (id) rememberLocalPhotoId(file, id)
     })
     return { name: value.name, files: value.files }
-  } catch { return null }
+  } catch { return undefined }
 }
 
-export async function saveGallery(gallery: GallerySource | null): Promise<void> {
+export async function saveGallery(scope: BrowserScope, gallery: GallerySource | null): Promise<void> {
   if (typeof indexedDB === 'undefined') return
   try {
-    if (!gallery) { await run('readwrite', store => store.delete(KEY)); return }
+    // Record an explicit disconnection without retaining any photos.
+    if (!gallery) { await run('readwrite', store => store.put(null, scope)); return }
     const paths = gallery.files.map(file => file.webkitRelativePath || '')
     const ids = gallery.files.map(file => localPhotoId(file))
-    await run('readwrite', store => store.put({ name: gallery.name, files: gallery.files, paths, ids }, KEY))
+    await run('readwrite', store => store.put({ name: gallery.name, files: gallery.files, paths, ids }, scope))
   } catch { /* Storage is optional; in-memory gallery still works. */ }
 }

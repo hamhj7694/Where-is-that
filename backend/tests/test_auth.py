@@ -292,6 +292,21 @@ def test_content_requires_auth(client):
     assert client.put("/api/me/content", json={"valuables": [], "records": []}).status_code == 401
 
 
+def test_content_rejects_a_request_still_scoped_to_a_previous_account(client):
+    first = client.post("/api/auth/signup", json=signup_payload(email="first@example.com")).json()
+    headers = {"X-Geugeo-Account-Id": str(first["id"])}
+    assert client.get("/api/me/content", headers=headers).status_code == 200
+    client.post("/api/auth/logout")
+    second = client.post("/api/auth/signup", json=signup_payload(email="second@example.com")).json()
+    assert first["id"] != second["id"]
+
+    assert client.get("/api/me/content", headers=headers).json()["code"] == "account_changed"
+    stale_write = client.put("/api/me/content", headers=headers, json={"valuables": [], "records": []})
+    assert stale_write.status_code == 409
+    assert stale_write.json()["code"] == "account_changed"
+    assert client.get("/api/me/content").json() == {"valuables": [], "records": []}
+
+
 def test_content_roundtrip_and_image_validation(client):
     client.post("/api/auth/signup", json=signup_payload(email="content@example.com"))
     assert client.get("/api/me/content").json() == {"valuables": [], "records": []}
