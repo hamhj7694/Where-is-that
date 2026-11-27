@@ -13,7 +13,7 @@ import console from 'node:console'
 const { AbortController } = globalThis
 
 const SERVICE = 'geugeo-eodi-local-gallery'
-const ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173'])
+const ORIGINS = new Set(['http://localhost:5179', 'http://127.0.0.1:5179'])
 const TTL = 10 * 60 * 1000
 const MAX_SELECTIONS = 8
 const IMAGE_TYPES = new Map(Object.entries({

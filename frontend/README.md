@@ -8,7 +8,7 @@ npm install
 npm run dev
 ```
 
-개발 서버: http://127.0.0.1:5173
+개발 서버: http://127.0.0.1:5179
 
 ## 인증 (회원가입·로그인)
 
@@ -16,7 +16,7 @@ npm run dev
 
 - `npm run dev`를 실행하면 Vite가 로컬 갤러리 브릿지와 함께 FastAPI 서버(`127.0.0.1:8000`)도 자동으로 실행하고, `/api` 요청을 그 서버로 프록시한다.
 - 서버를 직접 실행하거나 키를 입력하려면 `backend/.env.example`을 `backend/.env`로 복사해 값을 채운다. 카카오 JavaScript 키·REST API 키·클라이언트 시크릿은 **서버 .env에만** 있다.
-- 카카오 콘솔에는 `http://127.0.0.1:5173/auth/kakao/callback`을 Redirect URI로 등록한다.
+- 카카오 콘솔과 서버 `.env`에 `http://127.0.0.1:5179/auth/kakao/callback`을 Redirect URI로 설정한다. 로그인도 `http://127.0.0.1:5179`에서 시작한다. `.env`를 바꾼 후 백엔드를 재시작한다.
 - 로그인 상태는 서버 세션 쿠키(HttpOnly·SameSite=Lax)로 유지된다. 브라우저를 새로고침해도 세션이 살아 있고, 로그아웃하면 서버 세션과 쿠키가 삭제된다.
 - `npm run dev:web`은 웹 서버만 실행한다. 인증을 쓰려면 백엔드를 별도로 띄워야 한다.
 

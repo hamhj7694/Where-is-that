@@ -8,7 +8,7 @@ import { createLocalGalleryServer, createNativePickerScript } from './bridge.mjs
 
 const { fetch, AbortController, AbortSignal } = globalThis
 
-const ORIGIN = 'http://127.0.0.1:5173'
+const ORIGIN = 'http://127.0.0.1:5179'
 let directory, root, outside, server, base, token, paths, picker
 
 describe('Windows 사진 선택 창', () => {
@@ -184,8 +184,8 @@ describe('선택 범위와 브라우저 요청 경계', () => {
     expect(response.status).toBe(204)
     expect(response.headers.get('access-control-allow-origin')).toBe(ORIGIN)
     expect(response.headers.get('access-control-allow-private-network')).toBe('true')
-    for (const origin of ['http://localhost:5173', ORIGIN]) expect((await api('/v1/status', { headers: { Origin: origin } })).status).toBe(200)
-    for (const origin of ['https://evil.example', 'http://localhost:51730', 'http://127.0.0.1:5174', 'null']) {
+    for (const origin of ['http://localhost:5179', ORIGIN]) expect((await api('/v1/status', { headers: { Origin: origin } })).status).toBe(200)
+    for (const origin of ['https://evil.example', 'http://localhost:51790', 'http://127.0.0.1:5173', 'null']) {
       const denied = await api('/v1/status', { headers: { Origin: origin } })
       expect(denied.status).toBe(403)
       expect(denied.headers.get('access-control-allow-origin')).toBeNull()

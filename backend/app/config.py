@@ -16,12 +16,13 @@ def _data_dir() -> Path:
 
 DATA_DIR = _data_dir()
 DB_PATH = DATA_DIR / "app.db"
+DEFAULT_WEB_ORIGIN = "http://127.0.0.1:5179"
 
 
 def _allowed_origins() -> list[str]:
     raw = os.environ.get(
         "GEUGEO_ALLOWED_ORIGINS",
-        "http://127.0.0.1:5173,http://localhost:5173",
+        f"{DEFAULT_WEB_ORIGIN},http://localhost:5179",
     )
     return [item.strip() for item in raw.split(",") if item.strip()]
 
@@ -59,7 +60,7 @@ KAKAO_REST_API_KEY = os.environ.get("KAKAO_REST_API_KEY", "").strip()
 KAKAO_CLIENT_SECRET = os.environ.get("KAKAO_CLIENT_SECRET", "").strip()
 KAKAO_REDIRECT_URI = (
     os.environ.get("KAKAO_REDIRECT_URI", "").strip()
-    or "http://127.0.0.1:5173/auth/kakao/callback"
+    or f"{DEFAULT_WEB_ORIGIN}/auth/kakao/callback"
 )
 KAKAO_STATE_COOKIE = "geugeo_kakao_state"
 KAKAO_STATE_MAX_AGE_SECONDS = 10 * 60

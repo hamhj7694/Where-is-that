@@ -13,7 +13,7 @@ const apiCommand = existsSync(venvPython) ? venvPython : 'python'
 
 async function galleryRunning() {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/v1/status`, { headers: { Origin: 'http://127.0.0.1:5173' }, signal: AbortSignal.timeout(800) })
+    const response = await fetch(`http://127.0.0.1:${port}/v1/status`, { headers: { Origin: 'http://127.0.0.1:5179' }, signal: AbortSignal.timeout(800) })
     const status = await response.json()
     return status.service === 'geugeo-eodi-local-gallery' && status.version === 1
   } catch { return false }

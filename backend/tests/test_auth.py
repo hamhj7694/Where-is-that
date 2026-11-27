@@ -182,6 +182,35 @@ def test_kakao_scope_only_asks_for_profile(client, monkeypatch):
     assert "account_email" not in query["scope"][0]
 
 
+def test_kakao_start_rejects_a_different_frontend_origin(client, monkeypatch):
+    monkeypatch.setattr(config, "KAKAO_JAVASCRIPT_KEY", "public-js-key")
+    monkeypatch.setattr(config, "KAKAO_REST_API_KEY", "secret-rest-key")
+    origin = "http://127.0.0.1:5179"
+    other_origin = "http://localhost:5179"
+    callback = f"{origin}/auth/kakao/callback"
+    monkeypatch.setattr(config, "KAKAO_REDIRECT_URI", callback)
+    monkeypatch.setattr(config, "ALLOWED_ORIGINS", [origin, other_origin])
+
+    mismatched = client.post(
+        "/api/auth/kakao/start",
+        headers={"Origin": other_origin},
+        json={"returnTo": "/account"},
+    )
+    assert mismatched.status_code == 409
+    assert mismatched.json()["code"] == "kakao_redirect_origin"
+    assert config.KAKAO_STATE_COOKIE not in client.cookies
+
+    started = client.post(
+        "/api/auth/kakao/start",
+        headers={"Origin": origin},
+        json={"returnTo": "/account"},
+    )
+    assert started.status_code == 200
+    query = parse_qs(urlparse(started.json()["authorizeUrl"]).query)
+    assert query["redirect_uri"] == [callback]
+    assert client.cookies.get(config.KAKAO_STATE_COOKIE)
+
+
 def test_kakao_token_error_shows_kakao_error_code(monkeypatch):
     class Response:
         status_code = 401

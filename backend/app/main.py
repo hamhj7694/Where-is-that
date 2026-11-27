@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from typing import Callable, Literal
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -1505,9 +1506,14 @@ def reset_password(payload: ResetPasswordRequest) -> dict:
 
 
 @app.post("/api/auth/kakao/start")
-def kakao_start(payload: KakaoStartRequest, response: Response) -> dict:
+def kakao_start(payload: KakaoStartRequest, request: Request, response: Response) -> dict:
     if not kakao.configured():
         raise api_error(503, "kakao_not_configured", "카카오 로그인 설정이 필요해요. 서버 .env를 확인해 주세요.")
+    origin = request.headers.get("origin")
+    redirect = urlsplit(config.KAKAO_REDIRECT_URI)
+    redirect_origin = f"{redirect.scheme}://{redirect.netloc}"
+    if origin and origin != redirect_origin:
+        raise api_error(409, "kakao_redirect_origin", f"카카오 로그인은 {redirect_origin}에서 시작해 주세요.")
     nonce = security.new_session_token()
     with closing(db.connect()) as connection:
         with connection:
