@@ -8,6 +8,10 @@ export type LostResultState = 'success' | 'partial' | 'empty' | 'error' | 'loadi
 type SourceState = Exclude<LostResultState, 'partial'>
 export interface LostResultCounts { image: number; context: number }
 
+export function combinedLostScore(visual: number | undefined, context: number | undefined): number {
+  return Math.max(visual ?? 0, context ?? 0) + Math.min(visual ?? 0, context ?? 0) * 0.1
+}
+
 /**
  * AI 점수는 축마다 눈금이 다르므로 같은 맵에 섞지 않는다. primary 축에 값이 있는
  * 후보가 먼저 오고, 그다음 secondary, 마지막에 텍스트 점수를 본다. 텍스트 점수는

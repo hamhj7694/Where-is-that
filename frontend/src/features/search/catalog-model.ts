@@ -44,6 +44,7 @@ export interface Candidate {
   matchLabel?: string
   /** AI가 공개 사진을 직접 보고 매긴 점수. */
   visualScore?: number | null
+  rankingScore?: number | null
   location: CandidateLocation
   /** 실제 공개 API 상세에서 받은 보관기관 연락처. */
   tel?: string | null

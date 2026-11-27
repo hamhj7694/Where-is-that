@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -52,6 +52,31 @@ class AiRankRequest(BaseModel):
             raise ValueError("외부 AI 전송에 동의해 주세요.")
         if not self.query.strip() and not self.references:
             raise ValueError("검색어 또는 참고 사진을 입력해 주세요.")
+        return self
+
+
+GalleryThumbnail = Annotated[RequiredImageDataUrl, Field(max_length=600_000)]
+
+
+class AiGalleryIntentRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=1600)
+
+
+class AiGalleryRankCandidate(AiRankCandidate):
+    image: GalleryThumbnail
+
+
+class AiGalleryRankRequest(BaseModel):
+    queryPrompt: str = Field(default="", max_length=160)
+    reference: GalleryThumbnail | None = None
+    candidates: list[AiGalleryRankCandidate] = Field(min_length=1, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_gallery_rank(self) -> AiGalleryRankRequest:
+        if not self.queryPrompt.strip() and not self.reference:
+            raise ValueError("검색어 또는 참고 사진을 입력해 주세요.")
+        if len({candidate.id for candidate in self.candidates}) != len(self.candidates):
+            raise ValueError("사진 목록에 중복된 항목이 있어요.")
         return self
 
 

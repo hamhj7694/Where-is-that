@@ -1,11 +1,31 @@
 import { describe, expect, it, vi } from 'vitest'
-import { prepareGallerySelection } from './gallery-deduplication'
+import { findIdenticalGalleryFiles, prepareGallerySelection } from './gallery-deduplication'
 
 function image(content: string, name = 'photo.jpg', path = '', type = 'image/jpeg') {
   const file = new File([content], name, { type, lastModified: 12345 })
   Object.defineProperty(file, 'webkitRelativePath', { value: path })
   return file
 }
+
+describe('참고 사진과 내용이 동일한 갤러리 사진 찾기', () => {
+  it('400번째 사진도 파일명과 경로에 관계없이 찾고, 크기만 같은 파일은 제외한다', async () => {
+    const reference = image('same', '참고.jpg')
+    const different = image('diff', '참고.jpg')
+    const original = image('same', '원본.jpg', '갤러리/하위폴더/원본.jpg')
+    const others = Array.from({ length: 398 }, (_, index) => image('other', index + '.jpg'))
+    const readDifferentSize = vi.spyOn(others[0], 'arrayBuffer')
+    expect(await findIdenticalGalleryFiles(reference, [different, ...others, original])).toEqual([original])
+    expect(readDifferentSize).not.toHaveBeenCalled()
+  })
+
+  it('읽을 수 없는 사진이 있어도 나머지 후보를 확인한다', async () => {
+    const reference = image('same')
+    const unreadable = image('diff')
+    const original = image('same', '원본.jpg')
+    vi.spyOn(unreadable, 'arrayBuffer').mockRejectedValue(new Error('읽을 수 없음'))
+    expect(await findIdenticalGalleryFiles(reference, [unreadable, original])).toEqual([original])
+  })
+})
 
 describe('갤러리 연결·추가의 내용 기반 중복 제외', () => {
   it('기존 이미지와 내용이 같으면 이름·폴더·확장자가 달라도 제외한다', async () => {

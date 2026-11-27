@@ -40,6 +40,31 @@ function abortable<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
+/** An exact byte match is independent of a photo's filename and folder. */
+export async function findIdenticalGalleryFiles(
+  reference: File,
+  files: readonly File[],
+  signal?: AbortSignal,
+): Promise<File[]> {
+  signal?.throwIfAborted()
+  if (!reference.size) return []
+  const sameSize = files.filter(file => file.size === reference.size)
+  if (!sameSize.length) return []
+
+  const referenceHash = await abortable(fingerprint(reference), signal)
+  const matches: File[] = []
+  for (const file of sameSize) {
+    signal?.throwIfAborted()
+    try {
+      if (await abortable(fingerprint(file), signal) === referenceHash) matches.push(file)
+    } catch {
+      // An unreadable photo shouldn't prevent checking the others.
+      signal?.throwIfAborted()
+    }
+  }
+  return matches
+}
+
 interface SizeGroup {
   files: Set<File>
   unread: File[]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { browseSearchKey, canResumeBrowseJob, priorScoresForSearch } from './DirectSearchPage'
-import type { LostBrowseFilters, LostSearchHints } from '../search/lostfound-api'
+import { browseSearchKey, canResumeBrowseJob, mergeDirectBrowseItems, priorScoresForSearch } from './DirectSearchPage'
+import type { FoundItem, LostBrowseFilters, LostSearchHints } from '../search/lostfound-api'
 
 type StoredJob = Parameters<typeof priorScoresForSearch>[0]
 type LiveState = Parameters<typeof priorScoresForSearch>[1]
@@ -8,6 +8,14 @@ type LiveState = Parameters<typeof priorScoresForSearch>[1]
 function liveWith(raw: Array<{ id: string; visualScore?: number }>, visualScores: Record<string, number> = {}): LiveState {
   return { raw, visualScores } as unknown as LiveState
 }
+
+it('추가 검색에서 기존 후보를 모두 보존하며 새 순위의 중복을 제거한다', () => {
+  const item = (id: string, visualScore?: number) => ({ id, name: id, visualScore }) as FoundItem
+  const earlier = [item('old-a', 80), item('old-b', 65)]
+  const ranked = [item('new', 90), item('old-a', 85)]
+  expect(mergeDirectBrowseItems(earlier, ranked).map(({ id, visualScore }) => [id, visualScore]))
+    .toEqual([['new', 90], ['old-a', 85], ['old-b', 65]])
+})
 
 describe('직접 찾기 사진 점수 이어받기', () => {
   const oldJob = { jobId: 'old', keyword: '류영진', reloadToken: 0, skipVisual: 0, priorVisualScores: { 'police:old': 90 } } as StoredJob

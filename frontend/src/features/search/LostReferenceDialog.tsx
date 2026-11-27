@@ -17,8 +17,9 @@ function PhotoTab({ file, index, view, selected, onSelect, onView, showDirection
     {showDirection && <label><span className="visually-hidden">사진 {index + 1} 방향</span><select aria-label={`사진 ${index + 1} 방향`} value={view} disabled={disabled} onChange={event => onView(event.target.value as ReferencePhotoView)}>{REFERENCE_PHOTO_VIEWS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}</div>
 }
 
-export default function LostReferenceDialog({ open, photos, views, selected: initialSelected, dropped, guideOpen, onGuideToggle, onClose, onConfirm, variant = 'lost' }: { open: boolean; photos: File[]; views: ReferencePhotoView[]; selected: number; dropped: File[]; guideOpen: boolean; onGuideToggle: (open: boolean) => void; onClose: () => void; onConfirm: (photos: File[], views: ReferencePhotoView[]) => void; variant?: 'lost' | 'valuable' }) {
+export default function LostReferenceDialog({ open, photos, views, selected: initialSelected, dropped, guideOpen, onGuideToggle, onClose, onConfirm, variant = 'lost' }: { open: boolean; photos: File[]; views: ReferencePhotoView[]; selected: number; dropped: File[]; guideOpen: boolean; onGuideToggle: (open: boolean) => void; onClose: () => void; onConfirm: (photos: File[], views: ReferencePhotoView[], selected: number) => void; variant?: 'lost' | 'valuable' }) {
   const isValuable = variant === 'valuable'
+  const title = isValuable ? photos.length >= MAX_LOST_REFERENCE_PHOTOS ? '물건 사진 편집' : '물건 사진 추가' : '참고 사진 추가'
   const [entries, setEntries] = useState<Entry[]>(() => photos.map((file, index) => ({ file, original: originalReferencePhoto(file)!, view: views[index] ?? 'unspecified' })))
   const [selected, setSelected] = useState(Math.min(initialSelected, Math.max(0, photos.length - 1)))
   const [reading, setReading] = useState(false)
@@ -84,9 +85,10 @@ export default function LostReferenceDialog({ open, photos, views, selected: ini
   function confirm() {
     if (!active.current || busy.current || crop) return
     entries.forEach(item => rememberReferenceCrop(item.file, item.original))
-    onConfirm(entries.map(item => item.file), entries.map(item => item.view ?? 'unspecified')); close()
+    onConfirm(entries.map(item => item.file), entries.map(item => item.view ?? 'unspecified'), selected)
+    close()
   }
-  return <Modal open={open} title={isValuable ? '물건 사진 추가' : '참고 사진 추가'} focusKey={isValuable ? 'valuable-photos' : 'lost-reference-photos'} className="upload-modal" initialFocus={firstButton} onClose={close}
+  return <Modal open={open} title={title} focusKey={isValuable ? 'valuable-photos' : 'lost-reference-photos'} className="upload-modal" initialFocus={firstButton} onClose={close}
     footer={crop ? <div ref={setFooter} /> : <div className="photo-picker__actions"><button type="button" className="button button--secondary" onClick={close}>취소</button><button type="button" className="button button--primary" disabled={reading || isValuable && (!entries.length || deleteTargetIndex !== null)} onClick={confirm}>{entries.length ? `사진 ${entries.length}장 사용` : isValuable ? '사진 추가' : '사진 없이 계속'}</button></div>}>
     <input ref={addInput} type="file" accept="image/*" multiple hidden tabIndex={-1} aria-label="참고 사진 여러 장 선택" onChange={event => { void readFiles(Array.from(event.target.files ?? [])); event.target.value = '' }} />
     <input ref={replaceInput} type="file" accept="image/*" hidden tabIndex={-1} aria-label="선택한 참고 사진 교체" onChange={event => { void readFiles(Array.from(event.target.files ?? []), selected); event.target.value = '' }} />

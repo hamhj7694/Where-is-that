@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Candidate } from './catalog-model'
-import { filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, resolveAiRegionFilter, sortByRankTier, validateLostResultDates, type LostResultState } from './lost-result-model'
+import { combinedLostScore, filterCandidateRecords, isValidLostResultDate, LOST_RESULT_CHANNELS, lostResultChannelState, lostResultFilterLabel, readLostResultFilters, resolveAiDateFilters, resolveAiRegionFilter, sortByRankTier, validateLostResultDates, type LostResultState } from './lost-result-model'
 import { REFERENCE_PHOTO_VIEWS, type ReferencePhotoView } from './model'
 
 function candidate(id: string, patch: Partial<Candidate> = {}): Candidate {
@@ -31,6 +31,32 @@ describe('AI 점수 계층 정렬', () => {
     expect(sortByRankTier([banana, kick], new Map(), new Map(), text).map(item => item.id)).toEqual(['kick', 'banana'])
     expect(sortByRankTier([banana, kick], new Map(), new Map(), new Map()).map(item => item.id)).toEqual(['banana', 'kick'])
   })
+})
+
+const publicRankCases = Array.from({ length: 10 }, (_, i) => i).flatMap(variant =>
+  ['카드', '가방', '지갑', '의류', '휴대폰', '도서', '쇼핑백', '서류', '컴퓨터', '귀금속'].map(category =>
+    ({ category, variant })),
+)
+
+it.each(publicRankCases)('공개 후보 순위 $category/$variant', ({ category, variant }) => {
+  const photoOnly = candidate('photo', { category, description: '' })
+  const textOnly = candidate('text', { category, image: null, photoStatus: 'no_photo', description: '등록된 설명' })
+  const twoSignals = candidate('both', { category })
+  const keywordOnly = candidate('keyword', { category })
+  const candidates = [keywordOnly, twoSignals, textOnly, photoOnly]
+  const photoScore = 90 - variant
+  const contextScore = 90 - (9 - variant)
+  const photos = new Map([['photo', photoScore], ['both', variant >= 7 ? photoScore - 1 : 70 + variant]])
+  const descriptions = new Map([['text', contextScore], ['both', variant >= 7 ? contextScore - 1 : 62]])
+  const fallback = new Map([['keyword', 39]])
+  const rank = (scores: ReadonlyMap<string, number>) => sortByRankTier(candidates, scores, new Map(), fallback).map(row => row.id)
+  expect(rank(photos).slice(0, 2)).toEqual(['photo', 'both'])
+  expect(rank(descriptions).slice(0, 2)).toEqual(['text', 'both'])
+  const combined = new Map(candidates.filter(row => photos.has(row.id) || descriptions.has(row.id)).map(row =>
+    [row.id, combinedLostScore(photos.get(row.id), descriptions.get(row.id))]))
+  const expected = variant >= 7 ? 'both' : variant <= 4 ? 'photo' : 'text'
+  expect(rank(combined)[0]).toBe(expected)
+  expect(rank(combined)[3]).toBe('keyword')
 })
 
 describe('공개 후보 필터의 데이터 경계', () => {

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import type { Candidate, CandidateLocation } from '../search/catalog-model'
 import { fetchLostFoundDetail, formatDescription, formatFoundDateTime, toCandidate, type LostFoundSource } from '../search/lostfound-api'
+import BookmarkButton from './BookmarkButton'
+import { currentDetailPath } from './bookmarks'
 import { DemoNotice, EmptyState, LocationCard, NoPhoto, PageHeading, RetryButton } from './components'
 import KakaoMapPanel from './KakaoMapPanel'
 import { OFFICIAL_SEARCH_URL, safeReturn, sampleCandidates } from './data'
@@ -46,7 +48,8 @@ export function FoundDetail() {
     const validMapStates = ['verified', 'address_only', 'ambiguous', 'missing', 'provider_error']
     const customLocation: CandidateLocation = mapState && validMapStates.includes(mapState) ? { status: mapState as CandidateLocation['status'], address: ['verified', 'address_only', 'provider_error'].includes(mapState) ? '샘플 주소 · 실제 주소가 아니에요' : null, ...(mapState === 'verified' ? { latitude: 0, longitude: 0 } : {}) } : item.location
     const hasPhoto = !!item.image && item.photoStatus === 'verified_photo' && params.get('state') !== 'no-photo' && !imageError
-    return <main id="main-content" className="content-workspace"><PageHeading title={item.title} back={{ to: back, label: '검색 결과로' }} /><DemoNotice>샘플 기록 · 물품·기관·날짜는 예시예요.</DemoNotice>
+    const bookmark = { id: 'lost:demo:' + item.id, kind: 'lost' as const, title: item.title, subtitle: item.category ? '샘플 분실물 · ' + item.category : '샘플 분실물', image: item.image ?? null, path: currentDetailPath() }
+    return <main id="main-content" className="content-workspace"><PageHeading title={item.title} back={{ to: back, label: '검색 결과로' }} action={<BookmarkButton entry={bookmark} />} /><DemoNotice>샘플 기록 · 물품·기관·날짜는 예시예요.</DemoNotice>
       <div className="detail-layout"><div className="detail-photo">{hasPhoto ? <img src={item.image!} alt={item.title + ' 샘플 사진'} onError={() => setImageError(true)} /> : <NoPhoto message={imageError ? '사진을 불러오지 못했어요' : undefined} category={item.category} />}</div>
         <div><dl className="detail-facts">{[['물품 분류', item.category], ['색상', item.color], ['습득일', item.foundAt], ['습득 장소', item.foundPlace]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p className="field__help">{item.description}</p><p className="storage-note">이 물건이 본인의 물건이 맞는지는 보관기관에 직접 연락하거나 방문해서 확인해 주세요.</p></div></div>
       <LocationCard item={item} location={customLocation} />
@@ -59,7 +62,8 @@ export function FoundDetail() {
 
   const item = detail
   const hasPhoto = !!item.image && item.photoStatus === 'verified_photo' && !imageError
-  return <main id="main-content" className="content-workspace"><PageHeading title={item.title} back={{ to: back, label: '검색 결과로' }} />
+  const bookmark = { id: 'lost:' + source + ':' + id, kind: 'lost' as const, title: item.title, subtitle: item.atcId ? '습득물 · ' + item.atcId : '습득물', image: item.image ?? null, path: currentDetailPath() }
+  return <main id="main-content" className="content-workspace"><PageHeading title={item.title} back={{ to: back, label: '검색 결과로' }} action={<BookmarkButton entry={bookmark} />} />
     <div className="detail-layout"><div className="detail-photo">{hasPhoto ? <img src={item.image!} alt={item.title + ' 사진'} onError={() => setImageError(true)} /> : <NoPhoto message={imageError ? '사진을 불러오지 못했어요' : undefined} category={item.category} />}</div>
       <div><dl className="detail-facts">{[['물품 분류', item.category], ['색상', item.color], ['습득일시', formatFoundDateTime(item.foundAt, item.foundTime)], ['습득 장소', item.foundPlace], ['보관상태', item.custodyStatus], ['관리번호', item.atcId], ['연락처', item.tel]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl><p className="field__help detail-description">{formatDescription(item.description)}</p><p className="storage-note">이 물건이 본인의 물건이 맞는지는 보관기관에 직접 연락하거나 방문해서 확인해 주세요.</p></div></div>
     <KakaoMapPanel item={item} />

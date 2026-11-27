@@ -141,6 +141,20 @@ describe('직접 찾기 서버 필터 조회', () => {
       priorVisualScores: { 'police:card': 96 },
     })
   })
+
+  it('보조 일반 검색에 일반 검색 모드와 취소 신호를 전달한다', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+    const controller = new AbortController()
+    const filters = { color: '블랙(검정)' }
+    await browseLostFound('우산', 1, 40, undefined, filters, 200, 0, undefined, {
+      searchMode: 'basic', signal: controller.signal,
+    })
+    const [, request] = fetch.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(request.body))).toMatchObject({ keyword: '우산', filters, searchMode: 'basic' })
+    controller.abort()
+    expect(request.signal?.aborted).toBe(true)
+  })
 })
 
 describe('화면 중복 제거', () => {

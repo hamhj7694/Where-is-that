@@ -85,7 +85,7 @@ export function galleryPreviewItems<T extends { id: string }>(items: readonly T[
   return uniqueGalleryItems(items).slice(0, GALLERY_PREVIEW_LIMIT)
 }
 
-// AI 사진 비교는 한 요청당 최대 12후보다. 연결 갤러리에서 분석할 후보 수다.
+// AI 사진 비교는 한 요청당 최대 12후보다. 동일 파일 확인은 이 제한을 받지 않는다.
 export const AI_GALLERY_RANK_LIMIT = 12
 
 interface GalleryRankScore {
@@ -95,6 +95,16 @@ interface GalleryRankScore {
 }
 export type GalleryRankMap = Record<string, GalleryRankScore>
 
+export function galleryRankSignature(query: string, referenceId: string, candidateIds: readonly string[]): string {
+  return JSON.stringify(['local-gallery-v1', query, referenceId, candidateIds])
+}
+
+export function galleryResultItems<T extends { id: string }>(
+  items: readonly T[], ranking: GalleryRankMap | null, exactMatches: ReadonlySet<string>,
+): T[] {
+  return items.filter(item => exactMatches.has(item.id) || (ranking && Object.hasOwn(ranking, item.id)))
+}
+
 export function toGalleryRankMap(results: readonly AiImageRankResult[]): GalleryRankMap {
   return Object.fromEntries(results.map(result => [result.id, {
     score: result.score,
@@ -103,13 +113,18 @@ export function toGalleryRankMap(results: readonly AiImageRankResult[]): Gallery
   }]))
 }
 
-/** 각 채널이 담당하는 축으로 정렬한다. 점수 없는 후보는 원래 연결 순서를 뒤로 유지한다. */
-export function sortGalleryByRank<T extends { id: string }>(items: readonly T[], ranking: GalleryRankMap | null, channel: GallerySearchChannel): T[] {
-  if (!ranking) return [...items]
+/** 동일 파일을 먼저 표시하고 나머지는 채널별 점수와 연결 순서로 정렬한다. */
+export function sortGalleryByRank<T extends { id: string }>(
+  items: readonly T[], ranking: GalleryRankMap | null, channel: GallerySearchChannel, exactMatches?: ReadonlySet<string>,
+): T[] {
+  if (!ranking && !exactMatches?.size) return [...items]
   const axis: keyof GalleryRankScore = channel === 'image' ? 'imageSimilarity' : channel === 'context' ? 'contextRelevance' : 'score'
   return [...items].sort((first, second) => {
-    const left = ranking[first.id]?.[axis]
-    const right = ranking[second.id]?.[axis]
+    const firstExact = exactMatches?.has(first.id)
+    const secondExact = exactMatches?.has(second.id)
+    if (firstExact !== secondExact) return firstExact ? -1 : 1
+    const left = ranking?.[first.id]?.[axis]
+    const right = ranking?.[second.id]?.[axis]
     if (left === undefined && right === undefined) return 0
     if (left === undefined) return 1
     if (right === undefined) return -1

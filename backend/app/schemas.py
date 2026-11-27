@@ -213,6 +213,21 @@ class ContentPayload(BaseModel):
     records: list[ContentRecord] = Field(default_factory=list, max_length=500)
 
 
+class PeriodCursor(BaseModel):
+    scope: str = Field(pattern=r"^[a-f0-9]{64}$")
+    pages: dict[
+        Annotated[str, Field(pattern=r"^(broad|priority):(police|portal):[0-9]{1,2}$")],
+        Annotated[int, Field(ge=-9999, le=10000)],
+    ] = Field(default_factory=dict, max_length=64)
+
+    @field_validator("pages")
+    @classmethod
+    def reject_zero(cls, pages: dict[str, int]) -> dict[str, int]:
+        if not all(pages.values()):
+            raise ValueError("공개 목록의 페이지 위치를 확인해 주세요.")
+        return pages
+
+
 class LostFoundSearchRequest(BaseModel):
     keyword: str = Field(default="", max_length=100)
     page: int = Field(default=1, ge=1, le=LOSTFOUND_SEARCH_MAX_PAGES)
@@ -221,6 +236,10 @@ class LostFoundSearchRequest(BaseModel):
     originalQuery: str = Field(default="", max_length=100)
     photoSearch: bool = False
     photoCategory: str = Field(default="", max_length=100)
+    periodSearch: bool = False
+    periodCursor: PeriodCursor | None = None
+    fromDate: str = Field(default="", max_length=10)
+    toDate: str = Field(default="", max_length=10)
 
     @model_validator(mode="after")
     def validate_search_input(self) -> LostFoundSearchRequest:
@@ -250,9 +269,12 @@ class LostFoundBrowseRequest(BaseModel):
     maxPages: int = Field(default=200, ge=1, le=1000)
     hints: dict[str, Any] | None = None
     searchMode: Literal["basic", "ai"] | None = None
+    periodSearch: bool = False
+    periodCursor: PeriodCursor | None = None
     filters: dict[str, str] = Field(default_factory=dict)
     # 더 찾아보기: 이미 분석한 최신 사진 수만큼 건너뛰고 오래된 사진을 본다.
     skipVisual: int = Field(default=0, ge=0, le=600)
+    previousJobId: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
     # 앞선 탐색에서 이미 찾은 사진 점수. 새 탐색에서 사라지지 않도록 되살린다.
     priorVisualScores: dict[str, int] = Field(default_factory=dict, max_length=200)
 
@@ -307,6 +329,7 @@ class FoundItem(BaseModel):
     matchTier: int = 5
     matchLabel: str = ""
     visualScore: int | None = None
+    rankingScore: int | None = None
     detailLoaded: bool = False
     display: dict[str, str] = Field(default_factory=dict)
     aiMatch: AiMatchInfo | None = None
@@ -343,6 +366,8 @@ class LostFoundSearchResponse(BaseModel):
     errors: list[dict[str, Any]] = Field(default_factory=list)
     apiKeywords: list[str] = Field(default_factory=list)
     matched: int = 0
+    coverage: dict[str, Any] | None = None
+    periodCursor: PeriodCursor | None = None
 
 
 class LostFoundBrowseResponse(LostFoundSearchResponse):

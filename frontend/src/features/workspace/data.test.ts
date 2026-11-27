@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isDeleteConfirmation, localPhotoId, safeReturn } from './data'
+import { isDeleteConfirmation, localPhotoId, rememberLocalPhotoId, safeReturn } from './data'
 
 describe('valuable photo deletion confirmation', () => {
   it('only accepts the exact delete phrase', () => {
@@ -20,6 +20,14 @@ describe('local photo identity across reconnection', () => {
     const first = new File(['a'], 'photo.jpg', { type: 'image/jpeg', lastModified: 1 })
     const replacement = new File(['b'], 'photo.jpg', { type: 'image/jpeg', lastModified: 1 })
     expect(localPhotoId(first)).not.toBe(localPhotoId(replacement))
+  })
+  it('restores the saved id on a File rebuilt from storage', async () => {
+    const file = new File(['a'], 'photo.jpg', { type: 'image/jpeg' })
+    const savedId = localPhotoId(file)
+    const restored = new File([await file.arrayBuffer()], file.name, { type: file.type })
+    expect(localPhotoId(restored)).not.toBe(savedId)
+    rememberLocalPhotoId(restored, savedId)
+    expect(localPhotoId(restored)).toBe(savedId)
   })
 })
 

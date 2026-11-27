@@ -39,27 +39,27 @@ const FLOW_LANES = [
     id: 'gallery',
     label: 'A · 갤러리에서 찾기',
     nodes: [
-      { id: 'a1', step: 'A1', title: '사진 연결·준비', page: 'gallery-prepare', algo: 'algo-gallery-compare', role: '브라우저에서 사진을 고르고 중복을 제거해 참고 사진을 만든다.', input: '기기의 사진·폴더', output: '중복 제거된 참고 사진' },
-      { id: 'a2', step: 'A2', title: '사진 유사도 비교 (AI)', page: 'gallery-compare', algo: 'algo-gallery-compare', role: '참고 사진을 설명하고 후보 사진을 한 번에 채점한 뒤 ID를 검증한다.', input: '참고 사진·검색 문장·후보 사진', output: '종합·이미지·맥락 3축 점수' },
-      { id: 'a3', step: 'A3', title: '결과 표시', page: 'gallery-result', algo: 'model-similarity', role: '3축 점수로 정렬해 종합/이미지/맥락 화면에 보여준다.', input: '3축 점수와 갤러리 사진', output: '정렬된 사진 카드' },
+      { id: 'a1', step: 'A1', title: '사진 연결·준비', page: 'gallery-prepare', algo: 'algo-gallery-compare', role: '기기에서 사진·폴더를 연결하고 중복을 제거한다. 참고 사진은 별도로 선택한다.', input: '기기의 사진·폴더', output: '연결 갤러리와 참고 사진' },
+      { id: 'a2', step: 'A2', title: '전체 로컬 벡터 비교', page: 'gallery-compare', algo: 'algo-gallery-compare', role: '연결 사진 전체를 기기 안에서 OpenCLIP으로 비교한다. 같은 파일 해시는 우선한다.', input: '참고 사진·검색 문장·후보 사진', output: '종합·이미지·맥락 3축 점수' },
+      { id: 'a3', step: 'A3', title: '결과 표시', page: 'gallery-result', algo: 'model-similarity', role: '3축 점수로 정렬해 추천/사진/설명 화면에 보여준다.', input: '3축 점수와 갤러리 사진', output: '정렬된 사진 카드' },
     ],
   },
   {
     id: 'lost',
     label: 'B · 물건 찾기',
     nodes: [
-      { id: 'b1', step: 'B1', title: '조건 정리 + 공개 수집', page: 'lost-prepare', algo: 'algo-query-interpret', role: '자연어에서 탐색어·기간·시각 특징을 뽑고 공개 정보를 모은다.', input: '검색 문장·참고 사진·필터', output: 'AiSearchPlan + 공개 후보' },
-      { id: 'b2', step: 'B2', title: '사진 특징 매칭 (AI)', page: 'lost-visual', algo: 'algo-visual-match', role: '웹 참고를 거쳐 공개 사진을 AI가 직접 보고 특징 점수를 매긴다.', input: 'imageFeatures·참고 사진·공개 사진', output: 'visualScore와 사진 특징 배지' },
-      { id: 'b3', step: 'B3', title: '맥락 재정렬 + 결과', page: 'lost-context', algo: 'algo-context-rank', role: '설명·장소 맥락으로 후보를 다시 줄 세우고 확정 영역에 표시한다.', input: '후보 전체·사용자 문장', output: '관련도 순 3채널 결과' },
+      { id: 'b1', step: 'B1', title: '조건 정리 + 공개 수집', page: 'lost-prepare', algo: 'algo-query-interpret', role: '문장과 참고 사진에서 탐색·시각 단서를 정리하고 공개 후보를 수집한다.', input: '검색 문장·참고 사진·필터', output: 'AiSearchPlan + 공개 후보' },
+      { id: 'b2', step: 'B2', title: '사진 특징 매칭 (AI)', page: 'lost-visual', algo: 'algo-visual-match', role: '외부 VLM 우선 경로와 로컬 OpenCLIP·선택적 YOLOE 분기로 나뉜다.', input: 'imageFeatures·참고 사진·공개 사진', output: 'visualScore와 사진 특징 배지' },
+      { id: 'b3', step: 'B3', title: '맥락 재정렬 + 결과', page: 'lost-context', algo: 'algo-context-rank', role: '현재 페이지 설명 최대 12건을 대조하고 추천·설명·사진 결과를 각각 표시한다.', input: '현재 페이지 후보와 검색 단서', output: '관련도 순 3채널 결과' },
     ],
   },
   {
     id: 'direct',
     label: 'C · 직접 찾기',
     nodes: [
-      { id: 'c1', step: 'C1', title: '검색어 조건 정리 (AI)', page: 'direct-prepare', algo: 'algo-query-interpret', role: '말 속 고유명사·색상·기간을 탐색어와 필터로 바꾼다.', input: '검색 문장·오늘 날짜', output: 'apiKeywords·include·기간 필터' },
-      { id: 'c2', step: 'C2', title: '코드 필터·백그라운드 스캔', page: 'direct-browse', algo: 'algo-code-filter', role: '공식 코드로 먼저 좁히고 서버가 사진을 8장씩 이어서 분석한다.', input: '필터·검색 조건·jobId', output: '진행률과 전체 후보 풀' },
-      { id: 'c3', step: 'C3', title: '등급별 결과 표시', page: 'direct-result', algo: 'algo-ranking', role: '등급 → 텍스트·사진 점수 → 최신순으로 정렬해 페이지를 만든다.', input: '등급·점수·습득일', output: '등급 배지가 붙은 결과 목록' },
+      { id: 'c1', step: 'C1', title: 'AI·일반 검색 분기', page: 'direct-prepare', algo: 'algo-query-interpret', role: 'AI 검색의 탐색 힌트와 사용자가 고른 필터를 분리한다. 일반 검색은 별도다.', input: '검색 문장·오늘 날짜', output: '탐색 힌트 또는 일반 검색어' },
+      { id: 'c2', step: 'C2', title: '코드 필터·백그라운드 스캔', page: 'direct-browse', algo: 'algo-code-filter', role: '사용자가 적용한 코드 필터로 조회한다. 더 찾아보기는 이전 조회와 사진 점수를 재사용한다.', input: '필터·검색 조건·previousJobId', output: '진행률과 누적 후보 풀' },
+      { id: 'c3', step: 'C3', title: '등급별 결과 표시', page: 'direct-result', algo: 'algo-ranking', role: '누적 후보를 등급·점수·최신순으로 정렬한다. 일반 검색 결과는 독립적으로 유지한다.', input: '등급·점수·습득일', output: '등급 배지가 붙은 결과 목록' },
     ],
   },
   {

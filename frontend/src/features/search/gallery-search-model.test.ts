@@ -194,6 +194,16 @@ describe('AI 사진 분석 3축 정렬', () => {
     expect(sortGalleryByRank(items, null, 'combined')).toEqual(items)
   })
 
+  it('AI 점수가 없는 동일 파일도 세 채널의 첫 번째에 표시한다', () => {
+    const identical = new Set(['unscored'])
+    for (const channel of GALLERY_CHANNELS) {
+      const ranked = sortGalleryByRank(items, ranking, channel, identical)
+      expect(ranked[0].id).toBe('unscored')
+      expect(ranked.slice(1)).toEqual(sortGalleryByRank(items, ranking, channel).slice(0, 3))
+      expect(sortGalleryByRank(items, null, channel, identical)[0].id).toBe('unscored')
+    }
+  })
+
   it('점수 맵은 3축만 담고 원본 reasons는 버린다', () => {
     expect(ranking).toEqual({
       a: { score: 90, imageSimilarity: 20, contextRelevance: 70 },

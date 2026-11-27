@@ -105,7 +105,7 @@ export async function prepareAiSearch(
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, query, images: imageData, filters, externalProcessingConfirmed: true }),
+      body: JSON.stringify({ mode, query: query.slice(0, 300), images: imageData, filters, externalProcessingConfirmed: true }),
     })
   } catch {
     throw new Error('서버에 연결하지 못했어요. 백엔드가 실행 중인지 확인해 주세요.')

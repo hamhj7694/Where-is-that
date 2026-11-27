@@ -1,9 +1,64 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createSearchRecord, disconnectGalleryHistory, findSearchRecord, overwriteGallerySearch, overwriteLostSearch, recordPath, refineGalleryRecord, refineLostRecord, removeSearchRecord, resolveGalleryAssistant, resolveLostAssistant, updateSearchAssistant, type SearchRecord } from './history'
-import { addGalleryCondition, createGalleryAssistantState, editGalleryCondition, galleryConditionsChanged, removeGalleryCondition, type GalleryAssistantState } from './gallery-search-model'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createSearchRecord, disconnectGalleryHistory, findSearchRecord, galleryHistoryPreview, overwriteGallerySearch, overwriteLostSearch, recordPath, refineGalleryRecord, refineLostRecord, removeSearchRecord, resolveGalleryAssistant, resolveLostAssistant, saveGalleryRankSnapshot, updateSearchAssistant, type SearchRecord } from './history'
+import { addGalleryCondition, createGalleryAssistantState, editGalleryCondition, galleryConditionsChanged, galleryRankSignature, removeGalleryCondition, type GalleryAssistantState, type GalleryRankMap } from './gallery-search-model'
+import { localPhotoId, rememberLocalPhotoId } from '../workspace/data'
 import type { ReferencePhotoView } from './model'
 
 const image = new File(['image'], 'photo.jpg', { type: 'image/jpeg' })
+
+describe('갤러리 기록의 추천 사진 미리보기', () => {
+  const first = new File(['first-file'], 'first.jpg')
+  const recommended = new File(['recommendation'], 'ranked.jpg')
+  const reference = new File(['reference-file'], 'reference.jpg')
+  const files = [first, recommended]
+  const ranking: GalleryRankMap = {
+    [localPhotoId(first)]: { score: 10, imageSimilarity: 90, contextRelevance: 30 },
+    [localPhotoId(recommended)]: { score: 80, imageSimilarity: 20, contextRelevance: 20 },
+  }
+
+  beforeEach(() => {
+    const cache = new Map<string, string>()
+    vi.stubGlobal('window', { localStorage: {
+      getItem: (key: string) => cache.get(key) ?? null,
+      setItem: (key: string, value: string) => cache.set(key, value),
+    } })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  function saveScores(record: SearchRecord) {
+    const signature = galleryRankSignature(record.draft.query, record.draft.photo ? localPhotoId(record.draft.photo) : '', files.map(localPhotoId))
+    saveGalleryRankSnapshot(record.id, { signature, ranking, descriptions: [], count: files.length })
+  }
+
+  it('브라우저에서 복원한 기록은 저장된 추천 사진 1위를 사용한다', async () => {
+    const record = createSearchRecord('gallery', { query: '기억나는 사진', photo: reference }, { name: '내 사진', files })
+    saveScores(record)
+    const restoredFiles = files.map(original => {
+      const restored = new File([original], original.name)
+      rememberLocalPhotoId(restored, localPhotoId(original))
+      return restored
+    })
+    const restored = { ...record, gallery: { name: '내 사진', files: restoredFiles } }
+    expect(await galleryHistoryPreview(restored)).toBe(restoredFiles[1])
+  })
+
+  it('추천 결과에서 같은 파일이 우선되면 해당 갤러리 파일을 사용한다', async () => {
+    const copy = new File([first], 'reference-copy.jpg')
+    const record = createSearchRecord('gallery', { query: '다른 특징', photo: copy }, { name: '내 사진', files })
+    saveScores(record)
+    expect(await galleryHistoryPreview(record)).toBe(first)
+  })
+
+  it('검색이 바뀌면 새 순위가 저장되기 전까지 이전 미리보기를 사용하지 않는다', async () => {
+    const record = createSearchRecord('gallery', { query: '이전 검색', photo: null }, { name: '내 사진', files })
+    saveScores(record)
+    const [updated] = overwriteGallerySearch([record], record.id, { query: '수정한 검색', photo: null })
+    expect(await galleryHistoryPreview(updated)).toBeNull()
+    const signature = galleryRankSignature(updated.draft.query, '', files.map(localPhotoId))
+    saveGalleryRankSnapshot(updated.id, { signature, ranking: { [localPhotoId(first)]: ranking[localPhotoId(first)] }, descriptions: [], count: 1 })
+    expect(await galleryHistoryPreview(updated)).toBe(first)
+  })
+})
 
 describe('찾은 기록의 세션 스냅샷', () => {
   it('분실물 도우미에서 확정한 AI 계획을 새 검색 기록에 보존한다', () => {

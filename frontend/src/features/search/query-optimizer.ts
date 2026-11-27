@@ -74,3 +74,13 @@ export async function prepareOptimizedAssistant(
     optimizedQuery: query,
   }
 }
+
+/** 사용자가 수정한 문구를 그대로 적용하고, 이전 문구에서 얻은 AI 조건은 다시 계산한다. */
+export async function prepareEditedAssistant(
+  mode: AiPipelineMode, state: GalleryAssistantState, text: string,
+): Promise<GalleryAssistantState> {
+  const query = text.trim()
+  if (query === state.optimizedQuery?.trim()) return state
+  const aiPlan = await prepareAiSearch(mode, query).catch(() => null)
+  return { ...state, optimizedQuery: query, aiPlan }
+}

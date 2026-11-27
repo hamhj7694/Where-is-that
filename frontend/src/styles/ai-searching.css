@@ -81,6 +81,7 @@
   font-size: 13px;
   text-align: center;
 }
+.ai-search__detail { color: var(--text-muted); font-size: 11px; text-align: center; }
 .ai-search__dots { display: inline-flex; gap: 3px; }
 .ai-search__dots i {
   width: 4px;

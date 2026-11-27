@@ -92,11 +92,17 @@ export function photoFromFile(file: File, id: string): AppPhoto {
   return { id, name: file.name, file, sampleUrl: null, kind: /screen|screenshot|capture|스크린|캡처/i.test(file.name) ? 'screenshot' : 'photo', path: file.webkitRelativePath || file.name, updatedAt: file.lastModified }
 }
 
-const localPhotoIds = new WeakMap<File, string>()
+type IdentifiedFile = File & { __geugeoPhotoId?: string }
+
+/** File 객체에 직접 저장해 IndexedDB/계정에서 복원해도 같은 사진으로 찾을 수 있게 한다. */
+export function rememberLocalPhotoId(file: File, id: string) {
+  ;(file as IdentifiedFile).__geugeoPhotoId = id
+}
+
 export function localPhotoId(file: File) {
-  let id = localPhotoIds.get(file)
-  if (!id) { id = 'local-' + crypto.randomUUID(); localPhotoIds.set(file, id) }
-  return id
+  const identified = file as IdentifiedFile
+  if (!identified.__geugeoPhotoId) identified.__geugeoPhotoId = 'local-' + crypto.randomUUID()
+  return identified.__geugeoPhotoId
 }
 
 export function safeReturn(value: string | null, fallback: string) {

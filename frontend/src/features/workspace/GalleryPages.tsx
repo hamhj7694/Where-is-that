@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowRight, FolderOpen, Plus } from 'lucide-react'
 import { usePhotoPreview } from '../search/SearchComposer'
@@ -6,6 +6,8 @@ import GalleryAddDialog from '../search/GalleryAddDialog'
 import type { GalleryImportHandler } from '../search/useGalleryImport'
 import type { GallerySource, SearchDraft } from '../search/model'
 import { DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, PhotoViewer, QuerySummary, RetryButton, SearchEditAction, TransferDialog } from './components'
+import BookmarkButton from './BookmarkButton'
+import { bookmarkLink, createThumbnail, currentDetailPath } from './bookmarks'
 import CropDialog from './CropDialog'
 import FileLocationDetails from './FileLocationDetails'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
@@ -74,12 +76,26 @@ export function GalleryPhoto({ gallery, onOpenGallery, onTransfer }: Props) {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [copied, setCopied] = useState('')
   const actual = gallery?.files.map(file => photoFromFile(file, localPhotoId(file))) ?? []
-  const photo = actual.find(item => item.id === localId)
+  const photo = actual.find(item => item.id === localId) ?? actual.find(item => item.name === params.get('photo'))
   const url = usePhotoPreview(photo?.file ?? null)
   const source = url ?? photo?.sampleUrl
+  const [thumbnail, setThumbnail] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    void createThumbnail(source).then(value => { if (active) setThumbnail(value) })
+    return () => { active = false }
+  }, [source])
   const back = params.get('back')?.startsWith('/gallery/results') ? params.get('back')! : '/gallery/results'
   if (!photo || params.get('state') === 'missing') return <main id="main-content" className="content-workspace"><PageHeading title="이미지 보기" back={{ to: back, label: '돌아가기' }} /><EmptyState title="원본 이미지를 열 수 없어요" description="원본이 있는 갤러리를 다시 연결해 주세요." error><button className="button button--primary" onClick={onOpenGallery}>갤러리 다시 연결</button></EmptyState></main>
-  return <main id="main-content" className="content-workspace"><PageHeading title={photo.name} back={{ to: back, label: '돌아가기' }} />
+  const bookmark = {
+    id: 'gallery:' + photo.id,
+    kind: 'gallery' as const,
+    title: photo.name,
+    subtitle: photo.kind === 'screenshot' ? '스크린샷 · 갤러리 사진' : '갤러리 사진',
+    image: thumbnail ?? source ?? null,
+    path: bookmarkLink(currentDetailPath(), 'gallery', photo.name),
+  }
+  return <main id="main-content" className="content-workspace"><PageHeading title={photo.name} back={{ to: back, label: '돌아가기' }} action={<BookmarkButton entry={bookmark} />} />
     {!photo.file && <DemoNotice>샘플 이미지 · 개인 갤러리 사진이 아니에요.</DemoNotice>}
     <div className="detail-layout"><div className="detail-photo"><button type="button" className="photo-open" onClick={() => setViewerOpen(true)} aria-label={photo.name + ' 크게 보기'}><PhotoImage photo={cropPhoto ?? photo} /><span>크게 보기</span></button></div><div>
       {cropPhoto && <p className="status-badge">선택 영역 사용 중</p>}

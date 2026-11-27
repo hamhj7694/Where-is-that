@@ -23,6 +23,7 @@
   main{padding:26px 32px 80px;max-width:1540px}
   h2{font-size:21px;margin:0 0 5px}
   p.lead{color:var(--sub);margin:0 0 18px}
+  .table-scroll{overflow:auto;margin-bottom:12px}
   .page{display:none}.page.on{display:block}
   .grid{display:grid;gap:12px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
   @media(max-width:1100px){.g3,.g2{grid-template-columns:1fr}}
@@ -60,6 +61,35 @@
   .note{color:var(--sub);font-size:12px;border-left:2px solid var(--acc);padding-left:11px;margin:10px 0}
   .banner{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 16px;margin-bottom:18px}
   .banner b{color:var(--acc2)}
+  .search-overview h3{margin:0 0 8px;font-size:15px}
+  .search-overview ul{margin:0;padding-inline-start:20px}
+  .search-overview li+li{margin-top:6px}
+  .search-overview p{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line);color:var(--sub);font-size:13px}
+  .test-overview{margin:28px 0}
+  .test-summary{display:flex;flex-wrap:wrap;gap:10px 28px;margin:0;padding:11px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .test-summary>div{display:flex;align-items:baseline;gap:8px}
+  .test-summary dt{color:var(--sub);font-size:12px}
+  .test-summary dd{margin:0;color:var(--acc);font-weight:700;font-variant-numeric:tabular-nums}
+  .test-case{margin:18px 0;padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .test-case h4{margin:0 0 10px;font-size:16px}
+  .test-case__meta{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;margin:0 0 14px;font-size:13px}
+  .test-case__meta dt,.test-case__formula,.test-case figcaption{color:var(--sub)}
+  .test-case__meta dd{margin:0;overflow-wrap:anywhere}
+  .test-case__body{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,1fr);gap:20px;align-items:start}
+  .test-case figure{margin:0}
+  .test-case figure a{display:block;max-height:660px;overflow:auto;background:#f5f5f1;border:1px solid var(--line);border-radius:8px}
+  .test-case figure img{display:block;width:100%;height:auto}
+  .test-case figcaption{margin-top:6px;font-size:12px}
+  .test-case figcaption a{color:var(--acc2)}
+  .test-case__formula{margin:0 0 10px;font-size:12px}
+  .test-case__score{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .test-case table{table-layout:auto;min-width:0}
+  .test-case th:first-child{white-space:nowrap}
+  .test-case td{overflow-wrap:anywhere}
+  .test-case small{display:block;color:var(--sub)}
+  .test-case tfoot{color:var(--acc);font-weight:700}
+  .test-reports summary{cursor:pointer}
+  @media(max-width:1000px){.test-case__body{grid-template-columns:minmax(0,1fr)}}
   .mini{background:#12253a;color:var(--acc2);border:1px solid #245b7a;border-radius:7px;padding:4px 9px;font-size:11px;cursor:pointer;margin-top:8px}
   .mini:hover{background:#173452;color:#fff}
   .algo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin:14px 0}
@@ -133,6 +163,27 @@
   .node-detail .detail-head h3{font-size:16px}
   .node-detail .detail-grid{grid-template-columns:1fr}
   .node-detail .mini{margin:4px 0 0}
+  .model-map{margin:0 0 20px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .model-map h3{margin:0 0 10px;font-size:16px}
+  .model-map__row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr);column-gap:18px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+  .model-map__row:last-child{padding-bottom:0}
+  .model-map__name{background:none;border:0;padding:0;color:var(--txt);font:inherit;font-weight:700;text-align:left;cursor:pointer}
+  .model-map__name:hover,.model-map__route:hover{color:var(--acc2);text-decoration:underline}
+  .model-map button:focus-visible{outline:2px solid var(--acc2);outline-offset:3px}
+  .model-map__details{margin:4px 0 0;color:var(--sub);font-size:12px}
+  .model-map__id{display:block;overflow-wrap:anywhere;font-size:13px;font-weight:700}
+  .model-map__state{display:inline-block;margin-top:3px;color:var(--sub);font-size:11px}
+  .model-map__state[data-state="configured"]{color:var(--acc)}
+  .model-map__state[data-state="conditional"]{color:var(--warn)}
+  .model-map__routes{display:flex;flex-wrap:wrap;gap:4px 9px;align-items:baseline}
+  .model-map__route{min-height:28px;background:none;border:0;padding:0;color:var(--acc2);text-decoration:underline;text-underline-offset:3px;font:inherit;font-size:12px;cursor:pointer}
+  #model-map-list>p{margin:0;color:var(--sub)}
+  @media(max-width:980px){.model-map__row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:7px}.model-map__routes{grid-column:1/-1}}
+  @media(max-width:720px){
+    .layout:has(#flow-map.on,#home.on,#tests.on){grid-template-columns:minmax(0,1fr)}
+    .layout:has(#flow-map.on,#home.on,#tests.on)>nav{position:static;height:auto;max-height:165px;border-right:0;border-bottom:1px solid var(--line)}
+    .layout:has(#flow-map.on,#home.on,#tests.on)>main{padding:18px 14px 40px;min-width:0}
+  }
 </style>
 <link rel="stylesheet" href="/pipeline/flow-map.css">
 </head>
@@ -144,10 +195,11 @@
   <div class="group">시작</div>
   <button data-go="home" class="on">0. 전체 기술 스택</button>
   <button data-go="flow-map">0-1. 노드 흐름 지도</button>
+  <button data-go="tests">테스트</button>
 
   <div class="group">A. 갤러리에서 찾기</div>
   <button data-go="gallery-prepare">A1. 사진 연결·준비</button>
-  <button data-go="gallery-compare">A2. 사진 유사도 비교 (AI)</button>
+  <button data-go="gallery-compare">A2. 전체 로컬 벡터 비교</button>
   <button data-go="gallery-result">A3. 결과 표시</button>
 
   <div class="group">B. 물건 찾기</div>
@@ -156,7 +208,7 @@
   <button data-go="lost-context">B3. 맥락 재정렬 + 결과</button>
 
   <div class="group">C. 직접 찾기</div>
-  <button data-go="direct-prepare">C1. 검색어 조건 정리 (AI)</button>
+  <button data-go="direct-prepare">C1. AI·일반 검색 분기</button>
   <button data-go="direct-browse">C2. 코드 필터·백그라운드 스캔</button>
   <button data-go="direct-result">C3. 등급별 결과 표시</button>
 
@@ -169,7 +221,7 @@
   <button data-go="algo-detail" data-algo="algo-ranking">E5. 최종 정렬 · 페이지</button>
   <button data-go="algo-detail" data-algo="algo-browse-more">E6. 더 찾아보기 · 작업</button>
   <button data-go="algo-detail" data-algo="algo-web-reference">E7. 웹 참고 · 임베딩</button>
-  <button data-go="algo-detail" data-algo="model-multimodal">E8. AI 모델 3종 보기</button>
+  <button data-go="algo-detail" data-algo="model-multimodal">E8. AI 모델과 실행 경로</button>
 
   <div class="group">공통 / 점검</div>
   <button data-go="common-web">D0. 인터넷 참고·임베딩</button>
@@ -180,53 +232,69 @@
 <main>
 <!-- HOME -->
 <section class="page on" id="home">
-  <h2>0. 백엔드에서 쓰인 것 전체</h2>
-  <p class="lead">세 화면이 쓰는 모델·라이브러리·공개 API를 한 번에 정리했습니다.</p>
-
-  <div class="banner"><b>먼저 답:</b> 세 화면은 <b>같은 파이프라인이 아닙니다.</b><br>
-    갤러리 = 사진 유사도 비교 / 물건 찾기 = 조건 정리 + 사진 매칭 + 맥락 재정렬 / 직접 찾기 = 조건 정리 + <b>공개 API 사진까지 AI로 분석</b>해 신호 일치 등급으로 줄 세웁니다.<br>
-    낯선 캐릭터 이름은 중간에 <b>인터넷 검색 → 특징·참고 이미지 임베딩</b> 단계를 거친 뒤 공개 사진과 비교합니다.</div>
-
-  <h3>① AI 모델 / 역할</h3>
+  <h2>0. 검색 엔진과 연결 상태</h2>
+  <p class="lead">2026-11-26 · 로컬 작업 트리, 실행 중인 서버 상태, 모델 추론을 대조했습니다.</p>
+  <section class="banner search-overview" aria-labelledby="search-overview-title">
+    <h3 id="search-overview-title">검색 구조 한눈에 보기</h3>
+    <ul>
+      <li><b>갤러리에서 사진 찾기</b> · 연결한 사진과 스크린샷 전체를 기기 내 CLIP으로 비교해요.</li>
+      <li><b>분실물 찾기</b> · 글이나 사진으로 검색하고, 공개 목록에서 추천·설명·사진 기준의 후보를 보여줘요.</li>
+      <li><b>직접 찾기</b> · 일반 검색은 키워드로 찾고, AI 검색은 공개 사진과 설명의 단서까지 비교해요.</li>
+    </ul>
+    <p><b>공개 검색 범위</b> · 기간을 정하지 않으면 경찰청·포털기관 공개 목록의 최근 2개월을 조회해요. 가져온 후보를 비교하며, 남은 목록은 이어서 확인할 수 있어요.</p>
+    <p><b>분실일을 말하면</b> · 말해 준 시점의 10일 전부터 오늘까지 살펴봐요. 최대 6개월이며, 필터에서 직접 선택한 날짜가 우선해요.</p>
+  </section>
+  <h3>AI 모델과 실행 경로</h3>
   <div class="grid g3">
-    <div class="card"><h4>multimodal</h4><p>말 + 사진 + 말·사진 함께 읽기. 사진 설명, 조건 정리, 사진 채점, VLM census를 모두 맡습니다. <code>gpt-6-luna</code>, <code>/chat/completions</code> JSON 모드.</p><div><span class="tag a">1개 역할</span><span class="tag">llm/vlm/vision = 호환 별칭</span></div><button class="mini algo-open" data-algo="model-multimodal">개별 보기 · 수정 요청</button></div>
-    <div class="card"><h4>imageSimilarity</h4><p>사진끼리 닮은 정도를 점수로 매깁니다. 기본 <code>local-clip</code>. <code>none</code>, <code>openai-compatible</code>, <code>clip-http</code> 선택 가능.</p><div><span class="tag b">점수 전용</span><span class="tag">파인튜닝 없음</span></div><button class="mini algo-open" data-algo="model-similarity">개별 보기 · 수정 요청</button></div>
-    <div class="card"><h4>YOLOE</h4><p>크롭 1단계에서만 씁니다. 사전학습 가중치 그대로, 객체 2개 이상이거나 종류 2가지 이상일 때만 자릅니다.</p><div><span class="tag b">크롭 1단계</span></div><button class="mini algo-open" data-algo="model-yoloe">개별 보기 · 수정 요청</button></div>
+    <div class="card"><h4>멀티모달 · gpt-6-luna</h4><p>실행 서버에 표시된 OpenAI 호환 모델 ID입니다. 검색문과 사진 설명, 공개 사진의 의미 비교, 설명·장소 채점, 추천 문구 생성에 사용합니다. <code>llm</code>, <code>vlm</code>, <code>vision</code>은 같은 설정의 호환 이름입니다.</p><button class="mini algo-open" data-algo="model-multimodal">모델 상세</button></div>
+    <div class="card"><h4>OpenCLIP · ViT-B-32</h4><p><code>laion2b_s34b_b79k</code> 가중치. F1은 전체 연결 사진의 임베딩, F2/C는 선택된 로컬 비교 경로에 사용합니다. 이번 환경에서 샘플 이미지 512차원 임베딩이 정상 생성됐습니다.</p><button class="mini algo-open" data-algo="model-similarity">유사도 상세</button></div>
+    <div class="card"><h4>YOLOE-11s · 조건부 크롭</h4><p><code>yoloe-11s-seg.pt</code> 사전학습 가중치가 로컬에 있으며 샘플 탐지를 실행했습니다. F2/C 로컬 CLIP 경로에서 물건 위치를 찾습니다. 조건이 맞을 때 바운딩 박스로 자릅니다.</p><button class="mini algo-open" data-algo="model-yoloe">크롭 상세</button></div>
   </div>
-
-  <h3>② 라이브러리 / 프레임워크</h3>
-  <div class="card">
-    <span class="tag a">FastAPI</span><span class="tag a">uvicorn</span><span class="tag a">Pydantic</span><span class="tag a">httpx</span><span class="tag a">LangGraph</span><span class="tag a">SQLite</span>
-    <span class="tag b">CLIP (ultralytics/CLIP)</span><span class="tag b">MobileCLIP BLT</span><span class="tag b">YOLOE (ultralytics)</span><span class="tag b">Pillow</span><span class="tag b">numpy</span>
-    <span class="tag">pytest</span><span class="tag">Vite</span><span class="tag">React</span><span class="tag">TypeScript</span><span class="tag">Vitest</span>
-  </div>
-
-  <h3>③ 공개 데이터 / 외부 연동</h3>
+  <div class="note"><b>MobileCLIP BLT</b> 파일은 로컬에 있습니다. 현재 런타임의 가중치 로딩과 검색 호출은 OpenCLIP ViT-B-32로 확인했습니다. MobileCLIP을 운영에 적용하기 전 속도와 검색 품질을 비교할 수 있습니다.</div>
+  <h3>화면별로 실제 비교하는 범위</h3>
+  <div class="table-scroll"><table>
+    <tr><th>화면</th><th>후보 수집</th><th>비교와 결과</th></tr>
+    <tr><td>갤러리에서 찾기</td><td>연결한 전체 파일, 동일 파일 우선 확인</td><td>448px 썸네일을 기기 내 서버에서 16장씩 처리. 추천·이미지·맥락. 외부 AI에는 검색 문장을 전달할 수 있습니다.</td></tr>
+    <tr><td>분실물 찾기</td><td>이름 탐색어·품목 우선 조회와 날짜 목록을 각각 수집합니다. 추정 품목 밖의 공개 후보도 비교합니다.</td><td>공개 사진과 설명을 별도 비교. 추천·설명·사진의 3가지 결과. 사용자 필터는 결과에서 적용합니다.</td></tr>
+    <tr><td>직접 찾기</td><td>기간 검색에서 경찰청·포털기관 페이지를 개별 추적합니다. 추가 조회는 각 출처의 다음 위치에서 이어집니다.</td><td>일반 검색은 원문만. AI는 사진 최대 60장씩 분석하고 하단에 별도 일반 검색 결과를 유지합니다.</td></tr>
+  </table></div>
+  <h3>기반 서비스</h3>
   <div class="grid g3">
-    <div class="card"><h4>경찰청 15058696</h4><p>전용 필터 <code>getLosfundInfoAccToClAreaPd</code>로 분류·색상·지역·기간을 서버에서 먼저 좁힙니다.</p></div>
-    <div class="card"><h4>포털기관 15057670</h4><p><code>getPtLosfundInfoAccToClAreaPd</code>. 두 소스를 함께 읽고 같은 물건은 한 번만.</p></div>
-    <div class="card"><h4>공식 코드표</h4><p><code>lostfound_codes.py</code> — 분류 45종, 색상 85코드/39표시명, 지역 17개 시도.</p></div>
-    <div class="card"><h4>카카오</h4><p>로그인 REST, 지도/길찾기 로컬 API. 키·토큰은 서버 env 전용, 브라우저에는 JS 키만 전달.</p></div>
-    <div class="card"><h4>캐시 / 헬스</h4><p>검색 300초 · 상세 24시간 · 지도 30일. <code>/api/health</code>와 <code>/health</code> 동일 응답.</p></div>
-    <div class="card"><h4>평가 스크립트</h4><p><code>eval_visual_search.py</code> — 실사진 12건으로 R@1/R@3/MRR@5 측정.</p></div>
-    <div class="card"><h4>웹 참고 자료 <span class="tag a">신규</span></h4><p>위키 문서(리더 프록시 경유)·네이버 이미지 검색·DuckDuckGo 요약. 키 없이 공개 결과만 읽고 7일 캐시.</p><div><span class="tag">web_reference.py</span></div></div>
+    <div class="card"><h4>공개 습득물</h4><p><a href="https://www.data.go.kr/data/15058696/openapi.do" target="_blank" rel="noopener">경찰청 15058696</a> · <a href="https://www.data.go.kr/data/15057670/openapi.do" target="_blank" rel="noopener">포털기관 15057670</a>. 검색 이름 API와 분류·지역·기간 API를 함께 씁니다.</p></div>
+    <div class="card"><h4>실행 기반</h4><p>FastAPI · LangGraph · httpx · SQLite · PyTorch · OpenCLIP · Ultralytics · Pillow. 브라우저는 React · TypeScript · Vite.</p></div>
+    <div class="card"><h4>확인 범위</h4><p><code>/api/health</code>, <code>/api/ai/status</code>, 로컬 모델 추론과 검색 회귀 테스트. 실제 기능과 별도의 평가 한계는 D2를 확인하세요.</p></div>
   </div>
+</section>
 
-  <h3>④ 세 화면 AI 연결 한눈에</h3>
-  <table>
-    <tr><th>화면</th><th>AI 조건 정리</th><th>AI 사진 점수</th><th>AI 재정렬</th><th>결과 순서</th><th>개별 보기</th></tr>
-    <tr><td>A. 갤러리에서 찾기</td><td>버튼 없음(정책)</td><td><span class="tag a">연결</span> <code>vision/compare</code></td><td><span class="tag a">연결</span></td><td>종합·이미지·맥락 3축</td><td><button class="mini algo-open" data-algo="algo-gallery-compare">유사도 비교</button></td></tr>
-    <tr><td>B. 물건 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code></td><td><span class="tag a">연결</span> <code>vision/match-public</code></td><td><span class="tag a">연결</span> <code>search/rank-context</code></td><td>확정 4개 영역</td><td><button class="mini algo-open" data-algo="algo-context-rank">맥락 재정렬</button></td></tr>
-    <tr><td>C. 직접 찾기</td><td><span class="tag a">연결</span> <code>search/prepare</code> (말에서 시각 특징 추출)</td><td><span class="tag a">연결</span> <code>vision/match-public</code> 재사용</td><td><span class="tag w">부분</span> 사진 점수로 등급만 끌어올림</td><td>등급 → (제목·본문 신호×10 + 사진 점수) 내림차순, 동점이면 최신순</td><td><button class="mini algo-open" data-algo="algo-ranking">정렬 규칙</button></td></tr>
-  </table>
-  <div class="note">위의 <b>모델 카드·개별 보기 버튼</b>을 누르면 해당 모델/검색 방식/알고리즘의 입력·단계·임계값·실패 처리·코드 위치를 따로 보여주고, 그 항목을 지정한 수정 요청을 바로 보낼 수 있습니다. 왼쪽 <b>E. 검색 알고리즘</b> 메뉴에서도 같은 정보를 볼 수 있고, <b>0-1. 노드 흐름 지도</b>에서는 세 화면의 단계가 선으로 연결된 프레임에서 각 노드를 눌러 같은 정보를 확인할 수 있습니다.</div>
-  <div class="note">직접 찾기도 AI가 말 속에서 캐릭터·색상·카드 종류·이름을 시각 특징으로 뽑아 <b>공개 API 사진을 직접 봅니다</b>. 모델이 모르는 <code>치이카와</code>·<code>짱구</code>는 <b>D0 인터넷 참고 단계</b>에서 설명과 참고 이미지를 먼저 임베딩해 비교합니다. “약 한 달 전”, “오래전에”라는 말은 <b>그 시점 전후 기간 필터</b>로 바꿔 먼저 좁힙니다. 사진 분석은 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 진행하고, 충분히 맞으면 일찍 멈춥니다. <b>40점 이상이면 점수만 남기고 50점 이상이면 사진 일치로 인정</b>하되 조기 종료는 90점(또는 70점 3건)으로 엄격히 유지해 오래된 사진을 놓치지 않습니다. 결과는 <b>모두 표시</b>하며 남은 오래된 사진은 <b>더 찾아보기</b>로 이어서 봅니다. <code>류*진</code>은 <code>류영진</code>·<code>류세진</code>으로도 찾습니다.</div>
+<section class="page" id="tests">
+  <h2>테스트</h2>
+  <p class="lead"><time datetime="2026-11-27">2026-11-27</time> · 브라우저에서 실행한 검색과 표시 순서</p>
+  <section class="test-overview" aria-labelledby="live-tests-title">
+    <h3 id="live-tests-title">실제 검색 요약</h3>
+    <dl id="search-test-summary" class="test-summary"></dl>
+    <ul id="search-test-findings"></ul>
+    <p class="note">갤러리는 구성한 사진 6장으로 확인했습니다. 공개 검색은 당시 반환된 목록을 기록했습니다. 점수는 검색 화면의 내부 순위 점수이며, 사례마다 척도가 다릅니다. 평균은 상위 5개 중 실제 점수가 있는 항목으로 계산합니다.</p>
+  </section>
+  <div id="search-test-cases" aria-live="polite"><p>검색 기록을 불러오고 있어요.</p></div>
+  <details class="test-reports card">
+    <summary>자동 테스트 · 합성 검색 회귀 검증</summary>
+    <dl class="test-summary">
+      <div><dt>프론트엔드 · Vitest</dt><dd>584개 통과</dd></div>
+      <div><dt>백엔드 · pytest</dt><dd>576개 통과</dd></div>
+    </dl>
+    <p>갤러리, 분실물 찾기, 직접 찾기 AI, 직접 찾기 일반에 각각 100개의 합성 사례를 사용했습니다. 미리 정한 후보와 점수로 일괄 처리, 날짜 포함·제외, 정렬 규칙을 확인하는 테스트입니다.</p>
+    <p><a href="#audit">검증 범위와 남은 점검 항목 보기</a></p>
+  </details>
 </section>
 
 <!-- NODE MAP -->
 <section class="page" id="flow-map">
   <h2>0-1. 노드로 보는 파이프라인 지도 <span class="tag a">클릭 가능</span></h2>
   <p class="lead">프레임 안에서 각 단계가 선으로 연결돼 있어요. 노드를 누르면 역할·입력·처리·출력·코드 위치와 그 단계의 수정 요청을 볼 수 있습니다.</p>
+  <section class="model-map" id="model-map" aria-labelledby="model-map-title">
+    <h3 id="model-map-title">AI 모델 맵</h3>
+    <div id="model-map-list" aria-live="polite"><p>실행 서버의 모델 정보를 확인하고 있어요.</p></div>
+  </section>
   <div class="banner"><b>보는 법:</b> A~D는 화면 흐름(A 갤러리 / B 물건 찾기 / C 직접 찾기 / D 공통), E는 개별 AI 모델·검색 방식·알고리즘 목록입니다. 노드를 끌어 옮기고 마우스 휠로 확대·축소할 수 있어요. <b>점선</b>은 공통 단계가 사진 분석에 참고로 들어가는 길이에요. 상세의 <b>알고리즘 상세 페이지에서 보기</b>를 누르면 E 화면으로 이동합니다.</div>
   <div class="node-frame">
     <div class="node-canvas" id="node-canvas">
@@ -238,41 +306,35 @@
 
 <!-- A1 -->
 <section class="page" id="gallery-prepare">
-  <h2>A1. 갤러리에서 찾기 — 사진 연결·준비 <span class="tag">로컬만</span></h2>
-  <p class="lead">사진은 기기에서만 읽습니다. 이 단계에는 서버 AI 호출이 없습니다.</p>
+  <h2>A1. 갤러리에서 찾기 · 사진 연결과 준비 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">파일과 하위 폴더를 브라우저에서 읽고 연결한 목록을 IndexedDB로 보존합니다.</p>
   <div class="flow">
-    <div><div class="shot"><img src="/pipeline/03_gallery_before.png" alt="갤러리 연결 전 화면 캡처"></div><div class="cap"><b>인풋 (실캡처)</b><span>/gallery — 사진 여러 장 선택 또는 폴더 연결 버튼. 캡처는 로컬 예시 사진 4장을 넣기 전 상태입니다.</span></div></div>
-    <div><div class="steps">
-      <div class="step local"><b>갤러리 연결</b><div class="what">브라우저 파일 API로 사진/폴더를 읽고 새로고침해도 유지합니다.</div><div class="code">gallery-store.ts</div></div>
-      <div class="arrow">▼</div>
-      <div class="step local"><b>중복 제거·선택</b><div class="what">갤러리 전체에서 실제로 볼 사진만 골라 참고 사진으로 씁니다.</div><div class="code">gallery-deduplication.ts · prepareGallerySelection()</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>참고 사진 준비 완료</b><div class="what">여기서부터 A2의 <code>vision/compare</code>로 넘어갑니다. AI 조건 정리 버튼은 /gallery에 두지 않습니다.</div></div>
-    </div></div>
-    <div><div class="shot"><img src="/pipeline/03_gallery_after.png" alt="갤러리 연결 후 화면 캡처"></div><div class="cap"><b>아웃풋 (실캡처)</b><span>/gallery/results?view=all — 연결한 이미지 4장이 그리드로 표시되고, 검색창 위에 “4장의 이미지를 연결했어요”가 나옵니다.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>연결한 폴더 또는 사진, 검색 문장과 선택 사항인 참고 사진.</span></div></div>
+    <div class="steps">
+      <div class="step local"><b>파일 연결·중복 처리</b><div class="what">폴더 하위의 사진을 포함합니다. 연결 시 기존 이미지와 중복되는지 확인합니다.</div><div class="code">gallery-store.ts · gallery-deduplication.ts</div></div>
+      <div class="step local"><b>동일 파일 확인</b><div class="what">참고 사진이 있으면 연결 후보의 내용 해시와 비교합니다. 동일 파일은 세 영역에 대해 최상단에 둘 수 있습니다.</div><div class="code">GallerySearchResults.tsx</div></div>
+      <div class="step local"><b>썸네일 준비</b><div class="what">원본으로부터 긴 변 최대 448px JPEG 썸네일을 만들고 디코딩 실패 파일은 건너뜁니다.</div><div class="code">gallery-local-rank.ts</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>점수화할 로컬 후보 전체와 선택한 참고 사진.</span></div></div>
   </div>
-  <div class="req" data-req="gallery-prepare"><h4>✎ 이 구간 수정 요청</h4><p>저장하면 오픈코드 피클이 읽고 실제 코드를 고칩니다.</p>
+  <div class="req" data-req="gallery-prepare"><h4>✎ 이 구간 수정 요청</h4><p>이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>갤러리 연결</option><option>중복 제거</option></select>
     <textarea placeholder="예: 연결 시 사진 수 제한을 늘려줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- A2 -->
 <section class="page" id="gallery-compare">
-  <h2>A2. 갤러리에서 찾기 — 사진 유사도 비교 <span class="tag a">AI 연결됨</span></h2>
-  <p class="lead">참고 사진과 내 사진을 같이 보고 점수를 매겨 순위를 바꿉니다.</p>
+  <h2>A2. 갤러리에서 찾기 · 전체 사진 점수화 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">기기 내부의 API가 후보 사진을 OpenCLIP 벡터로 바꿉니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>검색문 + 참고 사진 + 갤러리 후보 사진.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>참고 사진 설명</b><div class="what">multimodal이 참고 사진을 먼저 설명합니다.</div><div class="code">ai_pipeline.py:192</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>한 번에 채점</b><div class="what">검색문·설명·참고 사진 원본·후보 사진을 하나의 요청에 담아 <code>compare_candidates.txt</code>로 점수를 받습니다.</div><div class="code">ai_pipeline.py:193-216</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>ID 검증</b><div class="what">후보 ID가 정확히 한 번씩 모두 있는지. 빠지거나 겹치면 502.</div><div class="code">ai_pipeline.py:217-224</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>imageSimilarity 교체</b><div class="what">AI 점수 대신 <code>score_similarity()</code>로 교체하고 내림차순 정렬.</div><div class="code">ai_pipeline.py:226-243</div></div>
-      <div class="step fail"><b>실패 시</b><div class="what">설명/비전 실패는 503/502. 같은 검색어 재요청은 중복 호출을 막습니다.</div><div class="code">GallerySearchResults.tsx:35-39</div></div>
-    </div></div>
-    <div><div class="card"><h4>아웃풋 (화면)</h4><p>종합 관련성 · 이미지 유사도 · 맥락 관련성 순서로 사진을 보여줍니다. 화면 캡처는 필요한 지점만 남기고 여기는 단계로 정리했습니다.</p></div></div>
+    <div><div class="cap"><b>입력</b><span>검색 문장, 참고 사진 썸네일, 연결 후보 전체.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>검색 문장 해석</b><div class="what"><code>/api/ai/vision/gallery-intent</code>에서 외부 멀티모달 모델에 검색 문장만 보내 CLIP용 영어 문구를 만듭니다. 실패하면 로컬 변환 규칙을 사용합니다.</div><div class="code">gallery_rank.py · ai_api.py</div></div>
+      <div class="step local"><b>기기 내 배치 임베딩</b><div class="what"><code>/api/ai/vision/gallery-local</code>로 16장씩 요청합니다. 루프백 접근을 검사하고 OpenCLIP으로 임베딩을 계산합니다. 사진은 이 단계에서 외부 모델에 전달하지 않습니다.</div><div class="code">gallery-local-rank.ts · local_vision.embed_gallery_images</div></div>
+      <div class="step"><b>점수</b><div class="what">사진↔사진과 문장↔사진을 코사인 유사도로 비교합니다. 종합은 이미지 30% + 문맥 70%입니다. 입력 축이 하나면 해당 점수를 공통으로 사용합니다.</div><div class="code">gallery_rank.rank_gallery_batch</div></div>
+      <div class="step fail"><b>캐시와 오류</b><div class="what">임베딩은 해시 기준 최대 2,048개를 메모리에 보관합니다. 읽지 못한 파일을 건너뛰며, 모델이나 요청이 실패하면 재시도할 수 있습니다.</div><div class="code">local_vision.py · GallerySearchResults.tsx</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>후보별 종합·이미지·문맥 점수. 12장은 상세 결과의 페이지 크기입니다.</span></div></div>
   </div>
   <div class="req" data-req="gallery-compare"><h4>✎ 이 구간 수정 요청</h4><p> 수정할 구간을 고르고 적어 주세요.</p>
     <select class="scope"><option>전체</option><option>참고 사진 설명</option><option>채점 프롬프트</option><option>ID 검증</option><option>유사도 교체</option></select>
@@ -281,197 +343,165 @@
 
 <!-- A3 -->
 <section class="page" id="gallery-result">
-  <h2>A3. 갤러리에서 찾기 — 결과 표시 <span class="tag">프론트</span></h2>
-  <p class="lead">AI 점수를 3개 축으로 나눠 보여줍니다. 서버 호출은 A2에서 끝납니다.</p>
+  <h2>A3. 갤러리에서 찾기 · 결과 표시 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">채널별로 정렬하고 같은 파일은 맨 위에서 확인할 수 있게 합니다.</p>
   <div class="flow">
-    <div><div class="card"><h4>인풋</h4><p>A2가 준 점수·정렬 결과와 원본 사진 메타데이터.</p></div></div>
-    <div><div class="steps">
-      <div class="step local"><b>종합 관련성</b><div class="what">검색어·사진 설명을 함께 본 전체 순위.</div></div>
-      <div class="step local"><b>이미지 유사도</b><div class="what">CLIP 기반 사진끼리의 닮은 정도.</div></div>
-      <div class="step local"><b>맥락 관련성</b><div class="what">사진 속 상황·배경이 검색어와 맞는 정도.</div></div>
-      <div class="step"><b>상세·기록</b><div class="what">사진 클릭 시 원본 확인, 북마크, 검색 기록 저장.</div></div>
-    </div></div>
-    <div><div class="card"><h4>아웃풋 (화면)</h4><p>갤러리 사진 카드 3축 정렬. 원본은 기기에 그대로 두고 서버에 사진을 올리지 않습니다.</p></div></div>
+    <div><div class="cap"><b>입력</b><span>A2 점수, 동일 파일 확인 결과, 브라우저의 이미지 메타데이터.</span></div></div>
+    <div class="steps">
+      <div class="step local"><b>추천·이미지·맥락</b><div class="what">동일 파일을 먼저 표시한 뒤 채널 점수로 정렬합니다. 점수 계산에 실패한 파일을 비교 완료로 표시하지 않습니다.</div><div class="code">gallery-search-model.ts</div></div>
+      <div class="step local"><b>목록과 상세</b><div class="what">각 미리보기 최대 4장, 더보기는 페이지당 12장입니다. 사진 상세·검색 기록을 연결합니다.</div><div class="code">GallerySearchResults.tsx · history.ts</div></div>
+      <div class="step"><b>개선 후보</b><div class="what">첫 검색 속도, 모델 버전별 캐시 재사용, 업무 스크린샷의 문자 검색을 따로 평가합니다.</div><div class="code">D2 · 평가 계획</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>사진 결과와 복원 가능한 순위 스냅샷.</span></div></div>
   </div>
-  <div class="req" data-req="gallery-result"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="gallery-result"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>3축 정렬</option><option>상세/북마크</option></select>
     <textarea placeholder="예: 이미지 유사도 카드에 점수 숫자도 표시해 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- B1 -->
 <section class="page" id="lost-prepare">
-  <h2>B1. 물건 찾기 — 조건 정리 + 공개 수집 <span class="tag a">AI 연결됨</span></h2>
-  <p class="lead">한 문장을 검색 조건으로 바꾸고, 공식 코드표로 공개 API를 먼저 좁힙니다.</p>
+  <h2>B1. 분실물 찾기 · 조건과 공개 후보 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">말만, 사진만, 둘 다 검색할 수 있습니다. 후보 수집은 AI 비교의 입력을 결정합니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>/lost-found 검색창에 “신림역 근처 검은 가죽 지갑” 입력.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>분기</b><div class="what">사진 있음 → describe, 없음 → interpret.</div><div class="code">ai_graph.py:50-51,97-108</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>describe / interpret</b><div class="what">사진 설명을 먼저 얻고, 오늘 날짜·원문·필터로 분류/색상/지역/키워드를 뽑습니다.</div><div class="code">ai_pipeline.py:134-149 · ai_graph.py:60-78</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>finish — 원문 복원</b><div class="what">AI가 만든 원문은 버리고 사용자 입력으로 덮어쓴 뒤 <code>AiSearchPlan</code> 검증.</div><div class="code">ai_graph.py:81-94</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>공식 코드 필터</b><div class="what">분류·색상·지역·기간을 전용 필터 API에 넘겨 서버에서 먼저 좁힙니다. <code>maxPages</code> 기본 200, 0이면 마지막까지.</div><div class="code">lostfound_codes.py:121-174 · police_api.py:381-532</div></div>
-      <div class="step fail"><b>실패 폴백</b><div class="what">AI 실패 시 원문 검색으로 계속합니다.</div><div class="code">LostSearchComposer.tsx:55-65</div></div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>AI가 정리한 검색 초안 + 경찰청 탐색어·AND/OR·사진 특징.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>검색 문장, 최대 6장의 참고 사진, 사용자가 지정한 결과 필터.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>검색 초안 해석</b><div class="what">사진이 있으면 설명을 생성합니다. <code>search/prepare</code>로 원문·사진 설명·서울 기준 날짜를 해석해 탐색어·시각 특징·검색 계획을 돌려줍니다. 실패 시 원문 경로를 사용합니다.</div><div class="code">LostSearchComposer.tsx · ai_graph.prepare</div></div>
+      <div class="step"><b>사진과 설명 후보 수집</b><div class="what">이름 탐색어 최대 3개와 날짜 목록을 조회합니다. 날짜 목록은 품목 우선 경로와 넓은 경로를 병행하며, 출처별 100건 페이지를 이어 읽습니다. 기본 기간에서 최근 일주일의 품목 첫 페이지를 분산해 보탭니다.</div><div class="code">police_api.search_in_period · LostSearchResults.tsx</div></div>
+      <div class="step branch"><b>검색 범위와 사용자 필터</b><div class="what">사용자 선택 날짜를 우선합니다. 자연어에서 확인한 시작 시점은 10일 앞당기고 종료일은 오늘로 넓힙니다. 오래된 분실일은 범위에 포함하고 시작점부터 최대 6개월까지 확인합니다. 날짜 단서가 없으면 최근 2개월입니다.</div><div class="code">search_period.py · PublicSearchScope.tsx</div></div>
+      <div class="step"><b>추천 문구 편집</b><div class="what">상단 버튼으로 패널을 엽니다. 내부 버튼에서 추천을 생성하고 문구를 수정할 수 있습니다. 다시 검색하면 현재 기록에 적용하며 바뀐 문구로 검색 조건을 계산합니다.</div><div class="code">AiQueryOptimizer.tsx · query-optimizer.ts</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>이름 후보, 독립적으로 모은 사진 후보, 설명 후보, 검색 계획.</span></div></div>
   </div>
-  <div class="req" data-req="lost-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="lost-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>사진 설명</option><option>조건 정리 프롬프트</option><option>공식 코드 필터</option><option>스캔 상한</option></select>
     <textarea placeholder="예: 구 단위 지역도 코드로 좁혀 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- B2 -->
 <section class="page" id="lost-visual">
-  <h2>B2. 물건 찾기 — 사진 특징 매칭 <span class="tag a">AI 연결됨</span></h2>
-  <p class="lead">“딸기 그림이 있는 지갑”처럼 말로 한 특징으로 공개 사진을 찾습니다. 사진이 없어도 됩니다.</p>
+  <h2>B2. 분실물 찾기 · 공개 사진 비교 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">사진을 읽을 수 있는 후보를 비교합니다. 실제 비교 결과는 사진 근거와 설명 근거를 구분합니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>사진 특징 문구 + 검색어. 첨부 사진이 있으면 함께.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>D0 웹 참고 → fetch</b><div class="what">모델이 모르는 캐릭터·브랜드는 웹에서 설명과 참고 사진을 먼저 임베딩합니다. 허용 호스트 사진은 512px JPEG로. 실패하면 설명 텍스트로 이동.</div><div class="code">web_reference.py · ai_graph.py:111-129</div></div>
-      <div class="arrow">▼</div>
-      <div class="step branch"><b>분기</b><div class="what">사진 없음 → describe / 유사도 미설정 → fallback / local-clip+YOLOE+census → census / 그 외 → select.</div><div class="code">ai_graph.py:139-152</div></div>
-      <div class="arrow">▼</div>
-      <div class="step branch"><b>census</b><div class="what">참고 <code>r0…</code>, 공개 <code>c0…</code>를 한 번의 멀티모달 호출로 셉니다. 객체 ≥2 또는 종류 ≥2이면 크롭 힌트.</div><div class="code">ai_graph.py:155-213</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>select + embed</b><div class="what">카테고리 맞는 사진 최대 8개만 CLIP 비교. 사진↔사진 0.45~1.00, 텍스트↔사진 0.10~0.45 보정.</div><div class="code">ai_graph.py:220-241</div></div>
-      <div class="arrow">▼</div>
-      <div class="step fail"><b>평평한 점수 → fallback</b><div class="what">1위 &lt; 70 또는 1·2위 차 &lt; 5면 멀티모달이 다시 채점. 참고 사진이 있으면 로컬 점수 유지.</div><div class="code">ai_graph.py:244-272</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>finish</b><div class="what">설명 점수 채우고 <code>imageSimilarity</code> 내림차순 반환.</div><div class="code">ai_graph.py:275-318</div></div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>“사진 특징이 비슷한 후보”. 실측 이미지 R@1/R@3/MRR@5 = 1.000.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>검색 문장·시각 특징, 참고 사진 최대 6장, 공개 사진 후보.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>후보 배치와 웹 참고</b><div class="what">화면은 한 차례 최대 96장, 12장씩 최대 두 요청을 동시에 비교합니다. 새 외부 분석이 허용된 경로에서 낯선 이름의 특징·참고 사진을 보강할 수 있습니다. 공식 사진은 정규화한 URL로 묶어 최대 4개씩 다운로드합니다.</div><div class="code">LostSearchResults.tsx · web_reference.py · ai_graph._visual_fetch</div></div>
+      <div class="step branch"><b>시맨틱 우선</b><div class="what"><code>preferSemantic</code>과 사용 가능한 멀티모달 설정이 있으면 공개 사진을 직접 채점합니다. 이 분기에서는 OpenCLIP·YOLOE를 거치지 않고, 필요 시 로컬 임베딩 경로로 돌아갑니다.</div><div class="code">ai_graph._visual_route_after_fetch · _visual_fallback</div></div>
+      <div class="step local"><b>로컬 임베딩</b><div class="what"><code>localOnly</code>인 기록 재비교 또는 로컬 분기에서 OpenCLIP으로 계산합니다. YOLOE가 타깃을 찾고 조건을 충족할 때만 자릅니다. 외부 경로의 로컬 분기에서는 VLM 객체 계수가 크롭 판정을 보강할 수 있습니다.</div><div class="code">ai_graph._visual_embed · local_vision.crop_target</div></div>
+      <div class="step fail"><b>폴백과 점수</b><div class="what">참고 기반 최고점 40 미만, 텍스트 기반 최고점 70 미만 또는 1·2위 차 5 미만 등을 폴백 기준으로 씁니다. 로컬 전용 및 명시 색상은 분기가 다릅니다. 사진 근거가 있고 40점 이상인 결과를 사진 채널에 반영합니다.</div><div class="code">ai_graph._visual_route_after_embed · LostSearchResults.tsx</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>사진별 유사도와 근거. 실패·누락 후보는 비교 완료라고 표시하지 않습니다.</span></div></div>
   </div>
-  <div class="req" data-req="lost-visual"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="lost-visual"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>사진 가져오기</option><option>census/크롭</option><option>후보 8개</option><option>점수 보정</option><option>폴백 임계값</option></select>
     <textarea placeholder="예: 8개 자르기 전에 키워드 매칭 먼저 해줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- B3 -->
 <section class="page" id="lost-context">
-  <h2>B3. 물건 찾기 — 맥락 재정렬 + 결과 <span class="tag a">AI 연결됨</span></h2>
-  <p class="lead">설명·조건 후보를 문맥에 맞게 다시 줄 세우고 확정 4개 영역에 담습니다.</p>
+  <h2>B3. 분실물 찾기 · 설명과 최종 순위 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">사진 증거와 설명 증거를 각각 남긴 뒤 종합 후보를 구성합니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>“설명·조건이 비슷한 후보” 전체 텍스트 + 사용자 문장.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>맥락 재정렬</b><div class="what"><code>rank_context_candidates.txt</code>로 <code>llm</code> 역할이 순위를 매깁니다.</div><div class="code">ai_pipeline.py:344-364</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>ID 완전성 검증</b><div class="what">누락·중복이면 502. 정상이면 점수 순 반환.</div><div class="code">ai_pipeline.py:360-363</div></div>
-      <div class="arrow">▼</div>
-      <div class="step local"><b>확정 4개 영역</b><span class="what">종합 / 설명·조건 / 사진 특징 — 레이아웃·카피·카드 크기·상태·데이터 경계는 바꾸지 않습니다.</span></div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>최종 분실물 후보 화면.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>현재 페이지의 공개 설명·장소 후보, 검색문, 참고 사진에서 얻은 설명.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>설명·장소 재정렬</b><div class="what"><code>search/rank-context</code>가 현재 페이지의 후보 최대 12개를 채점합니다. 공개 사진이 없는 후보도 설명으로 순위에 들어갑니다.</div><div class="code">LostSearchResults.tsx · ai_pipeline.rank_context_candidates</div></div>
+      <div class="step"><b>사진과 설명 결합</b><div class="what">종합 점수는 max(사진, 설명) + 0.1 × min(사진, 설명). AI 점수와 텍스트 점수는 정렬에서 구분하며 텍스트 점수 상한은 39입니다.</div><div class="code">LostSearchResults.tsx · sortByRankTier</div></div>
+      <div class="step local"><b>정렬 후 중복 제거</b><div class="what">각 채널에서 동일 사진을 정리합니다. 화면은 추천 후보, 설명이 잘 맞는 후보, 사진이 닮은 후보의 순서이며 개별 채널에서 더 볼 수 있습니다.</div><div class="code">lost-photo-deduplication.ts · lost-result-model.ts</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>3가지 후보 채널. 상세의 보관기관 정보는 공식 조회 결과입니다.</span></div></div>
   </div>
-  <div class="req" data-req="lost-context"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="lost-context"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>재정렬 프롬프트</option><option>ID 검증</option><option>4구역 표시</option></select>
     <textarea placeholder="예: 지역 일치 후보를 위로 올려줘 (단, 레이아웃은 유지)"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- C1 -->
 <section class="page" id="direct-prepare">
-  <h2>C1. 직접 찾기 — 검색어 조건 정리 <span class="tag a">AI 연결</span></h2>
-  <p class="lead">AI는 키워드와 AND/OR뿐 아니라 <b>말 속에 담긴 시각 특징</b>(캐릭터·색상·브랜드·사진 속 이름)도 뽑습니다. 첨부 사진이 없어도 공개 API 사진을 비교할 특징이 생깁니다.</p>
+  <h2>C1. 직접 찾기 · 검색 모드 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">AI 검색과 일반 검색의 입력은 같아도 실행 방식이 다릅니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>/direct-search 검색창에 “검은 가죽 지갑” 입력.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>prepareAI('direct')</b><div class="what">검색어가 바뀔 때만 <code>/api/ai/search/prepare</code>를 한 번 부릅니다. 사진 첨부 없이도 <code>imageFeatures</code>가 나옵니다.</div><div class="code">DirectSearchPage.tsx · interpret_search.txt</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>조건 추출</b><div class="what"><code>criteriaFromPlan()</code>로 API 탐색어·AND/OR·<code>imageFeatures</code>를 만듭니다. 브랜드·캐릭터 이름은 짧은 탐색어로 반드시 유지하고, 일반 명사 <code>카드</code>는 고유어 뒤에 둡니다. “약 한 달 전”, “오래전에” 같은 말은 <code>fromDate</code>/<code>toDate</code>로 바꿔 조회 기간에 적용하며, 사용자가 기간을 지우면 AI 추정 기간을 다시 넣지 않습니다.</div><div class="code">DirectSearchPage.tsx · ai-match-model.ts · interpret_search.txt</div></div>
-      <div class="step fail"><b>실패 폴백</b><div class="what">AI가 실패하면 빈 조건으로 원문 검색을 이어갑니다. 검색 자체는 죽지 않습니다.</div><div class="code">DirectSearchPage.tsx:60-65</div></div>
-      <div class="note">필터만 바꿀 때는 AI를 다시 부르지 않고 서버 조회만 다시 합니다.</div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>검색 조건 접기/펼치기와 조건 적용 버튼.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>직접 입력한 문장 또는 키워드와 적용한 필터.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>AI 검색</b><div class="what"><code>search/prepare</code>에서 탐색어·시각 특징을 뽑아 서버 작업에 전달합니다. 사용자 필터를 별도로 전달하고 AI 추정 날짜·지역은 제안으로 표시합니다.</div><div class="code">DirectSearchPage.tsx · ai-match-model.ts</div></div>
+      <div class="step local"><b>일반 검색</b><div class="what">공개 물품명·설명 등에서 키워드를 찾습니다. 입력 토큰을 확인하고 가려진 문자도 규칙으로 비교합니다. 모델 호출 없이 작동합니다.</div><div class="code">police_api._term_matches · browse_all</div></div>
+      <div class="step local"><b>하단 일반 검색</b><div class="what">AI 진행과 별도로 같은 검색문·필터로 조회합니다. 0건이면 문장에서 물건 키워드를 규칙으로 골라 재조회하고 나머지 단서로 순서를 보완합니다.</div><div class="code">DirectBasicResults.tsx · lostfound-keywords.ts</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>서버 작업과, AI 진행·완료 중에도 볼 수 있는 별도의 일반 검색 후보.</span></div></div>
   </div>
-  <div class="req" data-req="direct-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="direct-prepare"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>조건 정리</option><option>실패 폴백</option></select>
     <textarea placeholder="예: 직접 찾기도 사진 특징을 조건에 넣어줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- C2 -->
 <section class="page" id="direct-browse">
-  <h2>C2. 직접 찾기 — 코드 필터·백그라운드 스캔·등급 <span class="tag">서버</span></h2>
-  <p class="lead">공식 코드표로 먼저 좁히고, 오래 걸리는 조회는 서버 작업으로 넘깁니다. 중복을 제거한 뒤 일치 등급을 붙입니다.</p>
+  <h2>C2. 직접 찾기 · 공개 조회와 이어 찾기 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">공개 API 응답과 사진 분석 기록을 이전 작업에서 이어받습니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>검색어 + 분류·색상·지역·기간 필터 + AI 조건.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>작업 시작</b><div class="what"><code>POST /api/lostfound/browse/jobs</code>가 즉시 <code>jobId</code>를 줍니다. 탭을 닫거나 다른 페이지로 가도 <code>ThreadPoolExecutor</code>가 서버에서 계속 조회합니다. 30분 TTL.</div><div class="code">main.py: start_lostfound_browse_job</div></div>
-      <div class="arrow">▼</div>
-      <div class="step local"><b>jobId 저장·폴링</b><div class="what">브라우저는 <code>localStorage</code>에 jobId를 저장하고 0.9초마다 <code>GET .../jobs/{id}</code>로 확인. 돌아오면 같은 작업 결과를 이어받습니다.</div><div class="code">DirectSearchPage.tsx · lostfound-api.ts</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>필터 → 공식 코드 + 스캔</b><div class="what">분류·색상·지역과 자연어에서 읽은 기간을 공식 코드·날짜로 바꿔 서버에서 먼저 좁힙니다. 사용자가 직접 고른 기간이 AI 추정보다 우선. 타임아웃 45초, 스캔 페이지 최대 8개(더 찾아보기 시 최대 24개).</div><div class="code">lostfound_codes.py · police_api.py: metadata_pass · main.py: _browse_page_cap</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>중복 제거·등급 계산</b><div class="what"><code>exclude</code>만 확실히 제외. 나머지는 AI/검색어/필터/부분 일치 신호를 확인해 등급 0~5를 붙이고 <b>전부</b> 남깁니다. 같은 등급 안에서는 제목·본문 신호×10 + 사진 점수가 높은 순, 동점이면 최신 습득일·ID 순.</div><div class="code">police_api.py: MATCH_TIERS</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>웹 참고 → 공개 사진 AI 분석</b><div class="what">낯선 이름은 D0에서 참고 사진·특징을 먼저 얻습니다. 필터를 다 적용한 뒤 <b>최신 습득일부터 8건씩</b> 비교하고, 90점 이상 또는 70점 이상 3건이 나오면 더 오래된 사진은 건너뜁니다. <b>40점 이상</b>이면 <code>visualScore</code>에 남기고 <b>50점 이상</b>이면 사진 특징으로 인정해 등급도 올립니다. 텍스트가 이미 맞은 등급은 유지하고, <b>사진만 맞은 물건은 등급 1</b>에 두어 정확히 적힌 물건보다 뒤에 오게 한 뒤 정렬·페이지네이션합니다. 조기 종료로 안 본 사진이 남으면 <code>visualMore</code>를 true로 돌려줍니다.</div><div class="code">main.py: _apply_visual_hints · web_reference.py</div></div>
-      <div class="arrow">▼</div>
-      <div class="step local"><b>응답·캐시</b><div class="what"><code>matchTier</code>/<code>matchLabel</code>/<code>visualScore</code> 포함. 오류 없을 때만 300초 TTL 캐시. 부분 실패는 캐시하지 않습니다.</div></div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>등급·사진 점수 배지가 붙은 공개 습득물 목록 + 더 찾아보기 버튼.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>검색 모드·탐색어·사용자 필터, 이어 찾을 때 같은 범위의 이전 작업 ID.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>API 조회 예산</b><div class="what">검색은 최근 2개월 또는 선택·추정 기간을 출처별로 이어 조회합니다. 한 차례에 출처별 100건 페이지를 확인하며 품목 우선 경로는 넓은 후보에 보탭니다. 검색어 없는 전체 보기는 기존 목록 경로입니다.</div><div class="code">search_period.resolve_period · police_api._period_candidates</div></div>
+      <div class="step"><b>서버 작업</b><div class="what"><code>POST /api/lostfound/browse/jobs</code>가 작업 ID를 발급합니다. 화면은 약 0.9초 간격으로 조회하고 AI는 최대 60장씩, 배치 8장으로 비교합니다. 작업의 메모리 유효기간은 30분입니다.</div><div class="code">main._run_browse_job · DirectSearchPage.tsx</div></div>
+      <div class="step"><b>더 찾아보기</b><div class="what">같은 검색의 이전 작업 또는 기간 위치를 받아 읽지 않은 API 페이지를 조회합니다. AI 모드에서 이미 확인한 사진 ID·점수도 이어받습니다.</div><div class="code">main._browse_period_options · police_api._period_candidates</div></div>
+      <div class="step fail"><b>이전 작업이 만료됐을 때</b><div class="what">서버 재시작·만료 등으로 이전 작업을 사용할 수 없으면 기존 경로로 다시 조회할 수 있습니다. 브라우저가 보존한 기존 결과는 병합되며 추가 검색 실패 시에도 유지됩니다.</div><div class="code">DirectSearchPage.mergeDirectBrowseItems</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>진행 상태, 누적 후보 목록과 재계산된 페이지 수.</span></div></div>
   </div>
-  <div class="req" data-req="direct-browse"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="direct-browse"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>백그라운드 작업</option><option>코드 변환</option><option>스캔 한도</option><option>등급 계산</option><option>공개 사진 분석</option></select>
     <textarea placeholder="예: 작업 결과도 서버에 1시간 동안 더 보관해 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- C3 -->
 <section class="page" id="direct-result">
-  <h2>C3. 직접 찾기 — 등급별 결과 표시 <span class="tag a">사진 점수 포함</span></h2>
-  <p class="lead">조건에 맞는 것·안 맞는 것·AI가 찾은 것을 <b>전부</b> 보여주되, 제목에 검색어가 적힌 물건을 먼저 보여줍니다. 같은 등급 안에서는 텍스트 신호×10 + 사진 점수로 순위를 정하고, 상세 페이지에서 돌아오면 마지막 검색 결과를 그대로 되살립니다.</p>
+  <h2>C3. 직접 찾기 · 누적 정렬과 표시 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">페이지를 넘기는 화면 요청과 공개 API 페이지 예산을 구분합니다.</p>
   <div class="flow">
-    <div><div class="cap"><b>인풋</b><span>C1 조건 + C2 등급 결과.</span></div></div>
-    <div><div class="steps">
-      <div class="step"><b>등급 0 — 모두 일치</b><div class="what">AI 조건 + 검색어 + 조건 필터를 모두 만족.</div><div class="code">MATCH_TIERS[0]</div></div>
-      <div class="step"><b>등급 1~3 — 단일 신호</b><div class="what">AI 조건 일치 / 검색어 일치 / 조건 필터 일치 순.</div><div class="code">MATCH_TIERS[1..3]</div></div>
-      <div class="step"><b>등급 4~5 — 나머지</b><div class="what">부분 일치 / 공개 원문. 화면을 비우지 않고 끝까지 표시. 같은 등급 안에서는 텍스트 신호×10 + 사진 점수 → 동점이면 최신순.</div><div class="code">MATCH_TIERS[4..5]</div></div>
-      <div class="step local"><b>카드 배지 + 범례</b><div class="what">각 카드에 등급 배지를 붙이고 목록 위에 6단계 범례를 표시. 사진으로 찾은 항목은 <code>사진 특징 00점</code> 배지를 따로 붙입니다.</div><div class="code">components.tsx · direct-search.css</div></div>
-      <div class="step local"><b>오래 걸릴 때</b><div class="what">“AI가 찾아보고 있어요” + 회전 모션 + 점 3개 바운스. 2초 넘으면 경과 초도 표시. 다른 페이지로 가도 검색은 계속.</div><div class="code">DirectSearchPage.tsx</div></div>
-      <div class="step local"><b>더 찾아보기</b><div class="what"><code>visualMore</code>면 “최신 사진 N장을 살펴봤어요” 안내와 버튼을 보여줍니다. 누르면 실제로 본 장수만큼 <code>skipVisual</code>을 더해 새 백그라운드 작업을 시작하고, 더 오래된 사진부터 같은 분석을 반복합니다. 앞서 찾은 <code>visualScore</code>도 <code>priorVisualScores</code>로 같이 보내 이미 찾은 물건이 순위에서 사라지지 않게 합니다. 결과가 없을 때도 같은 버튼이 나타납니다.</div><div class="code">DirectSearchPage.tsx · lostfound-api.ts</div></div>
-      <div class="step"><b>실패 시</b><div class="what">AI 조건 정리가 실패해도 원문 검색 결과는 그대로 노출. 오류 메시지는 화면에 그대로 표시.</div></div>
-    </div></div>
-    <div><div class="cap"><b>아웃풋</b><span>등급 배지·사진 점수·더 찾아보기 안내가 있는 결과 화면.</span></div></div>
+    <div><div class="cap"><b>입력</b><span>조회한 후보와 AI 조건 신호, 사용자 필터, 사진 점수.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>서버 정렬</b><div class="what">일치 등급 0~5 → 텍스트 신호 × 10 + 사진 점수 내림차순 → 최신 습득일 → ID 내림차순. AI 사진 점수는 40점부터 남기고 50점부터 등급을 올릴 수 있습니다.</div><div class="code">main._rank_browse_result · _restore_visual_scores</div></div>
+      <div class="step local"><b>페이지 표시</b><div class="what">40건씩 화면에서 잘라 보여줍니다. 추가 검색 중 기존 카드와 현재 페이지가 유지되고, 완료하면 중복을 빼고 새 관련도 순위에 반영합니다.</div><div class="code">DirectSearchPage.tsx</div></div>
+      <div class="step local"><b>진행 안내</b><div class="what">AI 검색에 로봇과 비교 장수를 표시합니다. 일반 검색과 전체 목록은 기본 진행 표시를 사용합니다. 하단 일반 후보는 기본 PC 4건·모바일 2건이며 펼쳐 볼 수 있습니다.</div><div class="code">AiSearching · DirectBasicResults.tsx</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>정렬된 목록, 확인한 범위 안내, 계속 탐색할 수 있는 후보.</span></div></div>
   </div>
-  <div class="req" data-req="direct-result"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="direct-result"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>등급 표시</option><option>정렬 우선순위</option><option>진행 모션</option><option>페이지 표시</option></select>
     <textarea placeholder="예: 등급 0 카드에 호버 시 어떤 조건이 맞았는지 툴팁으로 보여줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- D0 -->
 <section class="page" id="common-web">
-  <h2>D0. 인터넷 참고 자료 → 특징·임베딩 <span class="tag a">신규 중간 단계</span></h2>
-  <p class="lead">“치이카와”, “짱구”, “먼작귀”처럼 모델이 말로만 못 알아보는 이름을 웹에서 먼저 찾습니다. B2·C2가 함께 씁니다.</p>
+  <h2>D0. 인터넷 참고 · 공개 사진 단서 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">검색어에 있는 낯선 이름의 의미를 보완하는 선택 경로입니다.</p>
   <div class="flow">
-    <div><div class="card"><h4>인풋</h4><p>자연어에서 뽑은 시각 특징 중 일반 명사를 뺀 고유명사. 예: <code>치이카와</code>, <code>짱구</code>.</p></div></div>
-    <div><div class="steps">
-      <div class="step"><b>웹 검색</b><div class="what">위키 문서는 공개 리더 프록시로 읽고, 이미지는 공개 이미지 검색 썸네일을 씁니다. 키·토큰은 저장하지 않습니다.</div><div class="code">web_reference.py: _fetch_wiki / _naver_image_urls</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>특징 → 참고 사진</b><div class="what">요약 문장에서 캐릭터 설명을 <code>imageFeatures</code>에 추가하고, representative 사진 2장을 512px JPEG data URL로 만듭니다. 실패하면 빈 값으로 계속.</div><div class="code">web_reference.py: enrich / _thumbnail</div></div>
-      <div class="arrow">▼</div>
-      <div class="step"><b>임베딩 + 비교</b><div class="what"><code>vision/match-public</code>이 참고 사진과 공개 분실물 사진을 CLIP으로 임베딩해 코사인 유사도를 비교합니다. 참고 사진이 작아 점수가 40점 미만이면 멀티모달이 원본 사진을 다시 직접 봅니다(낯선 캐릭터 놓침 방지).</div><div class="code">ai_graph.py: score_similarity → fallback</div></div>
-      <div class="arrow">▼</div>
-      <div class="step local"><b>캐시</b><div class="what">용어별로 7일 캐시. 일반 명사(<code>카드</code>·<code>하늘색</code>)는 웹 검색에서 제외해 토큰을 아낍니다.</div><div class="code">db.py: lostfound_cache</div></div>
-    </div></div>
-    <div><div class="card"><h4>아웃풋</h4><p><code>imageFeatures</code> + <code>references</code>. 이 값이 B2/C2의 공개 사진 비교 입력이 됩니다.</p></div></div>
+    <div><div class="cap"><b>입력</b><span>문장에서 추출한 시각 단서와 기존 참고 사진.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>검색 대상</b><div class="what">인명으로 보이는 단어를 시각 단서에서 제외합니다. 고유명사 후보는 위키·공개 검색 결과로 설명과 사진을 보강합니다.</div><div class="code">name_terms.py · web_reference.py</div></div>
+      <div class="step"><b>참고 예산·캐시</b><div class="what">추가 웹 참고 사진은 기본 최대 2장, 자료 캐시는 기본 7일입니다. 기존 참고 사진, 검색 원문과 공식 공개 사진이 실제 검색의 입력으로 이어집니다.</div><div class="code">config.WEB_REFERENCE_* · web_reference.enrich</div></div>
+      <div class="step fail"><b>실패 폴백</b><div class="what">외부 자료를 가져오지 못하면 기존 텍스트와 사진으로 비교를 이어갑니다. 웹 참고 근거를 실제 보관·소유권 증거로 해석하지 않습니다.</div><div class="code">ai_api.ai_match_public_images</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>보강된 특징과 참고 자료.</span></div></div>
   </div>
-  <div class="req" data-req="common-web"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="common-web"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>검색 소스</option><option>특징 추출</option><option>참고 사진 수</option><option>캐시 기간</option></select>
     <textarea placeholder="예: 참고 사진을 4장까지 늘려 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
 
 <!-- D1 -->
 <section class="page" id="common-base">
-  <h2>D1. 공통 기반 — 캐시·비밀값·헬스</h2>
-  <p class="lead">세 화면이 함께 쓰는 서버 기반입니다.</p>
+  <h2>D1. 공통 기반 · 캐시와 실행 환경 <span class="tag a">코드 확인</span></h2>
+  <p class="lead">실행 상태와 품질 평가를 분리해 봅니다.</p>
   <div class="flow">
-    <div><div class="card"><h4>인풋</h4><p>공개 API 응답, 캐시 키, 서버 환경변수.</p></div></div>
-    <div><div class="steps">
-      <div class="step"><b>TTL 캐시</b><div class="what">검색 300초 · 상세 86400초 · 지도 2592000초. 부분 실패 응답은 제외.</div><div class="code">main.py:361-493 · db.py</div></div>
-      <div class="step"><b>비밀값 경계</b><div class="what">경찰청 서비스키·카카오 토큰·AI 키는 서버 env. JS에는 <code>/api/lostfound/map-config</code>로 공개 키만.</div></div>
-      <div class="step"><b>헬스</b><div class="what"><code>/api/health</code>와 <code>/health</code>가 같은 응답. 키·토큰 없음.</div></div>
-      <div class="step fail"><b>개선 필요</b><div class="what">만료 캐시 정리 미호출, 업스트림 오류 로그에 키 에코 여지 → D2 참조.</div><div class="code">db.py:137-141 · police_api.py:66-78</div></div>
-    </div></div>
-    <div><div class="card"><h4>아웃풋</h4><p>세 화면에 공통으로 공급되는 정규화된 공개 데이터.</p></div></div>
+    <div><div class="cap"><b>입력</b><span>조회 응답, AI 설정, 브라우저 이미지 및 검색 기록.</span></div></div>
+    <div class="steps">
+      <div class="step"><b>캐시</b><div class="what">공개 검색 기본 300초, 상세 24시간, 지도 30일. 웹 참고는 7일. 갤러리 CLIP 임베딩은 프로세스 메모리에서 재사용합니다.</div><div class="code">config.py · db.py · local_vision.py</div></div>
+      <div class="step"><b>상태와 비밀값</b><div class="what"><code>/api/health</code>는 서비스 응답, <code>/api/ai/status</code>는 설정·라이브러리 가용성을 보여줍니다. 실제 API 성공이나 모델 품질은 추론과 테스트로 확인합니다.</div><div class="code">main.health · ai_pipeline.status_payload</div></div>
+      <div class="step local"><b>브라우저 기록</b><div class="what">비로그인 검색 기록과 갤러리 연결 상태는 IndexedDB로 복원합니다. 직접 찾기의 진행 작업 ID와 완료 스냅샷은 로컬/세션 저장소로 이어받습니다.</div><div class="code">useGuestHistory.ts · DirectSearchPage.tsx</div></div>
+    </div>
+    <div><div class="cap"><b>출력</b><span>키 값이 없는 상태 표시와 복원 가능한 로컬 데이터.</span></div></div>
   </div>
-  <div class="req" data-req="common-base"><h4>✎ 이 구간 수정 요청</h4><p> 저장하면 오픈코드 피클이 읽습니다.</p>
+  <div class="req" data-req="common-base"><h4>✎ 이 구간 수정 요청</h4><p> 이 구간의 요청을 로컬 요청함에 기록합니다.</p>
     <select class="scope"><option>전체</option><option>캐시 TTL</option><option>로그 마스킹</option><option>헬스</option></select>
     <textarea placeholder="예: 만료 캐시도 주기적으로 정리해 줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
 </section>
@@ -502,31 +532,24 @@
 
 <!-- AUDIT -->
 <section class="page" id="audit">
-  <h2>D2. 파이프라인 점검 결과</h2>
-  <p class="lead">실제 코드를 읽어 찾은 것들입니다. <span class="tag r">당장</span>과 <span class="tag w">나중</span>으로 나눴습니다.</p>
-  <h3>당장 고치면 좋은 것</h3>
-  <table>
-    <tr><th>우선</th><th>문제</th><th>근거</th><th>할 일</th></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>multimodal 설정만 넣으면 사진 경로가 503</b><br>사진 설명·census는 <code>vlm</code> 역할을 부르는데 <code>AI_VLM_*</code>는 비어 있을 수 있음</td><td>config.py:82-103<br>ai_pipeline.py:43-54<br>ai_graph.py:54-57,183</td><td>describe/census도 multimodal로 라우팅하거나 역할 폴백을 multimodal로</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>폴백 점수에 ID 검증 없음</b><br>빠진 후보가 0점으로 조용히 섞임</td><td>ai_pipeline.py:325-335<br>ai_graph.py:291-309</td><td><code>rank_candidates</code>와 같은 완전성 검사 적용</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>제공자별 점수 축 불일치</b><br>원격은 코사인×100, 로컬은 재보정. 임계값 70/5는 로컬 기준</td><td>image_similarity.py:198,227<br>local_vision.py:56-62</td><td>보정 공통화或 provider별 임계값 분리</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>라벨 변환 누출·오매핑</b><br>영어 재질·무늬가 YOLOE 라벨로. 색상 별칭 누락/불일치</td><td>local_vision.py:50-81<br>lostfound_codes.py:57-97</td><td>시각 프롬프트 값 전체 skip, 색상맵은 공식 코드표에서 생성</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>공개 사진 fetch 직렬 + 리다이렉트 검증 순서</b><br>최대 12건 순차 GET, 내부 요청 후 호스트 확인, MIME 헤더 신뢰, PIL 예외 누락</td><td>ai_graph.py:117-122<br>ai_pipeline.py:252-282</td><td>bounded 병렬화 + 리다이렉트 비활성화/홉별 검증 + 스트림 크기 제한 + PIL 예외 포함</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>범위 캡이 매칭보다 먼저</b><br>앞 8건만 자른 뒤 매칭 → 9번째 이후는 비교 자체가 안 됨</td><td>local_vision.py:163-179</td><td>매칭 먼저, cap 나중</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>만료 캐시 누적</b><br><code>db.cache_prune()</code> 호출 없음</td><td>db.py:137-141</td><td>lifespan에서 주기적 호출</td></tr>
-    <tr><td><span class="tag r">당장</span></td><td><b>AI 엔드포인트 인증·쿼터 없음 + 오류 로그 키 에코</b></td><td>ai_api.py:20-55<br>police_api.py:66-78</td><td>키 마스킹, 최소 인증/레이트리밋, 미사용 <code>AI_VISION_*</code> 정리</td></tr>
-  </table>
-  <h3>나중에 검토</h3>
-  <table>
-    <tr><th>우선</th><th>문제</th><th>할 일</th></tr>
-    <tr><td><span class="tag w">나중</span></td><td>census가 <code>target_hints</code>를 계산하고도 프롬프트에 안 보냄</td><td>타깃 라벨 전달, <code>{target, other}</code> 확장</td></tr>
-    <tr><td><span class="tag w">나중</span></td><td>설명 실패는 502, census 실패는 강등 — 강인성 비대칭</td><td>설명 생략 2차 경로 검토</td></tr>
-    <tr><td><span class="tag w">나중</span></td><td>혼합 출처 점수 / <code>imageSimilarity</code> 누락 시 score로 대체</td><td>출처별 점수 축 명시</td></tr>
-    <tr><td><span class="tag w">나중</span></td><td>재시도 없음, CLIP 1장씩, AI 결과 캐시 없음</td><td>지터 백오프, 배치 임베딩, 해시 키+TTL 캐시</td></tr>
-    <tr><td><span class="tag w">나중</span></td><td>텍스트 점수 100 포화, 하드코딩 보정치, 임의 YOLOE 토큰</td><td>자동 게이트, 설정화, 토큰 allowlist</td></tr>
-    <tr><td><span class="tag w">나중</span></td><td>테스트 공백: local-clip 전체 invoke, 폴백 ID 검증, fetch 예외, 색상 별칭, 로그 마스킹, cache_prune</td><td>해당 경로 테스트 추가</td></tr>
-  </table>
-  <div class="note">검증 기준: 백엔드 pytest 115개 · 프론트 432개 · 타입체크 통과. 실검색 지갑 623건 / 640건 스캔, 등급 0~5 전부 표시. 사진 24건 중 12건 평가 이미지 R@1/R@3/MRR@5 = 1.000. 텍스트 전용 CLIP R@1 0.083~0.167이라 폴백 경로를 탑니다.</div>
+  <h2>D2. 품질 점검과 개선 우선순위</h2>
+  <p class="lead">2026-11-26 확인. 코드 연결, 소규모 실행 검증, 서비스 전체 품질 평가를 구분했습니다.</p>
+  <h3>우선 바꿀 것</h3>
+  <div class="table-scroll"><table>
+    <tr><th>순서</th><th>발견</th><th>개선과 검증</th></tr>
+    <tr><td><span class="tag r">P0</span></td><td><b>공개 후보 수집 범위</b><br>최근 2개월 기본 범위와 선택·추정 범위 최대 6개월을 이어 조회합니다. 첫 응답에서 전체 기간을 모두 읽은 상태는 아닙니다.</td><td>두 출처의 확인 페이지와 이어 조회 위치를 응답에 담습니다. 아직 읽지 않은 페이지와 비교하지 않은 사진을 별도로 표시합니다. 장기간 자동 수집과 실데이터 검색 품질 평가는 후속 작업입니다.</td></tr>
+    <tr><td><span class="tag r">P0</span></td><td><b>운영 배포 전 외부 이미지·AI 호출 경계</b><br>공개 사진 리다이렉트와 용량 검증, AI 호출 비용, 설정 상태가 추론 성공과 다른 점을 점검했습니다.</td><td>리다이렉트마다 사진 출처를 확인하고 다운로드 크기를 스트리밍 중 제한합니다. 요청당 예산·재시도·부분 실패 표시와 비용 지표를 추가합니다.</td></tr>
+    <tr><td><span class="tag w">P1</span></td><td><b>분류와 수식어 구분 및 순위 보정</b><br>‘짱구 그림 가방’의 가방은 물건, 짱구 그림은 특징입니다. ‘파란 문어 그림’처럼 물건 종류가 모호할 수 있습니다.</td><td>품목 카테고리 우선 후보와 전체에서 찾은 사진·텍스트 후보를 합칩니다. 모델이 짐작한 색상이나 분류는 점수에 반영하고 사용자 명시 필터에만 제외 권한을 둡니다. 여러 해석을 평가합니다.</td></tr>
+    <tr><td><span class="tag w">P1</span></td><td><b>경로별 응답과 점수 비교</b><br>F2는 페이지의 설명 12개를 재정렬합니다. 멀티모달, 로컬 코사인, 키워드 점수의 의미가 다릅니다.</td><td>사진 근거·설명 근거를 분리한 Recall@K·MRR과 p95 응답 시간을 기록합니다. 모델 출력에서 후보 ID 누락·중복을 검증하고 저신뢰 경로를 보완합니다.</td></tr>
+    <tr><td><span class="tag w">P1</span></td><td><b>갤러리 응답 속도와 스크린샷</b><br>연결 파일 전체를 배치 비교하고 임베딩은 프로세스 메모리에 보관합니다.</td><td>기기 내 영속 임베딩 인덱스, OCR을 붙였을 때의 품질, MobileCLIP 대안의 속도·품질을 비교합니다.</td></tr>
+  </table></div>
+  <h3>실제 조회에서 확인한 사례</h3>
+  <div class="note">‘파란색 하치와레 카드’ 검색에서 경찰청·포털기관이 모두 응답했습니다. 이름은 <b>신한카드</b>로 등록되어 있고 기본 기간의 첫 두 묶음에는 없었습니다. 세 번째 묶음에서 사진 후보에 포함됐고, 공개 사진 5장 비교 요청 중 4장이 채점돼 대상이 96점으로 1위였습니다. 2026-11-22 하루를 지정했을 때는 첫 묶음에도 포함됐습니다.</div>
+  <div class="note">후보 포함률과 순위는 별도로 검증합니다. 갤러리, 분실물, 직접 찾기 AI·일반에 합성 회귀 사례를 각 100개 추가했습니다. 분실물은 추천·사진·설명 순위를 별도 100개 사례로 확인했습니다.</div>
+  <h3>YOLOE를 학습시켜야 하나요?</h3>
+  <div class="note"><b>현재 단계에서는 평가가 먼저입니다.</b> 설치된 YOLOE-11s 사전학습 모델로 지갑·가방 샘플 탐지를 실행했습니다. 지갑 샘플에서는 <code>cell phone</code>으로 검출됐고, 가방 샘플에서는 <code>bag</code>을 포함한 5개 객체가 검출됐습니다. 두 샘플의 기본 타깃 조건으로 크롭은 적용되지 않았습니다. 탐지 성공, 타깃 라벨 매핑, 크롭 적용, 최종 검색 적중률은 각각 다른 지표입니다.</div>
+  <div class="note">11월 21일 지갑 12장 평가의 이미지 R@1=100%는 입력과 정답에 같은 사진이 들어가는 자기 매칭입니다. 텍스트→사진 R@1은 8.3~16.7%였습니다. 서로 다른 각도와 조명, 배경에 여러 물건이 있는 사진, 같은 종류의 헷갈리는 물건, 사진 없는 설명을 포함한 검증셋이 필요합니다. 라벨·크롭 정책으로도 반복 오류가 남는 품목에 한해 학습 투자 여부를 결정하는 편이 적절합니다.</div>
+  <p>모델 원문 <a href="https://docs.ultralytics.com/models/yoloe/" target="_blank" rel="noopener">Ultralytics YOLOE</a> · <a href="https://github.com/mlfoundations/open_clip/blob/main/docs/PRETRAINED.md" target="_blank" rel="noopener">OpenCLIP 가중치</a> · <a href="https://github.com/apple-aiml-research/ml-mobileclip" target="_blank" rel="noopener">Apple MobileCLIP</a></p>
   <div class="req" data-req="audit"><h4>✎ 전체 수정 요청</h4><p> 무엇을 먼저 고칠지 적어 주세요.</p>
     <select class="scope"><option>전체</option><option>당장 항목부터</option><option>나중 항목 검토</option><option>새 고도화 제안</option></select>
     <textarea placeholder="예: 당장 항목 중 라벨 변환이랑 범위 캡 먼저 고쳐줘"></textarea><button>저장하고 요청하기</button><div class="msg"></div></div>
@@ -542,26 +565,37 @@
 </div>
 
 <script>
-const pages = ['home','flow-map','gallery-prepare','gallery-compare','gallery-result','lost-prepare','lost-visual','lost-context','direct-prepare','direct-browse','direct-result','common-web','common-base','audit','algo-map','algo-detail'];
+const pages = ['home','flow-map','tests','gallery-prepare','gallery-compare','gallery-result','lost-prepare','lost-visual','lost-context','direct-prepare','direct-browse','direct-result','common-web','common-base','audit','algo-map','algo-detail'];
 const algoById = new Map();
 const boundForms = new WeakSet();
 let currentAlgo = '';
 let selectedFlowNodeId = '';
+let modelMapStarted = false;
+let searchTestsStarted = false;
+const modelMapRows = [
+  {id:'model-multimodal', role:'공용 멀티모달', detail:'검색 문장·참고 사진 해석, 공개 사진 비교, 설명 재정렬',
+    routes:[['A2 문장 해석','gallery-compare'],['B1 조건 정리','lost-prepare'],['B2 사진 비교','lost-visual'],['B3 설명 재정렬','lost-context'],['C1 AI 검색','direct-prepare']]},
+  {id:'model-similarity', role:'사진·문장 임베딩', detail:'갤러리 전체와 공개 사진의 로컬 유사도',
+    routes:[['A2 갤러리 비교','gallery-compare'],['B2 공개 사진 로컬 비교','lost-visual']]},
+  {id:'model-yoloe', role:'대상 영역 탐지', detail:'공개 사진 로컬 비교에서 필요한 경우 대상 영역을 자름',
+    routes:[['B2 조건부 크롭','lost-visual']]},
+  {id:'model-mobileclip', role:'보유 모델', detail:'On-device 임베딩 모델', routes:[]},
+];
 const FLOW_GROUPS = [
   { id:'gallery', label:'A · 갤러리에서 찾기', nodes:[
-    { id:'a1', step:'A1', title:'사진 연결·준비', page:'gallery-prepare', algo:'algo-gallery-compare', role:'브라우저에서 사진을 고르고 중복을 제거해 참고 사진을 만든다.', input:'기기의 사진·폴더', output:'중복 제거된 참고 사진' },
-    { id:'a2', step:'A2', title:'사진 유사도 비교 (AI)', page:'gallery-compare', algo:'algo-gallery-compare', role:'참고 사진을 설명하고 후보 사진을 한 번에 채점한 뒤 ID를 검증한다.', input:'참고 사진·검색 문장·후보 사진', output:'종합·이미지·맥락 3축 점수' },
-    { id:'a3', step:'A3', title:'결과 표시', page:'gallery-result', algo:'model-similarity', role:'3축 점수로 정렬해 종합/이미지/맥락 화면에 보여준다.', input:'3축 점수와 갤러리 사진', output:'정렬된 사진 카드' },
+    { id:'a1', step:'A1', title:'사진 연결·준비', page:'gallery-prepare', algo:'algo-gallery-compare', role:'기기에서 사진·폴더를 연결하고 중복을 제거한다. 참고 사진은 별도로 선택한다.', input:'기기의 사진·폴더', output:'연결 갤러리와 참고 사진' },
+    { id:'a2', step:'A2', title:'전체 로컬 벡터 비교', page:'gallery-compare', algo:'algo-gallery-compare', role:'연결 사진 전체를 기기 안에서 OpenCLIP으로 비교한다. 같은 파일 해시는 우선한다.', input:'참고 사진·검색 문장·후보 사진', output:'종합·이미지·맥락 3축 점수' },
+    { id:'a3', step:'A3', title:'결과 표시', page:'gallery-result', algo:'model-similarity', role:'3축 점수로 정렬해 추천/사진/설명 화면에 보여준다.', input:'3축 점수와 갤러리 사진', output:'정렬된 사진 카드' },
   ]},
   { id:'lost', label:'B · 물건 찾기', nodes:[
-    { id:'b1', step:'B1', title:'조건 정리 + 공개 수집', page:'lost-prepare', algo:'algo-query-interpret', role:'자연어에서 탐색어·기간·시각 특징을 뽑고 공개 정보를 모은다.', input:'검색 문장·참고 사진·필터', output:'AiSearchPlan + 공개 후보' },
-    { id:'b2', step:'B2', title:'사진 특징 매칭 (AI)', page:'lost-visual', algo:'algo-visual-match', role:'웹 참고를 거쳐 공개 사진을 AI가 직접 보고 특징 점수를 매긴다.', input:'imageFeatures·참고 사진·공개 사진', output:'visualScore와 사진 특징 배지' },
-    { id:'b3', step:'B3', title:'맥락 재정렬 + 결과', page:'lost-context', algo:'algo-context-rank', role:'설명·장소 맥락으로 후보를 다시 줄 세우고 확정 영역에 표시한다.', input:'후보 전체·사용자 문장', output:'관련도 순 3채널 결과' },
+    { id:'b1', step:'B1', title:'조건 정리 + 공개 수집', page:'lost-prepare', algo:'algo-query-interpret', role:'문장과 참고 사진에서 탐색·시각 단서를 정리하고 공개 후보를 수집한다.', input:'검색 문장·참고 사진·필터', output:'AiSearchPlan + 공개 후보' },
+    { id:'b2', step:'B2', title:'사진 특징 매칭 (AI)', page:'lost-visual', algo:'algo-visual-match', role:'외부 VLM 우선 경로와 로컬 OpenCLIP·선택적 YOLOE 분기로 나뉜다.', input:'imageFeatures·참고 사진·공개 사진', output:'visualScore와 사진 특징 배지' },
+    { id:'b3', step:'B3', title:'맥락 재정렬 + 결과', page:'lost-context', algo:'algo-context-rank', role:'현재 페이지 설명 최대 12건을 대조하고 추천·설명·사진 결과를 각각 표시한다.', input:'현재 페이지 후보와 검색 단서', output:'관련도 순 3채널 결과' },
   ]},
   { id:'direct', label:'C · 직접 찾기', nodes:[
-    { id:'c1', step:'C1', title:'검색어 조건 정리 (AI)', page:'direct-prepare', algo:'algo-query-interpret', role:'말 속 고유명사·색상·기간을 탐색어와 필터로 바꾼다.', input:'검색 문장·오늘 날짜', output:'apiKeywords·include·기간 필터' },
-    { id:'c2', step:'C2', title:'코드 필터·백그라운드 스캔', page:'direct-browse', algo:'algo-code-filter', role:'공식 코드로 먼저 좁히고 서버가 사진을 8장씩 이어서 분석한다.', input:'필터·검색 조건·jobId', output:'진행률과 전체 후보 풀' },
-    { id:'c3', step:'C3', title:'등급별 결과 표시', page:'direct-result', algo:'algo-ranking', role:'등급 → 텍스트·사진 점수 → 최신순으로 정렬해 페이지를 만든다.', input:'등급·점수·습득일', output:'등급 배지가 붙은 결과 목록' },
+    { id:'c1', step:'C1', title:'AI·일반 검색 분기', page:'direct-prepare', algo:'algo-query-interpret', role:'AI 검색의 탐색 힌트와 사용자가 고른 필터를 분리한다. 일반 검색은 별도다.', input:'검색 문장·오늘 날짜', output:'탐색 힌트 또는 일반 검색어' },
+    { id:'c2', step:'C2', title:'코드 필터·백그라운드 스캔', page:'direct-browse', algo:'algo-code-filter', role:'사용자가 적용한 코드 필터로 조회한다. 더 찾아보기는 이전 조회와 사진 점수를 재사용한다.', input:'필터·검색 조건·previousJobId', output:'진행률과 누적 후보 풀' },
+    { id:'c3', step:'C3', title:'등급별 결과 표시', page:'direct-result', algo:'algo-ranking', role:'누적 후보를 등급·점수·최신순으로 정렬한다. 일반 검색 결과는 독립적으로 유지한다.', input:'등급·점수·습득일', output:'등급 배지가 붙은 결과 목록' },
   ]},
   { id:'common', label:'D · 공통 / 점검', nodes:[
     { id:'d0', step:'D0', title:'인터넷 참고·임베딩', page:'common-web', algo:'algo-web-reference', role:'모르는 고유명사를 웹에서 조사해 설명과 참고 사진을 만든다.', input:'고유명사', output:'보강된 특징·참고 사진' },
@@ -588,6 +622,14 @@ function go(id, algo){
   const target = id==='algo-detail' ? '#'+id+':'+currentAlgo : '#'+id;
   if(location.hash.slice(1)!==target.slice(1)) history.replaceState(null,'',target);
   if(id==='algo-detail') renderDetail(currentAlgo);
+  if(id==='flow-map' && !modelMapStarted){
+    modelMapStarted=true;
+    void loadModelMap();
+  }
+  if(id==='tests' && !searchTestsStarted){
+    searchTestsStarted=true;
+    void loadSearchTests();
+  }
   renderTodo(id);
   window.scrollTo(0,0);
 }
@@ -599,6 +641,168 @@ function el(tag, cls, text){
   if(cls) node.className=cls;
   if(text!==undefined) node.textContent=text;
   return node;
+}
+const searchTestFormulas = {
+  'gallery-combined':'0.3 × 사진 유사도 + 0.7 × 설명 유사도. 단서가 한 종류면 같은 점수를 두 항에 사용해요. 동일 파일이 있으면 우선해요.',
+  'gallery-image':'100 × (OpenCLIP 사진 벡터 코사인 유사도 − 0.45) ÷ 0.55. 0~100으로 제한하며 동일 파일은 해시로 확인해 먼저 표시해요.',
+  'lost-combined':'사진·설명 중 높은 점수 + 0.1 × 낮은 점수. 비교하지 않은 항목은 0으로 계산해요. AI 채점 후보를 먼저, 텍스트 대체 후보(최대 39점)를 그다음에 배치해요.',
+  'direct-ai':'10 × 텍스트 신호 + 공개 사진 비교 점수(없으면 0). 일치 등급이 낮은 번호부터 표시하고, 등급 안에서 점수가 높은 순으로 정렬해요.',
+  'direct-basic':'10 × 텍스트 신호. 일치 등급이 낮은 번호부터 표시하고, 등급 안에서 점수가 높은 순으로 정렬해요.',
+};
+const directSearchSignals='텍스트 신호는 단서마다 제목 4점, 설명 2점, 분류 1점 중 먼저 일치한 값을 더해요. 제외 단서가 일치하면 6점을 빼요. 동점은 최신 습득일과 ID로 정렬해요.';
+const searchTestNumber = new Intl.NumberFormat('ko-KR',{maximumFractionDigits:4});
+
+function renderSearchTestScores(item) {
+  const aside=el('div');
+  aside.append(el('h4',null,'1~5위 점수'), el('p','test-case__formula',searchTestFormulas[item.axis]));
+  if(item.axis.startsWith('direct-')) aside.append(el('p','test-case__formula',directSearchSignals));
+  const table=el('table');
+  table.setAttribute('aria-label',item.mode+' 상위 결과 점수');
+  const head=table.createTHead().insertRow();
+  ['순위','후보','점수'].forEach(label=>{
+    const th=el('th',null,label);
+    th.scope='col';
+    head.append(th);
+  });
+  const body=table.createTBody();
+  const scored=[];
+  for(let index=0;index<5;index++){
+    const result=item.rows[index];
+    const tr=body.insertRow();
+    const name=tr.insertCell();
+    name.textContent=result ? result.title : '결과 없음';
+    const rowHeader=el('th',null,String(index+1));
+    rowHeader.scope='row';
+    tr.prepend(rowHeader);
+    if(result?.basis) name.append(el('small',null,result.basis+(result.tier ? ' · 등급 '+result.tier : '')));
+    if(result?.date) name.append(el('small',null,'습득일 '+result.date));
+    const value=tr.insertCell();
+    value.className='test-case__score';
+    if(Number.isFinite(result?.score)){
+      scored.push(result.score);
+      value.textContent=searchTestNumber.format(result.score);
+    }else{
+      value.textContent='—';
+    }
+  }
+  const footer=table.createTFoot().insertRow();
+  const mean=footer.insertCell();
+  mean.colSpan=2;
+  mean.textContent='평균 · '+scored.length+'개 채점';
+  const meanValue=footer.insertCell();
+  meanValue.className='test-case__score';
+  meanValue.textContent=scored.length ? searchTestNumber.format(scored.reduce((sum,score)=>sum+score,0)/scored.length) : '—';
+  aside.append(table);
+  return aside;
+}
+
+function renderSearchTest(item) {
+  const article=el('article','test-case');
+  article.append(el('h4',null,item.feature+' · '+item.mode));
+  const meta=el('dl','test-case__meta');
+  [
+    ['검색어',item.query || '입력 없음'],
+    ['첨부',item.attachment || '없음'],
+    ['검색 조건',item.conditions],
+    ['조회 상태',item.scope],
+    ['화면 결과',item.visibleCount+'건 표시'],
+    ['관찰',item.note],
+  ].forEach(([label,value])=>{
+    if(value) meta.append(el('dt',null,label),el('dd',null,value));
+  });
+  const body=el('div','test-case__body');
+  const figure=el('figure');
+  const link=el('a');
+  link.href='/pipeline/'+encodeURIComponent(item.screenshot);
+  link.target='_blank';
+  link.rel='noopener';
+  const img=el('img');
+  img.src=link.href;
+  img.alt=item.feature+' '+item.mode+' 실제 결과 화면 원본 열기';
+  link.append(img);
+  const caption=el('figcaption',null,'브라우저 캡처 · ');
+  const original=el('a',null,'원본 크기로 보기');
+  original.href=link.href;
+  original.target=link.target;
+  original.rel=link.rel;
+  caption.append(original);
+  figure.append(link,caption);
+  body.append(figure,renderSearchTestScores(item));
+  article.append(meta,body);
+  return article;
+}
+
+async function loadSearchTests(){
+  const host=document.getElementById('search-test-cases');
+  try{
+    const response=await fetch('/pipeline/search-test-results.json');
+    if(!response.ok) throw new Error('search results unavailable');
+    const {cases,findings}=await response.json();
+    const summary=document.getElementById('search-test-summary');
+    summary.replaceChildren(...[
+      ['실제 검색',cases.length],
+      ['결과 있음',cases.filter(item=>item.rows.length).length],
+      ['결과 없음',cases.filter(item=>!item.rows.length).length],
+      ['사진 입력',cases.filter(item=>item.attachment).length],
+    ].map(([label,count])=>{
+      const stat=el('div');
+      stat.append(el('dt',null,label),el('dd',null,count+'건'));
+      return stat;
+    }));
+    document.getElementById('search-test-findings').replaceChildren(...findings.map(finding=>el('li',null,finding)));
+    host.replaceChildren(...cases.map(renderSearchTest));
+  }catch{
+    host.replaceChildren(el('p','note','저장한 검색 기록을 불러오지 못했어요. 페이지를 새로고침해 주세요.'));
+  }
+}
+
+async function loadModelMap(){
+  const host=document.getElementById('model-map-list');
+  try{
+    const response=await fetch('/api/pipeline/models');
+    if(!response.ok) throw new Error('model information unavailable');
+    const {items}=await response.json();
+    const states={configured:'사용 설정됨',conditional:'조건부 실행',unavailable:'사용 설정 확인 필요',
+      'weights-only':'가중치 보유 · 검색 연결 미확인',unlinked:'검색 연결 미확인'};
+    const rows=modelMapRows.map(({id,role,detail,routes})=>{
+      const model=items[id];
+      const row=el('article','model-map__row');
+      const identity=el('div');
+      const name=el('button','model-map__name',role);
+      name.type='button';
+      name.setAttribute('aria-label',role+' 모델 상세');
+      name.addEventListener('click',()=>go('algo-detail',id));
+      identity.append(name,el('p','model-map__details',detail));
+      const runtime=el('div');
+      runtime.appendChild(el('code','model-map__id',model.model||'모델명 미설정'));
+      const metadata=[model.provider,model.weights].filter(Boolean).join(' · ');
+      if(metadata) runtime.appendChild(el('p','model-map__details',metadata));
+      const state=el('span','model-map__state',states[model.state]);
+      state.dataset.state=model.state;
+      runtime.appendChild(state);
+      (model.overrides||[]).forEach(override=>{
+        runtime.appendChild(el('p','model-map__details',override.label+' · '+[override.model,override.provider].filter(Boolean).join(' · ')));
+      });
+      const connections=el('div','model-map__routes');
+      routes.forEach(([label,page])=>{
+        const route=el('button','model-map__route',label);
+        route.type='button';
+        route.addEventListener('click',()=>go(page));
+        connections.appendChild(route);
+      });
+      row.append(identity,runtime,connections);
+      return row;
+    });
+    host.replaceChildren(...rows);
+  }catch{
+    const retry=el('button','mini','다시 불러오기');
+    retry.type='button';
+    retry.addEventListener('click',()=>{
+      host.replaceChildren(el('p','','실행 서버의 모델 정보를 확인하고 있어요.'));
+      void loadModelMap();
+    });
+    host.replaceChildren(el('p','','실행 서버의 모델 정보를 불러오지 못했어요.'),retry);
+  }
 }
 function infoBox(title, values, ordered){
   const box=el('div','detail-box');
@@ -774,7 +978,7 @@ function bindRequest(box){
       });
       const data=await res.json();
       if(!res.ok) throw new Error(data.detail?.message||data.message||'저장 실패');
-      msg.textContent='저장됨 · '+data.id+' — 오픈코드 피클이 읽고 작업할게요.';
+      msg.textContent='저장됨 · '+data.id+' — 로컬 요청함에 저장했어요.';
       msg.style.color='var(--acc)';
       textarea.value='';
       await Promise.all([loadRequests(), loadIssues()]);
@@ -847,6 +1051,7 @@ function issuesForPage(pageId){
   return all.filter(i=>i.page===pageId);
 }
 function renderTodo(pageId){
+  if(pageId==='tests') return;
   const host=todoHost(pageId);
   if(!host) return;
   host.replaceChildren();
@@ -960,7 +1165,7 @@ async function requestIssues(issues,host){
     out.style.color=failed.length?'var(--warn)':'var(--acc)';
     out.textContent=ok+'/'+issues.length+'건 저장됨'+(failed.length
       ?' · 실패: '+failed.map(r=>r.reason?.message||'알 수 없음').join(', ')
-      :' — 오픈코드 피클이 읽고 작업할게요.');
+      :' — 로컬 요청함에 저장했어요.');
   }
 }
 function refreshLive(){if(!document.hidden){loadIssues();loadRequests();}}

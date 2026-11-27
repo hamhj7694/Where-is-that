@@ -127,6 +127,8 @@ def test_pipeline_screen_exposes_clickable_node_flow_map():
     assert 'id="flow-map"' in html
     # React Flow(@xyflow/react) 노드 그래프 번들을 사용한다.
     assert 'id="flow-react-root"' in html
+    assert 'id="model-map"' in html
+    assert '/api/pipeline/models' in html
     assert '/pipeline/flow-map.js' in html
     assert '/pipeline/flow-map.css' in html
     assert "pipeline-node-select" in html
@@ -139,6 +141,47 @@ def test_pipeline_screen_exposes_clickable_node_flow_map():
     style = client.get("/pipeline/flow-map.css")
     assert script.status_code == 200 and len(script.content) > 1000
     assert style.status_code == 200 and len(style.content) > 100
+
+
+def test_pipeline_search_evidence_has_a_capture_for_each_case():
+    client = TestClient(main.app)
+    html = client.get("/pipeline").text
+    assert 'data-go="tests"' in html
+    assert 'id="tests"' in html
+    assert 'id="home-tests-title"' not in html
+
+    response = client.get("/pipeline/search-test-results.json")
+    assert response.status_code == 200
+    cases = response.json()["cases"]
+    assert len(cases) == len({case["screenshot"] for case in cases}) >= 8
+    for case in cases:
+        assert len(case["rows"]) == min(case["visibleCount"], 5)
+        capture = client.get("/pipeline/" + case["screenshot"])
+        assert capture.status_code == 200
+        assert capture.headers["content-type"] == "image/jpeg"
+        assert capture.content.startswith(b"\xff\xd8")
+
+
+def test_pipeline_model_map_uses_runtime_settings_without_exposing_paths(monkeypatch):
+    monkeypatch.setattr(main.config, "AI_MULTIMODAL_MODEL", "runtime-vlm")
+    monkeypatch.setattr(main.config, "AI_MULTIMODAL_API_KEY", "sensitive-example-key")
+    monkeypatch.setattr(main.config, "AI_LLM_MODEL", "runtime-text")
+    monkeypatch.setattr(main.config, "LOCAL_CLIP_MODEL", "local-vit")
+    monkeypatch.setattr(main.config, "LOCAL_CLIP_PRETRAINED", "local-weights")
+    monkeypatch.setattr(main.config, "YOLOE_MODEL", r"C:\private\models\custom-yolo.pt")
+    monkeypatch.setattr(main.local_vision, "yoloe_available", lambda: True)
+
+    response = TestClient(main.app).get("/api/pipeline/models")
+    assert response.status_code == 200
+    models = response.json()["items"]
+    assert models["model-multimodal"]["model"] == "runtime-vlm"
+    assert models["model-multimodal"]["overrides"][0]["model"] == "runtime-text"
+    assert models["model-similarity"]["model"] == "local-vit"
+    assert models["model-similarity"]["weights"] == "local-weights"
+    assert models["model-yoloe"]["model"] == "custom-yolo.pt"
+    assert models["model-yoloe"]["state"] == "conditional"
+    assert models["model-mobileclip"]["state"] in {"weights-only", "unlinked"}
+    assert "sensitive-example-key" not in response.text and "private" not in response.text
 
 
 def test_ai_dates_are_normalized_and_never_reversed():

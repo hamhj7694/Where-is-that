@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 import logging
 import math
 import re
+import sqlite3
+import threading
 import unicodedata
 import xml.etree.ElementTree as ET
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from contextlib import closing
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
-from . import config, lostfound_codes
+from . import config, db, lostfound_codes, search_period
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,9 @@ DETAIL_PATHS = {
 }
 SOURCES = ("police", "portal")
 PHOTO_SEARCH_RECENT_DAYS = 3
+PERIOD_PAGE_ROWS = 100
+PERIOD_MAX_PAGE = 9999
+_PERIOD_CACHE_LOCKS = tuple(threading.Lock() for _ in range(16))
 IMAGE_BASE = "https://www.lost112.go.kr"
 MAX_XML_BYTES = 2_000_000
 # 요청마다 새 커넥션을 만들면 TLS 핸드셰이크 때문에 전체 스캔이 몇 배 느려진다.
@@ -367,6 +376,9 @@ def search_filtered(source: str, params: dict[str, str], page: int, rows: int) -
     """분류·지역·색상·기간 코드로 서버에서 좁힌 결과를 한 페이지 가져온다."""
     if source not in FILTER_PATHS:
         raise PoliceError("lostfound_invalid_source", "유실물 검색 대상을 확인해 주세요.")
+    if source == "portal" and "FD_COL_CD" in params:
+        params = {**params, "CLR_CD": params["FD_COL_CD"]}
+        del params["FD_COL_CD"]
     root = _request(
         FILTER_PATHS[source],
         {**params, "pageNo": page, "numOfRows": rows},
@@ -380,6 +392,124 @@ def search_filtered(source: str, params: dict[str, str], page: int, rows: int) -
             total = len(items)
         break
     return {"items": items, "totalCount": total or len(items)}
+
+
+def _cached_period_page(source: str, params: dict[str, str], page: int) -> dict:
+    key = "period:v1:" + json.dumps([source, params, page, PERIOD_PAGE_ROWS], sort_keys=True)
+    with _PERIOD_CACHE_LOCKS[hash(key) % len(_PERIOD_CACHE_LOCKS)]:
+        try:
+            with closing(db.connect()) as connection:
+                cached = db.cache_get(connection, "lostfound", key, config.LOSTFOUND_SEARCH_TTL)
+            if cached is not None:
+                return cached
+        except sqlite3.Error:
+            logger.warning("Public period page cache unavailable")
+        result = search_filtered(source, params, page, PERIOD_PAGE_ROWS)
+        try:
+            with closing(db.connect()) as connection:
+                db.cache_set(connection, "lostfound", key, result)
+        except sqlite3.Error:
+            logger.warning("Public period page could not be cached")
+        return result
+
+
+def _period_candidates(
+    period: dict, filters: dict | None, category: dict[str, str], cursor: dict | None,
+) -> dict:
+    # 매 요청에서 출처별 한 페이지를 진행한다. 우선 분류가 전체 날짜 조회를 막지 않는다.
+    date_params = {"START_YMD": period["from"].replace("-", ""), "END_YMD": period["to"].replace("-", "")}
+    applied = {**(filters or {}), "from": period["from"], "to": period["to"]}
+    # 여러 공식 코드가 같은 표시 색상을 뜻한다. 공개 목록을 한 번 읽어 표시 색상을 확인한다.
+    upstream_filters = {key: value for key, value in applied.items() if key != "color"}
+    broad = lostfound_codes.filter_param_sets(upstream_filters, _api_date) or [date_params]
+    priority = [{**params, **category} for params in broad] if category and not applied.get("category") else []
+    # 원천의 여러 날짜 응답은 날짜순이 아님을 실측했다. 기본 기간에는 최근 일자의
+    # 품목 페이지를 조금씩 별도 조회해 최신 품목이 여러 페이지 사이에 묻히는 일을 줄인다.
+    daily = []
+    if priority and period["basis"] == "default":
+        end = date.fromisoformat(period["to"])
+        for offset in range(7):
+            day = (end - timedelta(days=offset)).strftime("%Y%m%d")
+            daily.append({**priority[0], "START_YMD": day, "END_YMD": day})
+    scope = hashlib.sha256(json.dumps([broad, priority, daily], sort_keys=True).encode()).hexdigest()
+    pages = dict(cursor.get("pages", {})) if cursor and cursor.get("scope") == scope else {}
+    sources: dict[str, list[dict]] = {source: [] for source in SOURCES}
+    photo_priority: list[str] = []
+    available: set[str] = set()
+    errors: list[dict] = []
+
+    with ThreadPoolExecutor(max_workers=min(4, config.BROWSE_MAX_WORKERS)) as executor:
+        jobs = {}
+        for kind, group in (("priority", priority), ("broad", broad)):
+            for source in SOURCES:
+                for index, params in enumerate(group):
+                    key = f"{kind}:{source}:{index}"
+                    number = pages.get(key, 1)
+                    if number < 0:
+                        available.add(source)
+                    elif number <= PERIOD_MAX_PAGE:
+                        jobs[key] = (source, number, executor.submit(_cached_period_page, source, params, number))
+        for source in SOURCES:
+            pending_days = [(f"priority:{source}:{i + 1}", params) for i, params in enumerate(daily)
+                            if f"priority:{source}:{i + 1}" not in pages]
+            for key, params in pending_days[:2]:
+                jobs[key] = (source, 1, executor.submit(_cached_period_page, source, params, 1))
+        for key, (source, number, future) in jobs.items():
+            try:
+                result = future.result()
+            except PoliceError as error:
+                errors.append({"source": source, "page": number, "lane": key.split(":")[0], "code": error.code, "message": error.message})
+                continue
+            available.add(source)
+            items = [item.copy() for item in result["items"] if metadata_pass(
+                item, applied, skip_region=bool(lostfound_codes.region_param(str(applied.get("region") or ""))),
+            )]
+            sources[source].extend(items)
+            if key.startswith("priority:"):
+                photo_priority.extend(item["id"] for item in items if item.get("imageUrl"))
+            records_seen = (number - 1) * PERIOD_PAGE_ROWS + len(result["items"])
+            one_page_sample = key.startswith("priority:") and not key.endswith(":0")
+            if one_page_sample or records_seen >= result["totalCount"]:
+                pages[key] = -number
+            elif len(result["items"]) != PERIOD_PAGE_ROWS:
+                # 공급자가 요청한 페이지 크기보다 적게 주면 다음 시작점을 신뢰할 수 없다.
+                errors.append({"source": source, "page": number, "lane": key.split(":")[0], "code": "lostfound_short_page",
+                               "message": "공개 API의 페이지 범위를 확인하지 못했어요."})
+            else:
+                pages[key] = number + 1
+
+    coverage = {}
+    for source in SOURCES:
+        positions = [pages.get(f"broad:{source}:{i}", 1) for i in range(len(broad))]
+        coverage[source] = {
+            "pagesRead": sum(abs(position) - int(position > 0) for position in positions),
+            "complete": all(position < 0 for position in positions),
+        }
+    return {
+        "bySource": sources,
+        "sources": [source for source in SOURCES if source in available],
+        "photoPriority": list(dict.fromkeys(photo_priority)),
+        "errors": errors,
+        "coverage": {**period, "sources": coverage, "complete": all(value["complete"] for value in coverage.values())},
+        "periodCursor": {"scope": scope, "pages": pages},
+        "hasMore": any(0 < pages.get(f"broad:{source}:{i}", 1) <= PERIOD_MAX_PAGE
+                       for source in SOURCES for i in range(len(broad))),
+    }
+
+
+def order_period_photos(items: list[dict], priority_ids: list[str], criteria: dict, query: str) -> list[dict]:
+    priority = set(priority_ids)
+    ordered = sorted((item for item in items if item.get("imageUrl")), key=lambda item: (
+        text_signal_score(item, criteria, query), item["foundDate"], item["id"],
+    ), reverse=True)
+    preferred = deque(item for item in ordered if item["id"] in priority)
+    broad = deque(item for item in ordered if item["id"] not in priority)
+    output = []
+    while preferred or broad:
+        for lane in (preferred, preferred, broad):
+            if lane:
+                output.append(lane.popleft())
+    return output
 
 
 def criteria_pass(item: dict, criteria: dict[str, list[str]]) -> bool:
@@ -470,11 +600,25 @@ def _browse_dedupe_key(item: dict) -> str:
     return "content:" + "|".join(clean(value) for value in fields)
 
 
+def _browse_page(
+    cache: dict[str, dict] | None, lookup, source: str, query, page: int, rows: int,
+) -> dict:
+    if cache is None:
+        return lookup(source, query, page, rows)
+    key = json.dumps([lookup is search_filtered, source, query, page, rows], sort_keys=True, ensure_ascii=False)
+    if key not in cache:
+        cache[key] = lookup(source, query, page, rows)
+    payload = cache[key]
+    # 정렬과 사진 분석이 바꾼 필드는 원본 페이지에 쓰지 않는다.
+    return {**payload, "items": [item.copy() for item in payload["items"]]}
+
+
 def _browse_filtered(
     param_sets: list[dict[str, str]],
     rows: int,
     max_pages: int | None,
     visual_need: int = 0,
+    page_cache: dict[str, dict] | None = None,
 ) -> tuple[dict[str, list[dict]], list[dict], int, bool]:
     """전용 필터 API로 서버에서 좁힌 뒤, 사진 분석 풀을 채울 때까지 다음 페이지를 읽는다."""
     results: dict[str, list[dict]] = {}
@@ -489,7 +633,7 @@ def _browse_filtered(
     for params in param_sets:
         first: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
-            futures = {source: executor.submit(search_filtered, source, params, 1, rows) for source in SOURCES}
+            futures = {source: executor.submit(_browse_page, page_cache, search_filtered, source, params, 1, rows) for source in SOURCES}
             for source, future in futures.items():
                 try:
                     first[source] = future.result()
@@ -515,7 +659,7 @@ def _browse_filtered(
             batch = list(range(number, min(number + 4, available + 1)))
             with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
                 futures = {
-                    (source, page_number): executor.submit(search_filtered, source, params, page_number, rows)
+                    (source, page_number): executor.submit(_browse_page, page_cache, search_filtered, source, params, page_number, rows)
                     for page_number in batch for source in SOURCES
                 }
                 for (source, _page_number), future in futures.items():
@@ -543,6 +687,9 @@ def browse_all(
     max_pages: int | None = None,
     visual_need: int = 0,
     search_mode: str | None = None,
+    page_cache: dict[str, dict] | None = None,
+    period_mode: bool = False,
+    period_cursor: dict | None = None,
 ) -> dict:
     """직접 찾기용: 필터가 있으면 전용 API로, 없으면 이름 검색으로 여러 페이지를 스캔한다."""
     cleaned = _keyword(keyword)
@@ -561,9 +708,27 @@ def browse_all(
     # 코드 없는 지역값(구·동 등)은 다른 필터가 코드로 가도 텍스트 검사를 유지한다.
     region_applied = bool(lostfound_codes.region_param(str((filters or {}).get("region") or "")))
 
-    if use_codes:
+    collection = None
+    if period_mode:
+        period = search_period.resolve_period(filters, hints if has_ai else None, query=cleaned if has_ai else "")
+        api_keywords = criteria.get("apiKeywords") or ([cleaned] if cleaned else [])
+        preferred = search_period.category_priority((hints or {}).get("itemCategory"), cleaned, api_keywords) if has_ai else {}
+        collection = _period_candidates(period, filters, preferred, period_cursor)
+        results, errors = collection["bySource"], collection["errors"]
+        photo_priority = collection["photoPriority"]
+        limit_reached = not collection["coverage"]["complete"]
+        pages_scanned = sum(row["pagesRead"] for row in collection["coverage"]["sources"].values())
+        use_codes = True
+        # 이름 조회는 첫 묶음에서 빠른 텍스트 후보를 보탠다. 날짜 목록은 독립적으로 이어간다.
+        if cleaned and not period_cursor:
+            named = search_all(cleaned, 1, rows, hints=hints if has_ai else None)
+            for item in named["items"]:
+                if metadata_pass(item, {**(filters or {}), **period}):
+                    results[item["source"]].append(item)
+            collection["sources"] = [source for source in SOURCES if source in collection["sources"] or source in named["sources"]]
+    elif use_codes:
         results, errors, total_reported, pages_scanned, limit_reached = _browse_filtered(
-            param_sets, rows, max_pages, visual_need,
+            param_sets, rows, max_pages, visual_need, page_cache,
         )
         reported_totals["filtered"] = total_reported
     else:
@@ -583,7 +748,7 @@ def browse_all(
             scanned_by_term.update(dict.fromkeys(terms, per_term))
             with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
                 futures = {
-                    (term, source, number): executor.submit(search, source, term, number, rows)
+                    (term, source, number): executor.submit(_browse_page, page_cache, search, source, term, number, rows)
                     for term in terms
                     for number in range(1, per_term + 1)
                     for source in SOURCES
@@ -613,7 +778,7 @@ def browse_all(
         if search_mode == "ai" and has_keyword and not has_filters:
             # 분실물 찾기와 같은 날짜·품목 목록에서 이름과 별도로 사진을 가져온다.
             with ThreadPoolExecutor(max_workers=config.BROWSE_MAX_WORKERS) as executor:
-                jobs = _recent_photo_pages(executor, [*cleaned.split(), *api_keywords], "", 1, rows)
+                jobs = _recent_photo_pages(executor, [*cleaned.split(), *api_keywords], "", 1, rows, page_cache)
                 for (source, _day), future in jobs.items():
                     try:
                         payload = future.result()
@@ -676,7 +841,7 @@ def browse_all(
     return {
         "query": cleaned,
         "apiKeywords": api_keywords,
-        "sources": [source for source in SOURCES if source in results],
+        "sources": collection["sources"] if collection is not None else [source for source in SOURCES if source in results],
         "total": total,
         "items": items[start:start + rows],
         # 사진 분석은 페이지에 잘려 나간 항목도 봐야 하므로 전체 후보를 함께 넘긴다.
@@ -692,6 +857,7 @@ def browse_all(
         "filterApi": use_codes,
         "criteriaApplied": bool(criteria),
         "filtersApplied": {key: str(value) for key, value in (filters or {}).items() if str(value or "").strip()},
+        **({key: collection[key] for key in ("coverage", "periodCursor", "hasMore")} if collection is not None else {}),
     }
 
 
@@ -706,13 +872,14 @@ def _photo_params(terms: list[str], category_hint: str) -> dict[str, str]:
 
 def _recent_photo_pages(
     executor: ThreadPoolExecutor, terms: list[str], category_hint: str, page: int, rows: int,
+    page_cache: dict[str, dict] | None = None,
 ) -> dict[tuple[str, str], Future[dict]]:
     category = _photo_params(terms, category_hint)
     today = datetime.now(timezone(timedelta(hours=9))).date()
     days = [(today - timedelta(days=offset)).strftime("%Y%m%d") for offset in range(PHOTO_SEARCH_RECENT_DAYS)]
     return {
         (source, day): executor.submit(
-            search_filtered, source, {**category, "START_YMD": day, "END_YMD": day}, page, rows,
+            _browse_page, page_cache, search_filtered, source, {**category, "START_YMD": day, "END_YMD": day}, page, rows,
         )
         for source in SOURCES for day in days
     }
@@ -807,6 +974,46 @@ def search_all(
         "photoItems": list(photo_results.values()),
         "contextItems": [item for item_id, item in context_results.items() if item_id not in merged],
         "errors": errors,
+    }
+
+
+def search_in_period(
+    keyword: str, page: int, rows: int, hints: dict | None, cursor: dict | None,
+    *, original_query: str, photo_category: str, filters: dict | None,
+) -> dict:
+    criteria = _normalize_criteria(hints)
+    query = original_query or keyword
+    period = search_period.resolve_period(filters, hints, query=query)
+    keywords = criteria.get("apiKeywords", [])
+    preferred = search_period.category_priority(photo_category, query, keywords)
+    collected = _period_candidates(period, filters, preferred, cursor)
+    named = search_all(keyword or original_query, page, rows, hints=hints) if query else {}
+    lexical = [item for item in named.get("items", []) if metadata_pass(item, period)]
+    lexical_ids = {item["id"] for item in lexical}
+    pool = {item["id"]: item for rows in collected["bySource"].values() for item in rows}
+    priority = set(collected["photoPriority"])
+    ordered = sorted(pool.values(), key=lambda item: (
+        item["id"] in priority,
+        text_signal_score(item, criteria, query),
+        item["foundDate"],
+    ), reverse=True)
+    photos = order_period_photos(ordered, collected["photoPriority"], criteria, query)
+    context = [
+        item for item in ordered if item["id"] not in lexical_ids
+        and (text_signal_score(item, criteria, query) > 0 or score_criteria(item, criteria)["hits"])
+    ]
+    # 이름이나 코드 분류가 빗나가도 설명이 풍부하면 비교 후보로 보탠다.
+    context_ids = {item["id"] for item in context} | lexical_ids
+    extra_context = [item for item in ordered if item["id"] not in context_ids and item.get("notes")]
+    context.extend(extra_context[:rows])
+    errors = collected["errors"]
+    return {
+        "query": keyword, "apiKeywords": named.get("apiKeywords", []), "matched": named.get("matched", 0),
+        "sources": [source for source in SOURCES if source in collected["sources"] or source in named.get("sources", [])],
+        "items": lexical, "photoItems": photos, "contextItems": context, "errors": errors,
+        "total": len(lexical) + len(context), "hasMore": collected["hasMore"],
+        "scanLimitReached": not collected["coverage"]["complete"],
+        "coverage": collected["coverage"], "periodCursor": collected["periodCursor"],
     }
 
 

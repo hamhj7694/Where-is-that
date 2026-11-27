@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import ai_pipeline, main, police_api
+from app import ai_pipeline, db, main, police_api
 from app.schemas import LostFoundBrowseRequest
 
 
@@ -329,6 +329,59 @@ def test_deeper_search_keeps_the_score_found_earlier(monkeypatch):
     assert result["items"][0]["id"] == "police:old"  # 앞서 찾은 사진이 맨 위에 남는다.
     assert result["items"][0]["visualScore"] == 96
     assert result["items"][0]["matchTier"] == 1
+
+
+def test_deeper_browse_reuses_pages_and_compares_only_unseen_photos(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+    db.init_db()
+    monkeypatch.setattr(police_api, "configured", lambda: True)
+    monkeypatch.setattr(main.config, "LOSTFOUND_BROWSE_PAGE_CAP", 1)
+    monkeypatch.setattr(main, "_browse_jobs", {})
+    monkeypatch.setattr(main, "_browse_executor", SimpleNamespace(submit=lambda fn, *args: fn(*args)))
+    api_calls = []
+    checked_ids = []
+
+    def page(source, params, number, rows):
+        api_calls.append((source, number))
+        assert params["PRDT_CL_CD_01"]
+        if source != "police":
+            return {"items": [], "totalCount": 0}
+        # 다음 페이지의 날짜가 더 최신이어도 기존 점수와 분석 기록을 유지한다.
+        items = [
+            row(f"police:{number}:{index}", f"2026-11-{number + 20:02d}",
+                name=f"카드 {number}-{index}", category="카드 > 일반카드",
+                imageUrl=f"https://www.lost112.go.kr/{number}-{index}.jpg")
+            for index in (1, 2)
+        ] if number <= 2 else []
+        return {"items": items, "totalCount": 4}
+
+    def match(request):
+        checked_ids.extend(candidate.id for candidate in request.candidates)
+        return SimpleNamespace(results=[
+            SimpleNamespace(id=candidate.id, imageSimilarity={"police:1:1": 80, "police:2:1": 95}.get(candidate.id, 0), basis="photo")
+            for candidate in request.candidates
+        ])
+
+    monkeypatch.setattr(police_api, "search_filtered", page)
+    monkeypatch.setattr(ai_pipeline, "match_visual_features", match)
+    payload = LostFoundBrowseRequest(keyword="카드", searchMode="ai", rows=2, filters={"category": "카드"})
+    first_id = main.start_lostfound_browse_job(payload)["jobId"]
+    first = main.get_lostfound_browse_job(first_id)["result"]
+    assert first["visualMore"]
+    assert len(first["allItems"]) == 2
+    assert {number for _, number in api_calls} == {1}
+    assert set(checked_ids) == {"police:1:1", "police:1:2"}
+
+    api_calls.clear()
+    checked_ids.clear()
+    second_id = main.start_lostfound_browse_job(payload.model_copy(update={"previousJobId": first_id}))["jobId"]
+    second = main.get_lostfound_browse_job(second_id)["result"]
+    assert {number for _, number in api_calls} == {2}
+    assert set(checked_ids) == {"police:2:1", "police:2:2"}
+    assert len(second["allItems"]) == 4
+    assert second["visualScores"] == {"police:1:1": 80, "police:2:1": 95}
+    assert second["items"][0]["id"] == "police:2:1"
+    assert not second["visualMore"]
 
 
 def test_title_match_outranks_photo_only_match(monkeypatch):

@@ -170,8 +170,8 @@ function SingleSearchComposer({ mode, draft, error, textareaRef, onDraft, onSubm
     <div className="composer__body">
       <label htmlFor="search-query">{copy[mode].inputLabel}</label>
       <textarea ref={textareaRef} id="search-query" value={draft.query} placeholder={copy[mode].placeholder}
-        rows={3} spellCheck={false} autoComplete="off" aria-invalid={!!error} aria-describedby={error ? 'search-error' : undefined}
-        onChange={event => onDraft({ query: event.target.value, aiPlan: undefined })} onKeyDown={handleKey}
+        rows={3} maxLength={300} spellCheck={false} autoComplete="off" aria-invalid={!!error} aria-describedby={error ? 'search-error' : undefined}
+        onChange={event => onDraft({ query: event.target.value.slice(0, 300), aiPlan: undefined })} onKeyDown={handleKey}
         onPaste={event => void pasteImage(event)}
         onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} />
       {draft.photo && <div className="attachment">

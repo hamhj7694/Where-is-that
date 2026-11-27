@@ -5,7 +5,7 @@ vi.mock('./ai-search-api', () => ({ prepareAiSearch: vi.fn() }))
 
 import { prepareAiSearch } from './ai-search-api'
 import { addGalleryCondition, createGalleryAssistantState } from './gallery-search-model'
-import { assistantConditions, localAssistantUpdate, optimizedQueryFromPlan, prepareOptimizedAssistant } from './query-optimizer'
+import { assistantConditions, localAssistantUpdate, optimizedQueryFromPlan, prepareEditedAssistant, prepareOptimizedAssistant } from './query-optimizer'
 
 function makePlan(overrides: Partial<AiSearchPlan> = {}): AiSearchPlan {
   return {
@@ -66,5 +66,25 @@ describe('AI 검색어 최적화', () => {
     expect(next.optimizedQuery).toBeUndefined()
     expect(next.conditions).toEqual(['금색 로고'])
     expect(next.appliedConditions).toEqual(['금색 로고'])
+  })
+
+  it('편집한 문구를 그대로 쓰고 그 문구로 새 AI 조건을 만든다', async () => {
+    const state = { ...createGalleryAssistantState(), optimizedQuery: '검정 지갑', aiPlan: makePlan() }
+    const nextPlan = makePlan({ originalQuery: '파란 우산', refinedQuery: '접이식 파란 우산' })
+    vi.mocked(prepareAiSearch).mockResolvedValue(nextPlan)
+
+    const next = await prepareEditedAssistant('lost', state, ' 파란 우산 ')
+
+    expect(prepareAiSearch).toHaveBeenCalledWith('lost', '파란 우산')
+    expect(next.optimizedQuery).toBe('파란 우산')
+    expect(next.aiPlan).toBe(nextPlan)
+  })
+
+  it('그대로 적용할 때는 기존 계획을 쓰고 편집한 문구의 AI 요청 실패 시에는 비운다', async () => {
+    const state = { ...createGalleryAssistantState(), optimizedQuery: '검정 지갑', aiPlan: makePlan() }
+    expect(await prepareEditedAssistant('lost', state, '검정 지갑')).toBe(state)
+    expect(prepareAiSearch).not.toHaveBeenCalled()
+    vi.mocked(prepareAiSearch).mockRejectedValue(new Error('AI unavailable'))
+    expect(await prepareEditedAssistant('lost', state, '파란 우산')).toMatchObject({ optimizedQuery: '파란 우산', aiPlan: null })
   })
 })

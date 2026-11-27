@@ -32,6 +32,7 @@ export interface FoundItem {
   matchLabel?: string
   /** 서버가 공개 사진을 직접 보고 매긴 시각 특징 점수. */
   visualScore?: number | null
+  rankingScore?: number | null
 }
 
 export interface RouteResult {
@@ -130,6 +131,24 @@ export interface LostSearchHints extends Record<string, unknown> {
   any?: string[]
   exclude?: string[]
   imageFeatures?: string[]
+  itemCategory?: string
+  fromDate?: string
+  toDate?: string
+}
+
+export interface PublicPeriodCursor {
+  scope: string
+  pages: Record<string, number>
+}
+
+export interface PublicSearchCoverage {
+  from: string
+  to: string
+  basis: 'default' | 'explicit' | 'inferred'
+  clipped: boolean
+  dateBufferDays?: number
+  complete: boolean
+  sources: Record<LostFoundSource, { pagesRead: number; complete: boolean }>
 }
 
 interface SearchPayload {
@@ -144,6 +163,8 @@ interface SearchPayload {
   errors: { source: string; code: string; message: string }[]
   apiKeywords?: string[]
   matched?: number
+  coverage?: PublicSearchCoverage | null
+  periodCursor?: PublicPeriodCursor | null
 }
 
 export interface LostBrowseFilters {
@@ -223,6 +244,10 @@ export interface LostPhotoSearchOptions {
   originalQuery: string
   photoSearch: boolean
   photoCategory: string
+  periodSearch?: boolean
+  periodCursor?: PublicPeriodCursor
+  fromDate?: string
+  toDate?: string
 }
 
 /** 이름 조회와 별도로 사진이 있는 공개 목록을 조회할 수 있다. */
@@ -254,12 +279,14 @@ export function browseLostFound(
   maxPages = 200,
   skipVisual = 0,
   priorVisualScores?: Record<string, number>,
+  options?: { searchMode?: 'basic' | 'ai'; signal?: AbortSignal },
 ): Promise<BrowsePayload> {
+  const timeout = AbortSignal.timeout(70_000)
   return request<BrowsePayload>('/lostfound/browse', {
     method: 'POST',
     // 공개 API가 느려도 무한 로딩으로 남지 않도록 상한을 둔다.
-    signal: AbortSignal.timeout(70_000),
-    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores),
+    signal: options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
+    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores, options?.searchMode),
   })
 }
 
@@ -286,6 +313,8 @@ function browseBody(
   hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
   priorVisualScores?: Record<string, number>,
   searchMode?: 'basic' | 'ai',
+  previousJobId?: string,
+  period?: { cursor?: PublicPeriodCursor },
 ): string {
   return JSON.stringify({
     keyword: keyword.slice(0, 100), page, rows, maxPages, skipVisual,
@@ -293,6 +322,9 @@ function browseBody(
     ...(filters ? { filters } : {}),
     ...(priorVisualScores && Object.keys(priorVisualScores).length ? { priorVisualScores } : {}),
     ...(searchMode ? { searchMode } : {}),
+    ...(previousJobId ? { previousJobId } : {}),
+    // 일반 검색 미리보기는 별도의 짧은 조회를 계속 사용한다.
+    ...(period ? { periodSearch: true, periodCursor: period.cursor } : {}),
   })
 }
 
@@ -302,10 +334,12 @@ export function startBrowseJob(
   hints?: LostSearchHints, filters?: LostBrowseFilters, maxPages = 200, skipVisual = 0,
   priorVisualScores?: Record<string, number>,
   searchMode?: 'basic' | 'ai',
+  previousJobId?: string,
+  period?: { cursor?: PublicPeriodCursor },
 ): Promise<BrowseJobStart> {
   return request<BrowseJobStart>('/lostfound/browse/jobs', {
     method: 'POST',
-    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores, searchMode),
+    body: browseBody(keyword, page, rows, hints, filters, maxPages, skipVisual, priorVisualScores, searchMode, previousJobId, period),
   })
 }
 
@@ -420,6 +454,7 @@ export function toCandidate(item: FoundItem, detailed = false): Candidate {
     matchTier: item.matchTier,
     matchLabel: item.matchLabel,
     visualScore: item.visualScore,
+    rankingScore: item.rankingScore,
     location: {
       status: hasCoords ? 'verified' : item.address ? 'address_only' : 'missing',
       address: item.address || null,

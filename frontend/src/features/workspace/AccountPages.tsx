@@ -18,7 +18,9 @@ export function LoginPage({ session }: AccountProps) {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { signIn, beginKakaoLogin } = useAuth()
-  const next = safeReturn(params.get('returnTo'), '/valuables')
+  const returnTo = params.get('returnTo')
+  const next = safeReturn(returnTo, '/valuables')
+  const fromValuables = /^\/valuables(?:\/|\?|$)/.test(returnTo ?? '')
   const [mode, setMode] = useState<'choice' | 'email'>('choice')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,7 +54,7 @@ export function LoginPage({ session }: AccountProps) {
   }
 
   return <main id="main-content" className="content-workspace"><div className="login-panel"><LockKeyhole aria-hidden="true" />
-    <PageHeading title={session ? '이미 로그인했어요' : '소중한 물건 사진을 계정에'} description="사진 원본과 사진별 검색정보를 보관해요." />
+    <PageHeading title={session ? '이미 로그인했어요' : fromValuables ? '소중한 물건 사진을 계정에' : '로그인'} description={fromValuables ? '사진 원본을 계정에 보관해요.' : undefined} />
     {session
       ? <button type="button" className="button button--primary" onClick={() => navigate(next, { replace: true })}>계속하기<ArrowRight aria-hidden="true" /></button>
       : <>
@@ -74,7 +76,7 @@ export function LoginPage({ session }: AccountProps) {
         <Link className="button button--secondary" to={signupTo}>회원가입</Link>
       </>}
     <Link className="button button--ink" to="/">검색으로 돌아가기</Link>
-    <p className="field__help">로그인으로 본인 확인을 해요. 로그인 전에 만든 목록과 기록은 이 계정으로 이관돼요.</p>
+    <p className="field__help">로그인 전에 찾은 기록도 이 브라우저에서 계속 볼 수 있어요.</p>
   </div></main>
 }
 
@@ -123,11 +125,10 @@ export function SignupPage() {
       <div className="field"><label htmlFor="signup-password">비밀번호</label><input id="signup-password" type="password" autoComplete="new-password" value={password} minLength={8} maxLength={64} required onChange={event => setPassword(event.target.value)} /><p className="field__help">8자 이상 64자 이하로 입력해 주세요.</p></div>
       <div className="field"><label htmlFor="signup-confirm">비밀번호 확인</label><input id="signup-confirm" type="password" autoComplete="new-password" value={confirm} minLength={8} maxLength={64} required onChange={event => setConfirm(event.target.value)} /></div>
       <div className="field"><label htmlFor="signup-question">보안 질문</label><select id="signup-question" value={question} onChange={event => setQuestion(event.target.value)}>{RECOVERY_QUESTIONS.map(value => <option key={value} value={value}>{value}</option>)}</select><p className="field__help">비밀번호를 잊었을 때 계정을 찾는 데 사용해요.</p></div>
-      <div className="field"><label htmlFor="signup-answer">보안 질문 답변</label><input id="signup-answer" type="text" value={answer} minLength={2} maxLength={100} required onChange={event => setAnswer(event.target.value)} /><p className="field__help">답변은 암호화되어 저장되며 아이디·비밀번호 찾기에 필요해요.</p></div>
+      <div className="field"><label htmlFor="signup-answer">보안 질문 답변</label><input id="signup-answer" type="text" value={answer} minLength={2} maxLength={100} required onChange={event => setAnswer(event.target.value)} /><p className="field__help">아이디나 비밀번호를 찾을 때 이 답변이 필요해요.</p></div>
       <button className="button button--primary" type="submit" disabled={busy}>가입하기<ArrowRight aria-hidden="true" /></button>
     </form>
     <Link className="button button--ink" to={'/auth/login?returnTo=' + encodeURIComponent(next)}>로그인으로 돌아가기</Link>
-    <p className="field__help">가입하면 로그인 전에 만든 목록과 기록이 이 계정으로 이관돼요.</p>
   </div></main>
 }
 
@@ -354,7 +355,7 @@ export function SettingsPage({ gallery, session, onOpenGallery, onDisconnect }: 
 
 export function InfoPage({ page }: { page: 'privacy' | 'about' }) {
   return <main id="main-content" className="content-workspace"><PageHeading title={page === 'privacy' ? '사진 처리 안내' : '화면 체험 안내'} back={{ to: '/', label: '검색으로' }} />
-    {page === 'privacy' ? <><DemoNotice>검색 입력은 브라우저에서 처리하고, 등록한 사진과 검색 기록은 로그인한 계정에 저장해요.</DemoNotice><section className="settings-group"><h2>현재 저장 범위</h2><dl className="detail-facts"><div><dt>검색 입력·미리보기</dt><dd>이 브라우저에서만 처리</dd></div><div><dt>찾은 기록·등록 항목</dt><dd>로그인한 계정에 저장</dd></div><div><dt>기기 원본</dt><dd>변경·삭제하지 않음</dd></div></dl></section>
+    {page === 'privacy' ? <><section className="settings-group"><h2>현재 저장 범위</h2><dl className="detail-facts"><div><dt>비로그인 검색 기록·북마크</dt><dd>이 브라우저에 저장</dd></div><div><dt>로그인 후 검색 기록·등록 항목</dt><dd>로그인한 계정에 저장</dd></div><div><dt>기기 원본</dt><dd>변경·삭제하지 않음</dd></div></dl></section>
       <section className="settings-group"><h2>계정 탈퇴 시</h2><dl className="detail-facts"><div><dt>삭제 범위</dt><dd>계정의 검색 기록과 등록한 사진</dd></div><div><dt>남는 항목</dt><dd>기기에 있는 원본 사진</dd></div></dl><p className="field__help">갤러리 전체를 계정에 자동 등록하지 않아요. 등록한 자료는 목록·상세에서 확인하고 삭제해요.</p></section></>
       : <><DemoNotice>화면 체험용 안내예요. 실제 서비스와 다를 수 있어요.</DemoNotice><section className="settings-group"><h2>지금 해볼 수 있어요</h2><div className="settings-row"><div><strong>사진·입력·화면 이동</strong><p>샘플 후보와 임시 물건을 둘러보세요.</p></div><Link className="button button--secondary" to="/preview">화면 목록</Link></div></section>
         <section className="settings-group"><h2>공식 데이터 출처</h2><p className="field__help">아래 공개 정보의 응답과 사진 제공 여부는 달라질 수 있어요.</p><div className="source-links"><a href="https://www.data.go.kr/data/15058696/openapi.do" target="_blank" rel="noreferrer">경찰청_습득물정보 조회 서비스<ArrowRight aria-hidden="true" /></a><a href="https://www.data.go.kr/data/15057670/openapi.do" target="_blank" rel="noreferrer">경찰청_포털기관 습득물정보 조회 서비스<ArrowRight aria-hidden="true" /></a><a href={OFFICIAL_SEARCH_URL} target="_blank" rel="noreferrer">경찰민원24 습득물 검색 안내<ArrowRight aria-hidden="true" /></a></div></section></>}

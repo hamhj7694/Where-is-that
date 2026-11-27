@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from urllib.parse import urlsplit
 
-from . import web_reference
+from fastapi import APIRouter, Depends, HTTPException, Request
+
+from . import gallery_rank, web_reference
 from .ai_pipeline import (
     AiPipelineError,
     match_visual_features,
@@ -9,13 +11,41 @@ from .ai_pipeline import (
     rank_context_candidates,
     status_payload,
 )
-from .ai_schemas import AiContextRankRequest, AiRankRequest, AiSearchRequest, AiVisualMatchRequest
+from .ai_schemas import (
+    AiContextRankRequest, AiGalleryIntentRequest, AiGalleryRankRequest, AiRankRequest, AiSearchRequest, AiVisualMatchRequest,
+)
 
 router = APIRouter(prefix="/api/ai", tags=["AI search"])
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 
 
 def _http_error(error: AiPipelineError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail={"code": error.code, "message": error.message})
+
+
+def _require_local_gallery(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if (
+        not request.client or request.client.host not in _LOOPBACK
+        or request.url.hostname not in _LOOPBACK
+        or (origin and urlsplit(origin).hostname not in _LOOPBACK)
+    ):
+        raise HTTPException(status_code=403, detail={
+            "code": "local_gallery_required", "message": "갤러리 사진 분석은 이 기기에서만 실행할 수 있어요.",
+        })
+
+
+@router.post("/vision/gallery-intent", dependencies=[Depends(_require_local_gallery)])
+def ai_gallery_intent(request: AiGalleryIntentRequest) -> dict:
+    return {"prompt": gallery_rank.gallery_query_prompt(request.query)}
+
+
+@router.post("/vision/gallery-local", dependencies=[Depends(_require_local_gallery)])
+def ai_gallery_local(request: AiGalleryRankRequest) -> dict:
+    try:
+        return gallery_rank.rank_gallery_batch(request)
+    except AiPipelineError as error:
+        raise _http_error(error) from error
 
 
 @router.get("/status")

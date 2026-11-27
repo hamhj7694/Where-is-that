@@ -8,12 +8,14 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import importlib.util
 import io
 import logging
 import math
 import re
 import threading
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any
 
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 _DATA_URL = re.compile(r"^data:image/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=\r\n]+$")
 _MODEL_LOCK = threading.RLock()
+_GALLERY_VECTOR_LOCK = threading.Lock()
+_GALLERY_VECTORS: OrderedDict[bytes, tuple[float, ...]] = OrderedDict()
+_GALLERY_VECTOR_LIMIT = 2048
 
 # 자연어에 자주 나오는 습득물·시각 특징을 YOLOE/CLIP이 잘 아는 영어 라벨로 바꾼다.
 # 모델은 영어 텍스트 프롬프트에 훨씬 강하므로 한국어 입력을 여기서 번역한다.
@@ -355,6 +360,43 @@ def embed_text(prompt: str) -> tuple[float, ...]:
         return tuple(float(value) for value in vector[0])
 
 
+def embed_gallery_images(images: dict[str, str]) -> dict[str, tuple[float, ...]]:
+    """Encode local thumbnails in batches and keep only their digests and vectors."""
+    import torch
+    from PIL import Image
+
+    model, preprocess, _ = _clip_bundle()
+    keys = {item_id: hashlib.sha256(image.encode("ascii")).digest() for item_id, image in images.items()}
+    with _GALLERY_VECTOR_LOCK:
+        vectors: dict[bytes, tuple[float, ...]] = {}
+        pending = {}
+        for item_id, image in images.items():
+            key = keys[item_id]
+            if key in _GALLERY_VECTORS:
+                _GALLERY_VECTORS.move_to_end(key)
+                vectors[key] = _GALLERY_VECTORS[key]
+            elif key not in pending:
+                try:
+                    pending[key] = preprocess(_decode(image))
+                except (ValueError, OSError, Image.DecompressionBombError):
+                    continue
+
+        pending_keys = list(pending)
+        batch_size = config.LOCAL_CLIP_BATCH_SIZE
+        with torch.inference_mode():
+            for offset in range(0, len(pending_keys), batch_size):
+                batch_keys = pending_keys[offset:offset + batch_size]
+                encoded = model.encode_image(torch.stack([pending[key] for key in batch_keys]))
+                normalized = torch.nn.functional.normalize(encoded, dim=-1)
+                for key, values in zip(batch_keys, normalized.tolist()):
+                    vector = tuple(values)
+                    _GALLERY_VECTORS[key] = vector
+                    vectors[key] = vector
+        while len(_GALLERY_VECTORS) > _GALLERY_VECTOR_LIMIT:
+            _GALLERY_VECTORS.popitem(last=False)
+        return {item_id: vectors[key] for item_id, key in keys.items() if key in vectors}
+
+
 def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     if len(left) != len(right):
         return 0.0
@@ -366,16 +408,29 @@ def _cosine(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     return max(-1.0, min(1.0, dot / (left_norm * right_norm)))
 
 
-def _score(
-    vector: tuple[float, ...], references: list[tuple[float, ...]], *, image: bool = False
-) -> int:
+def similarity_score(
+    vector: tuple[float, ...], references: list[tuple[float, ...]], *, image: bool = False,
+    text_headroom: bool = False,
+) -> float:
     best = max((_cosine(vector, reference) for reference in references), default=0.0)
     base, span = (
         (_CLIP_IMAGE_SCORE_BASE, _CLIP_IMAGE_SCORE_SPAN) if image
         else (_CLIP_SCORE_BASE, _CLIP_SCORE_SPAN)
     )
     calibrated = (best - base) / span
-    return int(round(max(0.0, min(1.0, calibrated)) * 100))
+    if text_headroom and not image:
+        # 갤러리 맥락 정렬에서는 보정 구간 위의 서로 다른 점수도 구별한다.
+        upper = base + span
+        if best > upper:
+            return 95 + 5 * (best - upper) / (1 - upper)
+        return max(0.0, calibrated) * 95
+    return max(0.0, min(1.0, calibrated)) * 100
+
+
+def _score(
+    vector: tuple[float, ...], references: list[tuple[float, ...]], *, image: bool = False
+) -> int:
+    return round(similarity_score(vector, references, image=image))
 
 
 def score_similarity(

@@ -1,9 +1,11 @@
 import { snapshotSearchDraft, validateSearch, type GallerySource, type SearchDraft, type SearchMode } from './model'
-import { combineGalleryQuery, createGalleryAssistantState, type GalleryAssistantState } from './gallery-search-model'
+import { combineGalleryQuery, createGalleryAssistantState, galleryRankSignature, galleryResultItems, sortGalleryByRank, uniqueGalleryItems, type GalleryAssistantState, type GalleryRankMap } from './gallery-search-model'
+import { findIdenticalGalleryFiles } from './gallery-deduplication'
+import { localPhotoId } from '../workspace/data'
 import type { AiContextRankedCandidate, AiVisualMatchResult } from './ai-search-api'
-import type { FoundItem } from './lostfound-api'
+import type { FoundItem, PublicPeriodCursor, PublicSearchCoverage } from './lostfound-api'
 
-// Session memory only. Keep the submitted input/source separate from later edits.
+// Keep the submitted input/source separate from later edits.
 export interface SearchRecord {
   id: string
   mode: SearchMode
@@ -33,6 +35,8 @@ export interface LostResultsSnapshot {
   apiPage: number
   hasMore?: boolean
   scanLimitReached?: boolean
+  coverage?: PublicSearchCoverage
+  periodCursor?: PublicPeriodCursor
   partial: boolean
   rank?: { scope: string; results: AiContextRankedCandidate[] }
   visual?: { scope: string; searchKey?: string; results: AiVisualMatchResult[]; source: 'vision-model' | 'multimodal' }
@@ -79,6 +83,45 @@ export function readLostResultsSnapshot(key: string): LostResultsSnapshot | null
 export function clearLostResultsSnapshot(key: string): void {
   if (typeof window === 'undefined') return
   try { window.localStorage.removeItem(LOST_RESULTS_KEY + key) } catch { /* 무시 */ }
+}
+
+interface GalleryRankSnapshot {
+  signature: string
+  ranking: GalleryRankMap
+  descriptions: string[]
+  count: number
+}
+
+const GALLERY_RANK_KEY = 'geugeo-eodi:gallery-rank:'
+
+export function readGalleryRankSnapshot(id: string, signature: string): GalleryRankSnapshot | null {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(GALLERY_RANK_KEY + id) ?? 'null') as GalleryRankSnapshot | null
+    return value?.signature === signature && value.ranking && Array.isArray(value.descriptions) ? value : null
+  } catch { return null }
+}
+
+export function saveGalleryRankSnapshot(id: string, snapshot: GalleryRankSnapshot) {
+  try { window.localStorage.setItem(GALLERY_RANK_KEY + id, JSON.stringify(snapshot)) } catch { /* Keep the current result in memory. */ }
+}
+
+export function clearGalleryRankSnapshot(id: string) {
+  try { window.localStorage.removeItem(GALLERY_RANK_KEY + id) } catch { /* Storage is optional. */ }
+}
+
+export async function galleryHistoryPreview(record: SearchRecord, signal?: AbortSignal): Promise<File | null> {
+  const files = record.gallery?.files
+  if (record.mode !== 'gallery' || !files?.length) return null
+  const reference = record.draft.photo
+  const candidates = uniqueGalleryItems(files.map(file => ({ file, id: localPhotoId(file) })))
+  const signature = galleryRankSignature(record.draft.query, reference ? localPhotoId(reference) : '', candidates.map(item => item.id))
+  const snapshot = readGalleryRankSnapshot(record.id, signature)
+  const matches = reference ? await findIdenticalGalleryFiles(reference, files, signal).catch(() => []) : []
+  signal?.throwIfAborted()
+  const exactMatches = new Set(matches.map(localPhotoId))
+  const ranking = snapshot?.ranking ?? null
+  const results = galleryResultItems(candidates, ranking, exactMatches)
+  return sortGalleryByRank(results, ranking, 'combined', exactMatches)[0]?.file ?? null
 }
 
 export function createSearchRecord(mode: SearchMode, draft: SearchDraft, gallery: GallerySource | null): SearchRecord {
