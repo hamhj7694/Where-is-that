@@ -73,6 +73,9 @@
 .gallery-results__sections > .gallery-result-section:last-child { padding-bottom: 0; }
 .gallery-result-section__heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
 .gallery-result-section__heading > div { min-width: 0; }
+.result-channel-label { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: start; gap: 12px; }
+.result-channel-label__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-hover); }
+.result-channel-label__icon svg { width: 21px; height: 21px; stroke-width: 1.7; }
 .gallery-result-section__heading h2 { font-size: 22px; line-height: 1.5; font-weight: 650; word-break: keep-all; }
 .gallery-result-section__heading p { margin-top: 4px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; word-break: keep-all; }
 .gallery-result-section__more { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 44px; flex-shrink: 0; font-size: 13px; color: var(--text-secondary); }

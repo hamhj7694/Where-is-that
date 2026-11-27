@@ -52,13 +52,14 @@ h1, h2, h3, p, figure { margin: 0; }
 .icon-button { display: inline-flex; justify-content: center; align-items: center; width: 44px; height: 44px; flex-shrink: 0; padding: 0; border: 0; border-radius: var(--radius-control); background: none; color: var(--text-secondary); }
 .icon-button:hover { background: var(--raised); color: var(--ink); }
 .menu-toggle { display: none; }
-.search-workspace { flex: 1; width: min(100%, 936px); margin: 0 auto; padding: 48px; display: block; }
-.search-area { min-width: 0; }
-.page-intro { margin-bottom: 32px; }
-.page-intro h1 { font-size: clamp(34px, 3.3vw, 46px); line-height: 1.22; letter-spacing: -.035em; font-weight: 650; word-break: keep-all; text-wrap: balance; }
+.search-workspace { flex: 1; width: min(100%, 1296px); margin: 0 auto; padding: 48px; }
+.search-area { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(260px, 1fr); align-items: start; gap: clamp(28px, 4vw, 64px); min-width: 0; }
+.search-area__main { min-width: 0; }
+.page-intro { margin-bottom: 28px; }
+.page-intro h1 { font-size: clamp(34px, 3.7vw, 52px); line-height: 1.2; letter-spacing: -.045em; font-weight: 700; word-break: keep-all; text-wrap: pretty; }
 .page-intro p { margin-top: 12px; font-size: 15px; line-height: 1.7; color: var(--text-secondary); word-break: keep-all; max-width: 620px; }
 .mode-bar { position: sticky; top: 0; z-index: 3; background: color-mix(in srgb, var(--page) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-.mode-bar__inner { max-width: 936px; margin: 0 auto; padding: 0 48px; }
+.mode-bar__inner { max-width: 1296px; margin: 0 auto; padding: 0 48px; }
 .mode-tabs { display: flex; gap: 8px; width: fit-content; padding: 12px 0; }
 .mode-tabs button { background: none; border: 1px solid transparent; border-radius: 8px; min-height: 48px; min-width: 160px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; font-size: 15px; font-weight: 500; color: var(--text-secondary); word-break: keep-all; text-align: center; }
 .mode-tabs button:first-child { min-width: 216px; }
@@ -67,6 +68,15 @@ h1, h2, h3, p, figure { margin: 0; }
 .search-scope { margin-bottom: 14px; padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--raised); }
 .search-scope--public { padding-block: 12px; }
 .search-gallery-preview { margin-top: 24px; border-top: 1px solid var(--line); }
+.search-example { margin: 0; padding: 18px; border-radius: var(--radius-panel); background: var(--ink); color: var(--surface); }
+.search-example__photo { position: relative; aspect-ratio: 3 / 2; overflow: hidden; border-radius: 6px; background: var(--raised); }
+.search-example__photo img { width: 100%; height: 100%; object-fit: cover; }
+.search-example__photo::before, .search-example__photo::after { content: ''; position: absolute; width: 20px; height: 20px; border: solid #fff; border-width: 2px 0 0 2px; pointer-events: none; }
+.search-example__photo::before { inset: 10px auto auto 10px; }
+.search-example__photo::after { inset: auto 10px 10px auto; transform: rotate(180deg); }
+.search-example__caption { display: grid; gap: 8px; padding: 16px 2px 2px; }
+.search-example__caption span, .search-example__caption small { color: var(--accent-soft); font-size: 12px; line-height: 1.5; }
+.search-example__caption p { max-width: 26ch; font-size: 18px; font-weight: 580; line-height: 1.5; word-break: keep-all; }
 .search-scope__text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; min-width: 0; }
 .search-scope__text > span { font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
 .search-scope__text strong { font-size: 14px; font-weight: 500; word-break: keep-all; overflow-wrap: anywhere; }
@@ -123,7 +133,7 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1; padding: 4px; borde
 .schedule-preview__grid span { grid-column: span 3; background: #dfe2d2; padding: 6px; border-radius: 3px; white-space: nowrap; }
 .schedule-preview__grid span:nth-child(2) { grid-column: 2 / 6; grid-row: 2; background: #e7e6d5; }
 .schedule-preview__grid span:nth-child(3) { grid-column: 1 / 5; grid-row: 3; }
-.site-footer { margin: 0 auto; width: min(100%, 936px); padding: 24px 48px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: 13px; color: var(--text-muted); }
+.site-footer { margin: 0 auto; width: min(100%, 1296px); padding: 24px 48px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 24px; font-size: 13px; color: var(--text-muted); }
 .site-footer > p { display: flex; gap: 12px; }
 .site-footer > p > span { color: var(--text-secondary); }
 .site-footer > div { display: flex; gap: 20px; }
@@ -216,9 +226,13 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1; padding: 4px; borde
 @media (max-width: 1060px) {
   .desktop-nav { display: none; }
   .menu-toggle { display: inline-flex; }
-  .search-workspace { max-width: 800px; }
-  .mode-bar__inner { max-width: 800px; }
   .site-footer { padding: 24px 32px; }
+}
+@media (max-width: 850px) {
+  .search-workspace, .mode-bar__inner { max-width: 760px; }
+  .search-area { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .search-example { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr); align-items: center; gap: 14px; }
+  .search-example__caption { padding: 0; }
 }
 @media (max-width: 600px) {
   .app-shell { --shell-edge: clamp(12px, 5vw, 20px); }
@@ -231,6 +245,10 @@ kbd { font-family: inherit; font-size: 10px; line-height: 1; padding: 4px; borde
   .header-actions .preview-label { display: none; }
   .login-link { padding: 0 8px; max-width: 80px; font-size: 13px; }
   .search-workspace { padding: 28px 20px 32px; gap: 36px; }
+  .search-example { padding: 12px; }
+  .search-example__caption { gap: 4px; }
+  .search-example__caption p { font-size: 14px; }
+  .search-example__photo::before, .search-example__photo::after { width: 12px; height: 12px; }
   .mode-bar__inner { padding: 0 20px; }
   .page-intro { margin-bottom: 24px; }
   .page-intro h1 { font-size: 32px; line-height: 1.35; letter-spacing: -.8px; }

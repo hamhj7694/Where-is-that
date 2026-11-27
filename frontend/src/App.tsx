@@ -5,6 +5,7 @@ import Modal from './components/Modal'
 import { fetchContent, saveContent } from './features/account/api'
 import { deserializeContent, serializeContent } from './features/account/content'
 import SearchComposer from './features/search/SearchComposer'
+import SearchExample from './features/search/SearchExample'
 import GalleryPreview from './features/search/GalleryPreview'
 import GalleryConnection from './features/search/GalleryConnection'
 import { clearGalleryRankSnapshot, clearLostResultsSnapshot, createSearchRecord, disconnectGalleryHistory, overwriteGallerySearch, overwriteLostSearch, recordPath, refineGalleryRecord, refineLostRecord, removeSearchRecord, resolveGalleryAssistant, resolveLostAssistant, updateSearchAssistant, type SearchRecord } from './features/search/history'
@@ -408,7 +409,7 @@ export default function App() {
     {isInputPage && <nav className="mode-bar" aria-label="검색 기능"><div className="mode-bar__inner"><div className="mode-tabs" role="tablist" aria-label="검색 방식 선택" onKeyDown={handleModeKeys}>
       {(['gallery', 'lost'] as const).map(item => <button type="button" key={item} id={'mode-' + item} role="tab" aria-selected={mode === item} aria-controls="search-panel" tabIndex={mode === item ? 0 : -1} onClick={() => changeMode(item)}>{item === 'gallery' ? <Images aria-hidden="true" /> : <SearchModeIcon />}<span className="mode-label">{copy[item].name}</span></button>)}
     </div></div></nav>}
-    {isHome ? <HomeCover /> : isInputPage ? <main id="main-content" className="search-workspace"><section className="search-area" aria-labelledby="page-heading"><div className="page-intro"><h1 id="page-heading">{needsGallery ? '사진을 연결해 주세요' : copy[mode].title}</h1><p>{needsGallery ? '연결하면 갤러리 전체에서 사진을 찾을 수 있어요.' : copy[mode].description}</p></div>
+    {isHome ? <HomeCover /> : isInputPage ? <main id="main-content" className="search-workspace"><section className="search-area" aria-labelledby="page-heading"><div className="search-area__main"><div className="page-intro"><h1 id="page-heading">{needsGallery ? '사진을 연결해 주세요' : copy[mode].title}</h1><p>{needsGallery ? '연결하면 갤러리 전체에서 사진을 찾을 수 있어요.' : copy[mode].description}</p></div>
       <div id="search-panel" role="tabpanel" aria-labelledby={'mode-' + mode}>{needsGallery ? <GalleryConnection gallery={gallery} error={galleryError} onConnect={connectGallery} onCancel={returnFromGallery} onDisconnect={() => setOverlay('disconnect')} /> : <>
         <div className={mode === 'gallery' ? 'search-scope' : 'search-scope search-scope--public'}><div className="gallery-scope__header"><div className="search-scope__text"><span className="search-scope__label">검색 대상</span><strong>{mode === 'gallery' ? '연결한 갤러리 전체' : copy.publicScope}</strong>{mode === 'gallery' && gallery && <small>{gallery.name} · {gallery.files.length.toLocaleString('ko-KR')}장</small>}</div>
           {mode === 'gallery' && <div className="gallery-scope__actions"><button type="button" className="scope-action" onClick={openGallery}><FolderOpen aria-hidden="true" /><span>갤러리 관리</span><ChevronRight aria-hidden="true" /></button><button type="button" className="scope-action scope-action--quiet" onClick={() => setOverlay('disconnect')}>갤러리 해제</button></div>}
@@ -419,7 +420,7 @@ export default function App() {
           <details className="privacy-details"><summary>데이터 처리 자세히 보기</summary><p>{mode === 'lost' ? 'AI 검색 요청에 입력한 내용과 참고 사진을 사용해요. 공개된 습득물 기록과 비교해 후보를 보여줘요.' : 'AI 비교 요청에 입력한 내용과 비교할 사진을 사용해요. 기기에 있는 파일은 그대로 유지해요.'}</p></details>
         </div>
         {mode === 'gallery' && <div className="search-gallery-preview"><GalleryPreview key={gallery?.files[0] ? localPhotoId(gallery.files[0]) : 'disconnected'} gallery={gallery} onAdd={addGallery} /></div>}</>}
-      </div><p className="announcement" role="status" aria-live="polite">{announcement}</p></section></main>
+      </div><p className="announcement" role="status" aria-live="polite">{announcement}</p></div><SearchExample mode={mode} /></section></main>
       : <WorkspaceRouter gallery={gallery} galleryReady={galleryRestored} historyReady={historyReady} authReady={ready} accountLoading={accountLoading} accountLoadError={accountLoadError} onRetryAccountLoad={retryAccountLoad} drafts={drafts} records={records} autoRankRecordId={autoRankRecordId} galleryRankSeed={galleryRankSeed} onConsumeAiRankConsent={recordId => setAutoRankRecordId(current => current === recordId ? null : current)} onDeleteRecord={deleteRecord} onEditRecord={record => { setDrafts(previous => ({ ...previous, [record.mode]: snapshotSearchDraft(record.mode, record.draft) })); navigate(modePaths[record.mode]) }} session={session} items={items} onOpenGallery={openGallery} onAddGallery={addGallery} onDisconnect={disconnectGallery}
         onAssistantChange={(id, patch) => updateRecord(id, previous => updateSearchAssistant(previous, id, patch))} onRefineRecord={(parent, assistant) => parent.mode === 'lost' ? refineLostSearch(parent, assistant) : refineGallerySearch(parent, assistant)}
         onCommitGallerySearch={commitGallerySearch} onCommitLostSearch={commitLostSearch}

@@ -14,7 +14,7 @@ import { checkLostPhotos, uniqueLostPhotos } from '../search/lost-photo-deduplic
 import { readLostResultsSnapshot, saveLostResultsSnapshot, type LostResultsSnapshot } from '../search/history'
 import { matchPublicItemImages, rankLostContextCandidates, type AiContextRankCandidate, type AiContextRankedCandidate, type AiLocationRelation, type AiVisualMatchResult } from '../search/ai-search-api'
 import { criteriaFromPlan, criteriaToHints, criteriaLabels, hasSearchCriteria, matchPublicItem, resolveApiKeyword, type AiSearchCriteria } from '../search/ai-match-model'
-import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, RetryButton } from './components'
+import { AiSearching, EmptyState, FoundCard, PageHeading, Pagination, ResultChannelLabel, RetryButton } from './components'
 import { localPhotoId, OFFICIAL_SEARCH_URL } from './data'
 import { minimumWait, withMinimumVisible } from './ai-loading'
 import GalleryQuerySummary from './GalleryQuerySummary'
@@ -682,7 +682,7 @@ export default function LostSearchResults({ draft, channel, fromHistory, autoRan
     const busy = channelBusy[which]
     const available = (status === 'success' || status === 'partial') && !busy
     return <section className="gallery-result-section lost-result-section" key={which} aria-labelledby={id + '-' + which}>
-      <div className="gallery-result-section__heading"><div><h2 id={id + '-' + which}>{titles[which]}</h2><p>{descriptions[which]}</p></div>{!full && (available || status === 'empty') && (items.length > GALLERY_PREVIEW_LIMIT || hasMore) && <Link className="gallery-result-section__more" to={linkTo(which)}>{titles[which]} 더보기<ArrowRight aria-hidden="true" /></Link>}</div>
+      <div className="gallery-result-section__heading"><ResultChannelLabel channel={which} id={id + '-' + which} title={titles[which]} description={descriptions[which]} />{!full && (available || status === 'empty') && (items.length > GALLERY_PREVIEW_LIMIT || hasMore) && <Link className="gallery-result-section__more" to={linkTo(which)}>{titles[which]} 더보기<ArrowRight aria-hidden="true" /></Link>}</div>
       {full && page <= pages && live.moreFailed && <p className="lost-results__partial" role="alert">추가 후보를 불러오지 못했어요. <button type="button" onClick={loadNextPage}>다시 시도</button></p>}
       {full && which === 'context' && available && contextPageCandidates.length > 0 && <div className="lost-context-ranker">
         <button type="button" className="button button--secondary" disabled={rankBusy} onClick={rankCurrentContext}><Sparkles aria-hidden="true" />{activeRank ? '다시 비교' : '비슷한 물건 찾기'}</button>

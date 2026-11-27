@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
-import { ArrowUpRight, Bookmark, ChevronDown, ChevronUp, Images, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { ArrowUpRight, Bookmark, ChevronDown, ChevronUp, Images, RotateCcw, Search, Trash2, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Modal from '../../components/Modal'
 import { usePhotoPreview } from '../search/usePhotoPreview'
@@ -10,9 +10,10 @@ import { PageHeading, RetryButton } from './components'
 
 const HISTORY_PREVIEW_LIMIT = 3
 
-function HistorySection<T>({ id, title, items, empty, action, renderItem }: {
+function HistorySection<T>({ id, title, icon: Icon, items, empty, action, renderItem }: {
   id: string
   title: string
+  icon: LucideIcon
   items: readonly T[]
   empty: ReactNode
   action?: ReactNode
@@ -22,7 +23,7 @@ function HistorySection<T>({ id, title, items, empty, action, renderItem }: {
   const listId = id + '-list'
   const hiddenCount = items.length - HISTORY_PREVIEW_LIMIT
   return <section className="history-section" aria-labelledby={id}>
-    <div className="section-heading"><h2 id={id}>{title} <span className="history-section__count">{items.length}</span></h2></div>
+    <div className="section-heading history-section__heading"><Icon aria-hidden="true" /><h2 id={id}>{title} <span className="history-section__count">{items.length}</span></h2></div>
     {action}
     {items.length
       ? <ul className="history-list" id={listId}>{(expanded ? items : items.slice(0, HISTORY_PREVIEW_LIMIT)).map(renderItem)}</ul>
@@ -153,12 +154,12 @@ export default function HistoryPage({ records, onDeleteRecord, session, onRetryA
     <p className="history-status" role="status" aria-live="polite">{message}</p>
     <div className="history-sections">{sections.map(section => {
       const items = records.filter(record => record.mode === section.mode)
-      return <HistorySection key={section.mode} id={'history-' + section.mode} title={section.title} items={items} empty={section.empty}
+      return <HistorySection key={section.mode} id={'history-' + section.mode} title={section.title} icon={section.mode === 'gallery' ? Images : Search} items={items} empty={section.empty}
         action={<Link ref={node => { if (node) startLinks.current.set(section.mode, node); else startLinks.current.delete(section.mode) }} to={section.to} className="button button--secondary history-start">{section.cta}<ArrowUpRight aria-hidden="true" /></Link>}
         renderItem={record => <HistoryRow key={record.id} record={record} onDelete={() => { setMessage(''); setDeleteConfirmation(''); setPendingId(record.id) }} deleteRef={node => { if (node) deleteButtons.current.set(record.id, node); else deleteButtons.current.delete(record.id) }} />} />
     })}{bookmarkSections.map(section => {
       const items = bookmarks.filter(bookmark => bookmark.kind === section.kind)
-      return <HistorySection key={section.id} id={section.id} title={section.title} items={items}
+      return <HistorySection key={section.id} id={section.id} title={section.title} icon={Bookmark} items={items}
         empty={<>{section.empty}<br />검색 결과의 상세 페이지에서 북마크하면 여기에 표시돼요.</>}
         renderItem={entry => <BookmarkRow key={entry.id} entry={entry} onRemove={() => { setMessage(''); setPendingBookmark(entry) }} onUndo={() => undoBookmarkRemoval(entry)} removeRef={node => { if (node) bookmarkButtons.current.set(entry.id, node); else bookmarkButtons.current.delete(entry.id) }} />} />
     })}</div>

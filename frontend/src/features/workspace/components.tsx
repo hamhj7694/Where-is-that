@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Bot, Check, CreditCard, Image as ImageIcon, ImageOff, Info, KeyRound, MapPin, RotateCcw, Search, ShieldCheck, Smartphone, Wallet, Watch } from 'lucide-react'
+import { AlignLeft, ArrowLeft, ArrowRight, Bot, Check, CreditCard, Image as ImageIcon, ImageOff, Info, KeyRound, MapPin, RotateCcw, ScanSearch, Search, ShieldCheck, Smartphone, Wallet, Watch } from 'lucide-react'
 import '../../styles/ai-searching.css'
 import Modal from '../../components/Modal'
 import { usePhotoPreview } from '../search/SearchComposer'
@@ -13,6 +13,21 @@ export function PageHeading({ title, description, action, back }: { title: strin
   useEffect(() => { document.title = title + ' — 그거어디?' }, [title])
   return <>{back && <Link className="page-back" to={back.to}><ArrowLeft aria-hidden="true" />{back.label}</Link>}
     <div className="content-heading"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div></>
+}
+
+const resultChannelIcons = { combined: ScanSearch, image: ImageIcon, context: AlignLeft }
+
+export function ResultChannelLabel({ channel, id, title, description }: {
+  channel: keyof typeof resultChannelIcons
+  id: string
+  title: string
+  description: string
+}) {
+  const Icon = resultChannelIcons[channel]
+  return <div className="result-channel-label">
+    <span className="result-channel-label__icon"><Icon aria-hidden="true" /></span>
+    <div><h2 id={id}>{title}</h2><p>{description}</p></div>
+  </div>
 }
 
 export function DemoNotice({ children = '샘플 화면 · 실제 검색 결과가 아니에요.' }: { children?: ReactNode }) {

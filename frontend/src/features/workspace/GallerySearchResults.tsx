@@ -10,7 +10,7 @@ import { clearGalleryRankSnapshot, readGalleryRankSnapshot, saveGalleryRankSnaps
 import SearchComposer from '../search/SearchComposer'
 import { localPhotoId, photoFromFile, type AppPhoto } from './data'
 import { withMinimumVisible } from './ai-loading'
-import { AiSearching, DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, RetryButton } from './components'
+import { AiSearching, DemoNotice, EmptyState, PageHeading, Pagination, PhotoImage, ResultChannelLabel, RetryButton } from './components'
 import GallerySearchAssistant from './GallerySearchAssistant'
 import AiQueryOptimizer from './AiQueryOptimizer'
 import GalleryQuerySummary from './GalleryQuerySummary'
@@ -258,7 +258,7 @@ export default function GallerySearchResults({ gallery, draft, channel, fromHist
     const page = Math.min(totalPages, Math.max(1, Math.floor(Number(params.get('page')) || 1)))
     const shown = full ? ranked.slice((page - 1) * 12, page * 12) : galleryPreviewItems(ranked)
     return <section className="gallery-result-section" key={which} aria-labelledby={panelId + '-' + which}>
-      <div className="gallery-result-section__heading"><div><h2 id={panelId + '-' + which}>{text.title}</h2><p>{text.description}</p></div>
+      <div className="gallery-result-section__heading"><ResultChannelLabel channel={which} id={panelId + '-' + which} title={text.title} description={text.description} />
         {!full && state === 'preview' && ranked.length > GALLERY_PREVIEW_LIMIT && <Link className="gallery-result-section__more" to={linkTo(which)}>{text.more}<ArrowRight aria-hidden="true" /></Link>}
       </div>
       {state === 'error' ? <EmptyState title="결과를 불러오지 못했어요" description="다른 결과를 살펴보거나 다시 시도해 주세요." error><RetryButton onClick={() => retry(which)} /></EmptyState>
